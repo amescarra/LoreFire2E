@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Campaign;
 use App\Models\Character;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 class Adnd2eCharacterTest extends TestCase
@@ -505,5 +506,33 @@ class Adnd2eCharacterTest extends TestCase
         $character = Character::query()->where('name', 'Mira')->firstOrFail();
         $this->assertSame(450000, $character->class_levels[0]['xp']);
         $this->assertSame(450000, (int) $character->experience_points);
+    }
+
+    public function test_character_list_show_and_edit_are_separate_inertia_pages(): void
+    {
+        $character = Character::factory()->create([
+            'name' => 'Thurmbog',
+            'campaign_id' => null,
+            'class' => 'Fighter',
+            'strength' => 18,
+            'exceptional_strength' => '67',
+        ]);
+
+        $this->get(route('characters.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page->component('Characters/Index'));
+
+        $this->get(route('characters.show', $character))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Characters/Show')
+                ->where('character.id', $character->id)
+                ->where('character.exceptional_strength', '67'));
+
+        $this->get(route('characters.edit', $character))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Characters/Edit')
+                ->where('character.id', $character->id));
     }
 }

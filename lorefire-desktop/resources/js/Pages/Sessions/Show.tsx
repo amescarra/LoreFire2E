@@ -251,7 +251,7 @@ export default function Show({ campaign, session, characters, transcriptSegments
           setTranscriptionProgress(null)
           setLiveHasTranscript(true)
           // Reload transcript segments and speaker profiles without full page reload
-          router.reload({ only: ['transcriptSegments', 'speakerProfiles', 'session'] })
+          router.reload({ only: ['transcriptSegments', 'speakerProfiles', 'session'], async: true })
         } else if (data.status === 'failed' || data.status === 'cancelled') {
           clearInterval(transcriptionPollRef.current!)
           transcriptionPollRef.current = null

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Head, router, usePage } from '@inertiajs/react'
+import { fetchPythonSetupStatus } from '@/lib/pythonSetup'
 import { Button } from '@/Components/Button'
 import { Input, Select } from '@/Components/Input'
 import { SetupLog } from '@/Components/SetupLog'
@@ -117,11 +118,15 @@ export default function Onboarding({ python_status, python_error }: Props) {
 
   useEffect(() => {
     if (currentPythonStatus === 'running') {
-      pollRef.current = setInterval(() => {
-        router.reload({
-          only: ['python_setup'],
-        })
-      }, 3000)
+      const apply = async () => {
+        const ps = await fetchPythonSetupStatus()
+        if (!ps) return
+        setCurrentPythonStatus(ps.status)
+        setCurrentPythonError(ps.error ?? null)
+        setCurrentPythonLog(ps.log ?? '')
+      }
+      apply()
+      pollRef.current = setInterval(apply, 3000)
     } else {
       if (pollRef.current) clearInterval(pollRef.current)
     }

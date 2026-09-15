@@ -49,6 +49,20 @@ Route::prefix('onboarding')->name('onboarding.')->group(function () {
     Route::post('retry-python',  [OnboardingController::class, 'retryPython'])->name('retry-python');
 });
 
+Route::get('python-setup-status', function () {
+    try {
+        return response()->json(app(\App\Services\PythonSetupService::class)->sharedPayload());
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status' => 'failed',
+            'error' => $e->getMessage(),
+            'log' => '',
+            'started_at' => null,
+            'onboarding_complete' => false,
+        ]);
+    }
+})->name('python-setup.status');
+
 // Campaigns
 Route::resource('campaigns', CampaignController::class);
 

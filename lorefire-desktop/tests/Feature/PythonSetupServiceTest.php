@@ -472,4 +472,15 @@ class PythonSetupServiceTest extends TestCase
         exec($cmd, $output, $code);
         $this->assertSame(0, $code, 'PowerShell failed to parse '.$label.":\n".implode("\n", $output));
     }
+
+    public function test_python_setup_status_json_does_not_use_inertia(): void
+    {
+        AppSetting::set(PythonSetupService::SETTING_STATUS, PythonSetupService::STATUS_RUNNING);
+        AppSetting::set(PythonSetupService::SETTING_STARTED_AT, time() - 15, 'integer');
+        file_put_contents($this->logPath, "==> Installing WhisperX and dependencies...\n");
+
+        $response = $this->getJson('/python-setup-status');
+        $response->assertOk()->assertJsonPath('status', 'running');
+        $this->assertFalse($response->headers->has('X-Inertia'));
+    }
 }

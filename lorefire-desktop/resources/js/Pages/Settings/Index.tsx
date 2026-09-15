@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Head, useForm, usePage, router } from '@inertiajs/react'
+import { fetchPythonSetupStatus } from '@/lib/pythonSetup'
 import AppLayout from '@/Layouts/AppLayout'
 import { Button } from '@/Components/Button'
 import { Input, Select } from '@/Components/Input'
@@ -40,23 +41,19 @@ export default function Index({ settings, whisperx_languages }: Props) {
     comfyui_base_url:     settings.comfyui_base_url ?? 'http://localhost:8188',
   })
 
-  // Poll when running
+  // Poll when running — fetch, not router.reload, so Inertia visits are not cancelled.
   useEffect(() => {
     if (pythonStatus !== 'running') return
-    pollRef.current = setInterval(() => {
-      router.reload({
-        only: ['python_setup'],
-        onSuccess: (page) => {
-          const ps = (page.props as PageProps).python_setup
-          if (ps) {
-            setPythonStatus(ps.status)
-            setPythonError(ps.error ?? null)
-            setPythonLog(ps.log ?? '')
-            if (ps.status !== 'running' && pollRef.current) clearInterval(pollRef.current)
-          }
-        },
-      })
-    }, 3000)
+    const apply = async () => {
+      const ps = await fetchPythonSetupStatus()
+      if (!ps) return
+      setPythonStatus(ps.status)
+      setPythonError(ps.error ?? null)
+      setPythonLog(ps.log ?? '')
+      if (ps.status !== 'running' && pollRef.current) clearInterval(pollRef.current)
+    }
+    apply()
+    pollRef.current = setInterval(apply, 3000)
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
   }, [pythonStatus])
 

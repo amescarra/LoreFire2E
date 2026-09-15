@@ -41,7 +41,7 @@ export default function Index({ settings, whisperx_languages }: Props) {
     comfyui_base_url:     settings.comfyui_base_url ?? 'http://localhost:8188',
   })
 
-  // Poll when running — fetch, not router.reload, so Inertia visits are not cancelled.
+  // Poll when running via JSON so Inertia visits are not cancelled.
   useEffect(() => {
     if (pythonStatus !== 'running') return
     const apply = async () => {

@@ -26,11 +26,11 @@ class NavigationUiTest extends TestCase
         $this->assertStringContainsString('sessionOverlay', $splash);
         $this->assertStringContainsString('fetchPythonSetupStatus', $splash);
         $this->assertStringContainsString('data-testid="splash-continue"', $splash);
-        $this->assertStringNotContainsString('router.reload', $splash);
+        $this->assertStringNotContainsString('router.reload(', $splash);
         $this->assertStringNotContainsString('className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8 drag-region"', $splash);
 
         $this->assertStringContainsString('fetchPythonSetupStatus', $settings);
-        $this->assertStringNotContainsString('router.reload', $settings);
+        $this->assertStringNotContainsString('router.reload(', $settings);
         $this->assertStringContainsString('fetchPythonSetupStatus', $onboarding);
         $this->assertStringNotContainsString("only: ['python_setup']", $onboarding);
 

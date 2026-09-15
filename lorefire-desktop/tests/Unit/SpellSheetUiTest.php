@@ -45,5 +45,9 @@ class SpellSheetUiTest extends TestCase
 
         $this->assertStringContainsString('timesMemorizedOf', $live);
         $this->assertStringNotContainsString('Prepared', $live);
+        $this->assertStringContainsString('SpellMaterialHint', $tab);
+        $this->assertStringContainsString('SpellMaterialHint', $live);
+        $this->assertStringContainsString('inventoryItems', $tab);
+        $this->assertStringContainsString('missingSpellMaterials', $live);
     }
 }

@@ -149,15 +149,18 @@ class SessionSheetUpdates
         $copies = max(1, (int) ($action['copies'] ?? 1));
         $changed = false;
         for ($i = 0; $i < $copies; $i++) {
-            $flags = Adnd2e::burnMemorizedInstance(
-                Adnd2e::effectiveTimesMemorized((int) $spell->times_memorized, (bool) $spell->is_prepared),
-                (int) $spell->times_cast,
-            );
-            if ((int) $flags['times_cast'] === (int) $spell->times_cast) {
+            $result = SpellMaterialComponents::tryBurnOneCopy($character, $spell);
+            if (! $result['ok']) {
+                Log::info('SessionSheetUpdates: blocked spell cast — missing components', [
+                    'character' => $character->name,
+                    'spell' => $spell->name,
+                    'error' => $result['error'],
+                ]);
                 break;
             }
-            $spell->update($flags);
-            $spell->refresh();
+            if (! $result['changed']) {
+                break;
+            }
             $changed = true;
         }
 

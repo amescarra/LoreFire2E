@@ -7,9 +7,10 @@ import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { HpBar } from '@/Components/HpBar'
+import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { Campaign, GameSession, Character, InventoryItem, CharacterSpell } from '@/types'
-import { formatSigned, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
+import { formatSigned, missingSpellMaterials, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -564,12 +565,21 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
                   .map(spell => {
                     const remaining = remainingMemorizedOf(spell)
                     const copies = timesMemorizedOf(spell)
+                    const missing = missingSpellMaterials(spell, character.inventory_items)
+                    const canCast = remaining > 0
                     return (
                       <button
                         key={spell.id}
                         type="button"
-                        title={remaining > 0 ? 'Click to cast one copy · right-click to restore' : 'Right-click to restore one copy'}
-                        onClick={() => remaining > 0 && burnSpell(spell, 'use')}
+                        data-testid="live-spell-cast"
+                        title={
+                          !canCast
+                            ? 'Right-click to restore one copy'
+                            : missing.length > 0
+                              ? `Cannot cast: missing ${missing.join(', ')}`
+                              : 'Click to cast one copy · right-click to restore'
+                        }
+                        onClick={() => canCast && burnSpell(spell, 'use')}
                         onContextMenu={e => { e.preventDefault(); remaining < copies && burnSpell(spell, 'recover') }}
                         className="flex items-center gap-2 px-2 py-1 rounded text-left"
                         style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)', opacity: remaining > 0 ? 1 : 0.5 }}
@@ -578,6 +588,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
                           {spell.level}
                         </span>
                         <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-bright)' }}>{spell.name}</span>
+                        <SpellMaterialHint spell={spell} items={character.inventory_items} compact />
                         <span className="text-[8px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>
                           {remaining}/{copies}
                         </span>

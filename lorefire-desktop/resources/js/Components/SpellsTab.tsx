@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
 import { router } from '@inertiajs/react'
-import { CharacterSpell } from '@/types'
+import { CharacterSpell, InventoryItem } from '@/types'
 import { Button } from '@/Components/Button'
 import { Input, Select, Textarea } from '@/Components/Input'
 import { MemorizedControl } from '@/Components/MemorizedControl'
+import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
 import { memorizedCopyTotal, remainingCopyTotal, remainingMemorizedOf, slotCapacityAtLevel, timesMemorizedOf } from '@/lib/adnd2e'
 
 // ── Spell school colours ──────────────────────────────────────────────
@@ -95,10 +96,11 @@ interface Props {
   characterClass: string
   spells: CharacterSpell[]
   memorization?: Record<string, number> | null
+  inventoryItems?: InventoryItem[]
 }
 
 // ── Main component ────────────────────────────────────────────────────
-export function SpellsTab({ characterId, characterClass, spells, memorization = null }: Props) {
+export function SpellsTab({ characterId, characterClass, spells, memorization = null, inventoryItems = [] }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingSpell, setEditingSpell] = useState<CharacterSpell | null>(null)
   const [form, setForm] = useState<SpellForm>(BLANK_SPELL)
@@ -274,6 +276,7 @@ export function SpellsTab({ characterId, characterClass, spells, memorization = 
             <SpellRow
               key={spell.id}
               spell={spell}
+              inventoryItems={inventoryItems}
               expanded={expandedSpell === spell.id}
               onToggleExpand={() => setExpandedSpell(expandedSpell === spell.id ? null : spell.id)}
               onEdit={() => openEdit(spell)}
@@ -305,9 +308,10 @@ export function SpellsTab({ characterId, characterClass, spells, memorization = 
 
 // ── Spell row ─────────────────────────────────────────────────────────
 function SpellRow({
-  spell, expanded, onToggleExpand, onEdit, onDelete, onSetMemorized,
+  spell, inventoryItems, expanded, onToggleExpand, onEdit, onDelete, onSetMemorized,
 }: {
   spell: CharacterSpell
+  inventoryItems: InventoryItem[]
   expanded: boolean
   onToggleExpand: () => void
   onEdit: () => void
@@ -350,6 +354,7 @@ function SpellRow({
           {times > 0 && remaining === 0 && (
             <span className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>Cast</span>
           )}
+          <SpellMaterialHint spell={spell} items={inventoryItems} compact />
           {spell.school && (
             <span
               className="hidden sm:inline px-1.5 py-0 text-[9px] rounded uppercase tracking-widest leading-4"
@@ -400,6 +405,13 @@ function SpellRow({
             {spell.components && <Detail label="Components" value={spell.components} />}
             {spell.duration && <Detail label="Duration" value={spell.duration} />}
           </div>
+          {(spell.material_requirements?.length ?? 0) > 0 && (
+            <p className="mt-1 text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
+              Linked: {spell.material_requirements!.map(req => (
+                `${req.focus ? 'focus' : 'spend'} ${req.name}`
+              )).join(' · ')}
+            </p>
+          )}
           {spell.description && (
             <p className="mt-1 leading-relaxed" style={{ color: 'var(--color-text-base)' }}>
               {spell.description}
@@ -627,13 +639,16 @@ function ManualSpellForm({
         onChange={e => set('components', e.target.value)}
         placeholder="V, S, M (a pinch of sulfur)"
       />
+      <p className="text-[10px] -mt-2" style={{ color: 'var(--color-text-dim)' }}>
+        Named items in parentheses or a Material: note are spent from inventory on cast. Label foci so they are not consumed. Bare V, S, M does not invent materials.
+      </p>
 
       <Textarea
         label="Description (optional)"
         value={form.description}
         onChange={e => set('description', e.target.value)}
         rows={3}
-        placeholder="Brief description or notes…"
+        placeholder="Material: a pinch of sulfur. Optional notes — not PHB text."
       />
 
       <div className="flex flex-wrap gap-3">

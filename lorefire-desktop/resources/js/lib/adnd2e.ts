@@ -678,6 +678,34 @@ export function remainingMemorizedOf(spell: {
   return Math.max(0, timesMemorizedOf(spell) - (spell.times_cast ?? 0))
 }
 
+/** Case-insensitive name, then contains either direction (mirrors PHP matching). */
+export function inventoryHasMaterial(
+  items: Array<{ name: string; quantity?: number }> | undefined,
+  name: string,
+  quantity = 1,
+): boolean {
+  if (!items || items.length === 0) return false
+  const needle = name.trim().toLowerCase()
+  if (needle === '') return false
+  return items.some(item => {
+    const hay = (item.name ?? '').toLowerCase().trim()
+    const have = item.quantity ?? 1
+    if (have < quantity) return false
+    if (hay === needle) return true
+    if (needle.length < 3) return false
+    return hay.includes(needle) || (hay.length >= 3 && needle.includes(hay))
+  })
+}
+
+export function missingSpellMaterials(
+  spell: { material_requirements?: Array<{ name: string; quantity: number; consumed: boolean; focus: boolean }> },
+  items: Array<{ name: string; quantity?: number }> | undefined,
+): string[] {
+  return (spell.material_requirements ?? [])
+    .filter(req => !inventoryHasMaterial(items, req.name, req.quantity))
+    .map(req => req.name)
+}
+
 export function memorizedCopyTotal(spells: Array<{ times_memorized?: number | null; is_prepared?: boolean }>): number {
   return spells.reduce((sum, spell) => sum + timesMemorizedOf(spell), 0)
 }

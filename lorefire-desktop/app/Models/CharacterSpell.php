@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\Adnd2e;
+use App\Support\SpellMaterialComponents;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -33,6 +34,7 @@ class CharacterSpell extends Model
 
     protected $appends = [
         'remaining_memorized',
+        'material_requirements',
     ];
 
     protected static function booted(): void
@@ -51,6 +53,16 @@ class CharacterSpell extends Model
     public function getRemainingMemorizedAttribute(): int
     {
         return Adnd2e::remainingMemorized((int) $this->times_memorized, (int) $this->times_cast);
+    }
+
+    /**
+     * Named materials/foci parsed from this spell's own components/description.
+     *
+     * @return list<array{name: string, quantity: int, consumed: bool, focus: bool}>
+     */
+    public function getMaterialRequirementsAttribute(): array
+    {
+        return SpellMaterialComponents::parse($this->components, $this->description);
     }
 
     public function character(): BelongsTo

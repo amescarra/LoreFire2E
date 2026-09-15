@@ -99,6 +99,14 @@ export interface CharacterSpell {
   times_memorized: number
   times_cast: number
   remaining_memorized?: number
+  material_requirements?: SpellMaterialRequirement[]
+}
+
+export interface SpellMaterialRequirement {
+  name: string
+  quantity: number
+  consumed: boolean
+  focus: boolean
 }
 
 export interface InventoryItem {

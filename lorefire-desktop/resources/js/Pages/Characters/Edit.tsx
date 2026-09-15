@@ -579,6 +579,7 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
             characterClass={data.class}
             spells={character.spells ?? []}
             memorization={data.memorization as Record<string, number>}
+            inventoryItems={character.inventory_items ?? []}
           />
 
           {/* Notes */}

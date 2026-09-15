@@ -302,6 +302,11 @@ class BatchSheetTest extends TestCase
         $this->assertStringContainsString('data-mod="dexterity">'.$dexMod, $html);
         $this->assertStringContainsString('data-mod="intelligence">'.$intMod, $html);
         $this->assertStringNotContainsString('data-mod="dexterity">+2', $html);
+        $this->assertStringContainsString('missile', $html);
+        $this->assertStringContainsString('def -2', $html);
+        $this->assertStringContainsString('langs 5', $html);
+        $this->assertStringContainsString('learn 70%', $html);
+        $this->assertStringContainsString('shock 95%', $html);
         $this->assertStringContainsString('Dual-class', $html);
         $this->assertStringContainsString('PSI 9', $html);
         $this->assertStringContainsString('FR 10', $html);
@@ -309,6 +314,41 @@ class BatchSheetTest extends TestCase
         $this->assertStringContainsString('data-save="paralyzation">'.($saves['paralyzation'] ?? 20), $html);
         $this->assertStringContainsString('PSP 40 / 55', $html);
         $this->assertStringContainsString('Id Insinuation', $html);
+    }
+
+    public function test_batch_sheet_prints_exceptional_strength_table_columns(): void
+    {
+        $character = Character::factory()->create([
+            'name' => 'Thurmbog',
+            'race' => 'Dwarf',
+            'class' => 'Fighter',
+            'class_path' => 'single',
+            'class_levels' => [
+                ['class' => 'Fighter', 'level' => 5],
+            ],
+            'level' => 5,
+            'strength' => 18,
+            'exceptional_strength' => '67',
+            'dexterity' => 12,
+            'constitution' => 16,
+            'intelligence' => 10,
+            'wisdom' => 10,
+            'charisma' => 8,
+        ]);
+
+        $html = view('pdf.batch-sheets', [
+            'characters' => collect([$character->load(['spells', 'inventoryItems', 'features', 'conditions', 'campaign'])]),
+            'baseUrl'    => 'http://localhost',
+        ])->render();
+
+        $this->assertStringContainsString('18/67', $html);
+        $this->assertStringContainsString('data-mod="strength">+2', $html);
+        $this->assertStringContainsString('hit +2', $html);
+        $this->assertStringContainsString('dmg +3', $html);
+        $this->assertStringContainsString('wt 160', $html);
+        $this->assertStringContainsString('press 305', $html);
+        $this->assertStringContainsString('open 13', $html);
+        $this->assertStringContainsString('BB 25%', $html);
     }
 
     public function test_batch_sheets_index_includes_class_levels_with_xp(): void

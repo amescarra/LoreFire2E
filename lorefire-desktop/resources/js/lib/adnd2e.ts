@@ -340,27 +340,37 @@ export function savingThrows(characterClass: string, level: number): SavingThrow
   return { paralyzation: row[0], rod: row[1], petrification: row[2], breath: row[3], spell: row[4] }
 }
 
-export function strengthAdjustments(score: number, exceptional?: string | null): { hit: number; damage: number } {
-  if (score <= 1) return { hit: -5, damage: -4 }
-  if (score === 2) return { hit: -3, damage: -2 }
-  if (score === 3) return { hit: -3, damage: -1 }
-  if (score <= 5) return { hit: -2, damage: -1 }
-  if (score <= 7) return { hit: -1, damage: 0 }
-  if (score <= 15) return { hit: 0, damage: 0 }
-  if (score === 16) return { hit: 0, damage: 1 }
-  if (score === 17) return { hit: 1, damage: 1 }
+export function strengthAdjustments(score: number, exceptional?: string | null): {
+  hit: number
+  damage: number
+  weight_allow: number
+  max_press: number
+  open_doors: string
+  bend_bars: number
+} {
+  if (score <= 1) return { hit: -5, damage: -4, weight_allow: 1, max_press: 3, open_doors: '1', bend_bars: 0 }
+  if (score === 2) return { hit: -3, damage: -2, weight_allow: 1, max_press: 5, open_doors: '1', bend_bars: 0 }
+  if (score === 3) return { hit: -3, damage: -1, weight_allow: 5, max_press: 10, open_doors: '2', bend_bars: 0 }
+  if (score <= 5) return { hit: -2, damage: -1, weight_allow: 10, max_press: 25, open_doors: '3', bend_bars: 0 }
+  if (score <= 7) return { hit: -1, damage: 0, weight_allow: 20, max_press: 55, open_doors: '4', bend_bars: 0 }
+  if (score <= 9) return { hit: 0, damage: 0, weight_allow: 35, max_press: 90, open_doors: '5', bend_bars: 1 }
+  if (score <= 11) return { hit: 0, damage: 0, weight_allow: 40, max_press: 115, open_doors: '6', bend_bars: 2 }
+  if (score <= 13) return { hit: 0, damage: 0, weight_allow: 45, max_press: 140, open_doors: '7', bend_bars: 4 }
+  if (score <= 15) return { hit: 0, damage: 0, weight_allow: 55, max_press: 170, open_doors: '8', bend_bars: 7 }
+  if (score === 16) return { hit: 0, damage: 1, weight_allow: 70, max_press: 195, open_doors: '9', bend_bars: 10 }
+  if (score === 17) return { hit: 1, damage: 1, weight_allow: 85, max_press: 220, open_doors: '10', bend_bars: 13 }
   if (score === 18) {
     const exc = parseExceptional(exceptional)
-    if (exc === null) return { hit: 1, damage: 2 }
-    if (exc <= 50) return { hit: 1, damage: 3 }
-    if (exc <= 75) return { hit: 2, damage: 3 }
-    if (exc <= 90) return { hit: 2, damage: 4 }
-    if (exc <= 99) return { hit: 3, damage: 5 }
-    return { hit: 3, damage: 6 }
+    if (exc === null) return { hit: 1, damage: 2, weight_allow: 110, max_press: 255, open_doors: '11', bend_bars: 16 }
+    if (exc <= 50) return { hit: 1, damage: 3, weight_allow: 135, max_press: 280, open_doors: '12', bend_bars: 20 }
+    if (exc <= 75) return { hit: 2, damage: 3, weight_allow: 160, max_press: 305, open_doors: '13', bend_bars: 25 }
+    if (exc <= 90) return { hit: 2, damage: 4, weight_allow: 185, max_press: 330, open_doors: '14', bend_bars: 30 }
+    if (exc <= 99) return { hit: 3, damage: 5, weight_allow: 235, max_press: 380, open_doors: '15 (3)', bend_bars: 35 }
+    return { hit: 3, damage: 6, weight_allow: 335, max_press: 480, open_doors: '16 (6)', bend_bars: 40 }
   }
-  if (score === 19) return { hit: 3, damage: 7 }
-  if (score === 20) return { hit: 3, damage: 8 }
-  return { hit: 4, damage: 9 }
+  if (score === 19) return { hit: 3, damage: 7, weight_allow: 485, max_press: 640, open_doors: '16 (8)', bend_bars: 50 }
+  if (score === 20) return { hit: 3, damage: 8, weight_allow: 535, max_press: 700, open_doors: '17 (10)', bend_bars: 60 }
+  return { hit: 4, damage: 9, weight_allow: 635, max_press: 810, open_doors: '17 (12)', bend_bars: 70 }
 }
 
 export function dexterityAdjustments(score: number): { reaction: number; missile: number; defensive: number } {
@@ -391,6 +401,52 @@ export function constitutionHpAdjustment(score: number, characterClass = 'Fighte
   return warrior ? 5 : 2
 }
 
+export function constitutionAdjustments(score: number, characterClass = 'Fighter'): {
+  hp: number
+  system_shock: number
+  resurrection: number
+  poison_save: number
+  regeneration: string | null
+} {
+  let shock = 70
+  let resurrection = 75
+  let poison = 0
+  let regen: string | null = null
+  if (score <= 1) { shock = 25; resurrection = 30 }
+  else if (score === 2) { shock = 30; resurrection = 35 }
+  else if (score === 3) { shock = 35; resurrection = 40 }
+  else if (score === 4) { shock = 40; resurrection = 45 }
+  else if (score === 5) { shock = 45; resurrection = 50 }
+  else if (score === 6) { shock = 50; resurrection = 55 }
+  else if (score === 7) { shock = 55; resurrection = 60 }
+  else if (score === 8) { shock = 60; resurrection = 65 }
+  else if (score === 9) { shock = 65; resurrection = 70 }
+  else if (score === 10) { shock = 70; resurrection = 75 }
+  else if (score === 11) { shock = 75; resurrection = 80 }
+  else if (score === 12) { shock = 80; resurrection = 85 }
+  else if (score === 13) { shock = 85; resurrection = 90 }
+  else if (score === 14) { shock = 88; resurrection = 92 }
+  else if (score === 15) { shock = 90; resurrection = 94 }
+  else if (score === 16) { shock = 95; resurrection = 96 }
+  else if (score === 17) { shock = 97; resurrection = 98 }
+  else if (score === 18) { shock = 99; resurrection = 100 }
+  else if (score === 19) { shock = 99; resurrection = 100; poison = 1 }
+  else if (score === 20) { shock = 99; resurrection = 100; poison = 1; regen = '1/6 turns' }
+  else if (score === 21) { shock = 99; resurrection = 100; poison = 2; regen = '1/5 turns' }
+  else if (score === 22) { shock = 99; resurrection = 100; poison = 2; regen = '1/4 turns' }
+  else if (score === 23) { shock = 99; resurrection = 100; poison = 3; regen = '1/3 turns' }
+  else if (score === 24) { shock = 99; resurrection = 100; poison = 3; regen = '1/2 turns' }
+  else { shock = 100; resurrection = 100; poison = 4; regen = '1/1 turn' }
+
+  return {
+    hp: constitutionHpAdjustment(score, characterClass),
+    system_shock: shock,
+    resurrection,
+    poison_save: poison,
+    regeneration: regen,
+  }
+}
+
 export function wisdomMagicalDefense(score: number): number {
   if (score <= 1) return -6
   if (score === 2) return -4
@@ -402,6 +458,32 @@ export function wisdomMagicalDefense(score: number): number {
   if (score === 16) return 2
   if (score === 17) return 3
   return 4
+}
+
+export function wisdomBonusSpells(score: number): Record<number, number> {
+  if (score <= 12) return {}
+  if (score === 13) return { 1: 1 }
+  if (score === 14) return { 1: 2 }
+  if (score === 15) return { 1: 2, 2: 1 }
+  if (score === 16) return { 1: 2, 2: 2 }
+  if (score === 17) return { 1: 2, 2: 2, 3: 1 }
+  return { 1: 2, 2: 2, 3: 1, 4: 1 }
+}
+
+export function wisdomSpellFailure(score: number): number {
+  if (score <= 1) return 80
+  if (score === 2) return 60
+  if (score === 3) return 50
+  if (score === 4) return 45
+  if (score === 5) return 40
+  if (score === 6) return 35
+  if (score === 7) return 30
+  if (score === 8) return 25
+  if (score === 9) return 20
+  if (score === 10) return 15
+  if (score === 11) return 10
+  if (score === 12) return 5
+  return 0
 }
 
 export function charismaAdjustments(score: number): { max_henchmen: number; loyalty: number; reaction: number } {
@@ -419,16 +501,138 @@ export function charismaAdjustments(score: number): { max_henchmen: number; loya
   return { max_henchmen: 15, loyalty: 8, reaction: 7 }
 }
 
+export function intelligenceLimits(score: number): {
+  languages: number
+  max_spell_level: number | null
+  chance_to_learn: number | null
+  max_spells_per_level: number | null
+} {
+  if (score <= 8) return { languages: 1, max_spell_level: null, chance_to_learn: null, max_spells_per_level: null }
+  if (score === 9) return { languages: 2, max_spell_level: 4, chance_to_learn: 35, max_spells_per_level: 6 }
+  if (score === 10) return { languages: 2, max_spell_level: 5, chance_to_learn: 40, max_spells_per_level: 7 }
+  if (score === 11) return { languages: 2, max_spell_level: 5, chance_to_learn: 45, max_spells_per_level: 7 }
+  if (score === 12) return { languages: 3, max_spell_level: 6, chance_to_learn: 50, max_spells_per_level: 7 }
+  if (score === 13) return { languages: 3, max_spell_level: 6, chance_to_learn: 55, max_spells_per_level: 9 }
+  if (score === 14) return { languages: 4, max_spell_level: 7, chance_to_learn: 60, max_spells_per_level: 9 }
+  if (score === 15) return { languages: 4, max_spell_level: 7, chance_to_learn: 65, max_spells_per_level: 11 }
+  if (score === 16) return { languages: 5, max_spell_level: 8, chance_to_learn: 70, max_spells_per_level: 11 }
+  if (score === 17) return { languages: 5, max_spell_level: 8, chance_to_learn: 75, max_spells_per_level: 14 }
+  return { languages: 7, max_spell_level: 9, chance_to_learn: 85, max_spells_per_level: 18 }
+}
+
 export function primaryAdjustment(ability: string, score: number, exceptional?: string | null, characterClass = 'Fighter'): number {
   switch (ability) {
     case 'strength': return strengthAdjustments(score, exceptional).hit
     case 'dexterity': return dexterityAdjustments(score).missile
     case 'constitution': return constitutionHpAdjustment(score, characterClass)
-    case 'intelligence': return score <= 8 ? -1 : score >= 16 ? 3 : score >= 12 ? 1 : 0
+    case 'intelligence': return intelligenceLimits(score).languages - 2
     case 'wisdom': return wisdomMagicalDefense(score)
     case 'charisma': return charismaAdjustments(score).reaction
     default: return 0
   }
+}
+
+export function primaryAdjustmentLabel(ability: string): string {
+  switch (ability) {
+    case 'strength': return 'hit'
+    case 'dexterity': return 'missile'
+    case 'constitution': return 'HP'
+    case 'intelligence': return 'lang'
+    case 'wisdom': return 'MD'
+    case 'charisma': return 'react'
+    default: return 'mod'
+  }
+}
+
+export function formatAbilityScore(ability: string, score: number, exceptional?: string | null): string {
+  if (ability !== 'strength' || score !== 18) return String(score)
+  const raw = (exceptional ?? '').toUpperCase().trim()
+  if (!raw) return '18'
+  if (raw === '00' || raw === '100') return '18/00'
+  if (!/^\d{1,3}$/.test(raw)) return '18'
+  return `18/${raw.padStart(2, '0')}`
+}
+
+export function formatWisdomBonusSpells(bonus: Record<number, number>): string {
+  const levels = Object.keys(bonus).map(Number).sort((a, b) => a - b)
+  if (levels.length === 0) return '—'
+  const ordinal: Record<number, string> = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th', 6: '6th', 7: '7th' }
+  return levels.map(level => `${ordinal[level] ?? `${level}th`}×${bonus[level]}`).join(', ')
+}
+
+export type AbilityAdjustmentLine = { label: string; value: string }
+
+export const ABILITY_ORDER = [
+  { key: 'strength', label: 'STR' },
+  { key: 'dexterity', label: 'DEX' },
+  { key: 'constitution', label: 'CON' },
+  { key: 'intelligence', label: 'INT' },
+  { key: 'wisdom', label: 'WIS' },
+  { key: 'charisma', label: 'CHA' },
+] as const
+
+export type AbilityKey = typeof ABILITY_ORDER[number]['key']
+
+export function abilityAdjustmentLines(
+  ability: string,
+  score: number,
+  exceptional?: string | null,
+  characterClass = 'Fighter',
+): AbilityAdjustmentLine[] {
+  if (ability === 'strength') {
+    const row = strengthAdjustments(score, exceptional)
+    return [
+      { label: 'hit', value: formatSigned(row.hit) },
+      { label: 'dmg', value: formatSigned(row.damage) },
+      { label: 'wt', value: String(row.weight_allow) },
+      { label: 'press', value: String(row.max_press) },
+      { label: 'open', value: row.open_doors },
+      { label: 'BB', value: `${row.bend_bars}%` },
+    ]
+  }
+  if (ability === 'dexterity') {
+    const row = dexterityAdjustments(score)
+    return [
+      { label: 'react', value: formatSigned(row.reaction) },
+      { label: 'missile', value: formatSigned(row.missile) },
+      { label: 'def', value: formatSigned(row.defensive) },
+    ]
+  }
+  if (ability === 'constitution') {
+    const row = constitutionAdjustments(score, characterClass)
+    const lines: AbilityAdjustmentLine[] = [
+      { label: 'HP', value: formatSigned(row.hp) },
+      { label: 'shock', value: `${row.system_shock}%` },
+      { label: 'resurrect', value: `${row.resurrection}%` },
+      { label: 'poison', value: formatSigned(row.poison_save) },
+    ]
+    if (row.regeneration) lines.push({ label: 'regen', value: row.regeneration })
+    return lines
+  }
+  if (ability === 'intelligence') {
+    const row = intelligenceLimits(score)
+    const lines: AbilityAdjustmentLine[] = [{ label: 'langs', value: String(row.languages) }]
+    if (row.max_spell_level !== null) lines.push({ label: 'spell lvl', value: String(row.max_spell_level) })
+    if (row.chance_to_learn !== null) lines.push({ label: 'learn', value: `${row.chance_to_learn}%` })
+    if (row.max_spells_per_level !== null) lines.push({ label: 'max/lvl', value: String(row.max_spells_per_level) })
+    return lines
+  }
+  if (ability === 'wisdom') {
+    return [
+      { label: 'MD', value: formatSigned(wisdomMagicalDefense(score)) },
+      { label: 'bonus', value: formatWisdomBonusSpells(wisdomBonusSpells(score)) },
+      { label: 'fail', value: `${wisdomSpellFailure(score)}%` },
+    ]
+  }
+  if (ability === 'charisma') {
+    const row = charismaAdjustments(score)
+    return [
+      { label: 'hench', value: String(row.max_henchmen) },
+      { label: 'loyalty', value: formatSigned(row.loyalty) },
+      { label: 'react', value: formatSigned(row.reaction) },
+    ]
+  }
+  return []
 }
 
 export function formatSigned(n: number): string {

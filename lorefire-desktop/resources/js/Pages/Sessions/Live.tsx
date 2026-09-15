@@ -8,9 +8,10 @@ import { Button } from '@/Components/Button'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { HpBar } from '@/Components/HpBar'
 import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { Campaign, GameSession, Character, InventoryItem, CharacterSpell } from '@/types'
-import { formatSigned, inventoryQuantityLabel, missingSpellMaterials, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
+import { ABILITY_ORDER, inventoryQuantityLabel, missingSpellMaterials, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,10 +29,6 @@ type LiveTab = 'characters' | 'oracle' | 'session'
 
 function csrf(): string {
   return (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
-}
-
-function mod(score: number, ability = 'dexterity', characterClass = 'Fighter'): string {
-  return formatSigned(primaryAdjustment(ability, score, null, characterClass))
 }
 
 function fmtTime(s: number): string {
@@ -461,20 +458,17 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
             )}
 
             {/* Ability scores */}
-            <div className="grid grid-cols-3 gap-1">
-              {[
-                { label: 'STR', key: 'strength' as const },
-                { label: 'DEX', key: 'dexterity' as const },
-                { label: 'CON', key: 'constitution' as const },
-                { label: 'INT', key: 'intelligence' as const },
-                { label: 'WIS', key: 'wisdom' as const },
-                { label: 'CHA', key: 'charisma' as const },
-              ].map(({ label, key }) => (
-                <div key={label} className="flex flex-col items-center py-1 rounded" style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)' }}>
-                  <span className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>{label}</span>
-                  <span className="text-sm font-bold font-heading" style={{ color: 'var(--color-text-bright)' }}>{character[key]}</span>
-                  <span className="text-[9px] font-mono" style={{ color: 'var(--color-rune)' }}>{mod(character[key] as number, key, character.class)}</span>
-                </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+              {ABILITY_ORDER.map(({ label, key }) => (
+                <AbilityScoreBlock
+                  key={key}
+                  ability={key}
+                  label={label}
+                  score={character[key] as number}
+                  exceptional={character.exceptional_strength}
+                  characterClass={character.class}
+                  variant="live"
+                />
               ))}
             </div>
 

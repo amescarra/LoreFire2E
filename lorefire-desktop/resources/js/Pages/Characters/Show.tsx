@@ -10,8 +10,9 @@ import { Input } from '@/Components/Input'
 import { Campaign, Character, InventoryItem, InventorySnapshot } from '@/types'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { SpellsTab } from '@/Components/SpellsTab'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import {
-  SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatSigned, formatXpAmount, hasPsionicist, inventoryQuantityLabel, normalizeClassLevels, primaryAdjustment, vitalityState,
+  ABILITY_ORDER, SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatXpAmount, hasPsionicist, inventoryQuantityLabel, normalizeClassLevels, vitalityState,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -86,19 +87,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
     router.patch(memorizationUrl, { level, action }, { preserveScroll: true })
   }
 
-  const adj = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, character.exceptional_strength, character.class))
-
   const vitality = vitalityState(character.current_hp)
-
-  const abilities = [
-    { label: 'STR', key: 'strength' as const },
-    { label: 'DEX', key: 'dexterity' as const },
-    { label: 'CON', key: 'constitution' as const },
-    { label: 'INT', key: 'intelligence' as const },
-    { label: 'WIS', key: 'wisdom' as const },
-    { label: 'CHA', key: 'charisma' as const },
-  ]
 
   const classPath = character.class_path ?? 'single'
   const classEntries = backfillClassLevelsXp(
@@ -262,13 +251,17 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
         </div>
 
         {/* ── Ability scores ────────────────────────────────────────── */}
-        <div className="grid grid-cols-6 gap-2">
-          {abilities.map(({ label, key }) => (
-            <div key={key} className="runic-card p-3 flex flex-col items-center gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{label}</span>
-              <span className="font-heading text-xl text-[var(--color-text-white)] leading-none">{character[key]}</span>
-              <span className="text-sm text-[var(--color-rune)] font-mono">{adj(key, character[key] as number)}</span>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {ABILITY_ORDER.map(({ label, key }) => (
+            <AbilityScoreBlock
+              key={key}
+              ability={key}
+              label={label}
+              score={character[key] as number}
+              exceptional={character.exceptional_strength}
+              characterClass={character.class}
+              variant="sheet"
+            />
           ))}
         </div>
 

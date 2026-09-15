@@ -8,7 +8,8 @@ import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
 import { Campaign, Character, GameSession, Npc } from '@/types'
-import { formatSigned, primaryAdjustment } from '@/lib/adnd2e'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
+import { ABILITY_ORDER } from '@/lib/adnd2e'
 
 interface Props {
   campaign: Campaign & {
@@ -292,9 +293,6 @@ export default function Show({ campaign, imageGenProvider }: Props) {
 }
 
 function CharacterCard({ character, campaignId }: { character: Character; campaignId: number }) {
-  const mod = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, character.exceptional_strength, character.class))
-
   return (
     <Link href={`/campaigns/${campaignId}/characters/${character.id}`}>
       <div className="runic-card p-3 flex items-center gap-4 hover:border-[var(--color-muted)] transition-all group">
@@ -328,11 +326,16 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
 
         {/* Key stats */}
         <div className="flex gap-3 shrink-0 text-center">
-          {(['strength','dexterity','constitution','intelligence','wisdom','charisma'] as const).slice(0,3).map(stat => (
-            <div key={stat} className="text-center">
-              <div className="text-xs font-heading text-[var(--color-rune-bright)]">{mod(stat, character[stat])}</div>
-              <div className="text-[10px] uppercase text-[var(--color-text-dim)]">{stat.slice(0,3)}</div>
-            </div>
+          {ABILITY_ORDER.slice(0, 3).map(({ label, key }) => (
+            <AbilityScoreBlock
+              key={key}
+              ability={key}
+              label={label}
+              score={character[key]}
+              exceptional={character.exceptional_strength}
+              characterClass={character.class}
+              variant="chip"
+            />
           ))}
         </div>
 

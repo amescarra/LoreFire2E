@@ -121,6 +121,25 @@
   }
   table.form td.score { font-size: 12pt; font-weight: 700; }
   table.form td.left, table.form th.left { text-align: left; }
+  table.form.abilities th { width: 2.2em; }
+  table.form.abilities td.score { width: 3.2em; font-size: 11pt; }
+  table.form.abilities .adj-lines {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1px 8px;
+    font-size: 7.5pt;
+    text-align: left;
+    justify-content: flex-start;
+  }
+  table.form.abilities .adj-lines .mod-lbl {
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-right: 6px;
+  }
+  table.form.abilities .adj {
+    white-space: nowrap;
+  }
 
   .combat-grid {
     display: grid;
@@ -274,30 +293,25 @@
   <div class="cols">
     <div class="box">
       <div class="box-title">Ability Scores</div>
-      <table class="form">
-        <tr>
-          @foreach (['STR','DEX','CON','INT','WIS','CHA'] as $lbl)
+      <table class="form abilities">
+        @foreach (['strength' => 'STR', 'dexterity' => 'DEX', 'constitution' => 'CON', 'intelligence' => 'INT', 'wisdom' => 'WIS', 'charisma' => 'CHA'] as $abilityKey => $lbl)
+          @php
+            $primaryLabel = \App\Support\Adnd2e::primaryAdjustmentLabel($abilityKey);
+            $detailLines = $character->abilityAdjustmentLines($abilityKey);
+          @endphp
+          <tr>
             <th>{{ $lbl }}</th>
-          @endforeach
-        </tr>
-        <tr>
-          <td class="score">
-            {{ $character->strength }}@if($character->exceptional_strength && $character->strength === 18)/{{ $character->exceptional_strength }}@endif
-          </td>
-          <td class="score">{{ $character->dexterity }}</td>
-          <td class="score">{{ $character->constitution }}</td>
-          <td class="score">{{ $character->intelligence }}</td>
-          <td class="score">{{ $character->wisdom }}</td>
-          <td class="score">{{ $character->charisma }}</td>
-        </tr>
-        <tr>
-          <td data-mod="strength">{{ $adj('strength') }}</td>
-          <td data-mod="dexterity">{{ $adj('dexterity') }}</td>
-          <td data-mod="constitution">{{ $adj('constitution') }}</td>
-          <td data-mod="intelligence">{{ $adj('intelligence') }}</td>
-          <td data-mod="wisdom">{{ $adj('wisdom') }}</td>
-          <td data-mod="charisma">{{ $adj('charisma') }}</td>
-        </tr>
+            <td class="score">{{ $character->formattedAbilityScore($abilityKey) }}</td>
+            <td class="left">
+              <div class="adj-lines">
+                <span class="mod-lbl"><span data-mod="{{ $abilityKey }}">{{ $adj($abilityKey) }}</span> {{ $primaryLabel }}</span>
+                @foreach ($detailLines as $line)
+                  <span class="adj">{{ $line['label'] }} {{ $line['value'] }}</span>
+                @endforeach
+              </div>
+            </td>
+          </tr>
+        @endforeach
       </table>
     </div>
 

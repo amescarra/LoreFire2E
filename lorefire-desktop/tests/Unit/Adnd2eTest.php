@@ -382,4 +382,59 @@ class Adnd2eTest extends TestCase
         ], 'multi', true, true));
         $this->assertSame('PSI — · FR 760,016', Adnd2e::formatClassXpLine($dual, 'dual', false, false));
     }
+
+    public function test_ability_tables_include_full_2e_columns_and_exceptional_strength(): void
+    {
+        $plain18 = Adnd2e::strengthAdjustments(18, null);
+        $this->assertSame(1, $plain18['hit']);
+        $this->assertSame(2, $plain18['damage']);
+        $this->assertSame(110, $plain18['weight_allow']);
+        $this->assertSame(255, $plain18['max_press']);
+        $this->assertSame('11', $plain18['open_doors']);
+        $this->assertSame(16, $plain18['bend_bars']);
+
+        $thurmbog = Adnd2e::strengthAdjustments(18, '67');
+        $this->assertSame(2, $thurmbog['hit']);
+        $this->assertSame(3, $thurmbog['damage']);
+        $this->assertSame(160, $thurmbog['weight_allow']);
+        $this->assertSame(305, $thurmbog['max_press']);
+        $this->assertSame('13', $thurmbog['open_doors']);
+        $this->assertSame(25, $thurmbog['bend_bars']);
+        $this->assertSame('18/67', Adnd2e::formatAbilityScore('strength', 18, '67'));
+        $this->assertSame('+2', Adnd2e::formatSigned(Adnd2e::primaryAdjustment('strength', 18, '67')));
+        $this->assertSame('hit', Adnd2e::primaryAdjustmentLabel('strength'));
+
+        $lines = Adnd2e::abilityAdjustmentLines('strength', 18, '67');
+        $this->assertSame(['hit', 'dmg', 'wt', 'press', 'open', 'BB'], array_column($lines, 'label'));
+        $this->assertContains('25%', array_column($lines, 'value'));
+
+        $dex = Adnd2e::dexterityAdjustments(16);
+        $this->assertSame(['reaction' => 1, 'missile' => 1, 'defensive' => -2], $dex);
+        $this->assertSame('missile', Adnd2e::primaryAdjustmentLabel('dexterity'));
+
+        $con = Adnd2e::constitutionAdjustments(16, 'Fighter');
+        $this->assertSame(2, $con['hp']);
+        $this->assertSame(95, $con['system_shock']);
+        $this->assertSame(96, $con['resurrection']);
+        $this->assertSame(0, $con['poison_save']);
+        $this->assertNull($con['regeneration']);
+
+        $int = Adnd2e::intelligenceLimits(16);
+        $this->assertSame(5, $int['languages']);
+        $this->assertSame(8, $int['max_spell_level']);
+        $this->assertSame(70, $int['chance_to_learn']);
+        $this->assertSame(11, $int['max_spells_per_level']);
+        $this->assertSame(3, Adnd2e::primaryAdjustment('intelligence', 16));
+
+        $wisLines = Adnd2e::abilityAdjustmentLines('wisdom', 16);
+        $this->assertSame(['MD', 'bonus', 'fail'], array_column($wisLines, 'label'));
+        $this->assertSame('+2', $wisLines[0]['value']);
+        $this->assertSame('1st×2, 2nd×2', $wisLines[1]['value']);
+        $this->assertSame('0%', $wisLines[2]['value']);
+
+        $cha = Adnd2e::charismaAdjustments(16);
+        $this->assertSame(8, $cha['max_henchmen']);
+        $this->assertSame(4, $cha['loyalty']);
+        $this->assertSame(5, $cha['reaction']);
+    }
 }

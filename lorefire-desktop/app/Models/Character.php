@@ -152,6 +152,24 @@ class Character extends Model
         return Adnd2e::primaryAdjustment($ability, (int) $this->{$ability}, $exceptional, $primary);
     }
 
+    public function formattedAbilityScore(string $ability): string
+    {
+        $exceptional = $ability === 'strength' ? $this->exceptional_strength : null;
+
+        return Adnd2e::formatAbilityScore($ability, (int) $this->{$ability}, $exceptional);
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    public function abilityAdjustmentLines(string $ability): array
+    {
+        $exceptional = $ability === 'strength' ? $this->exceptional_strength : null;
+        $primary = $this->classEntries()[0]['class'] ?? (string) $this->class;
+
+        return Adnd2e::abilityAdjustmentLines($ability, (int) $this->{$ability}, $exceptional, $primary);
+    }
+
     public function resolvedThac0(): int
     {
         return $this->thac0 ?? Adnd2e::combinedThac0($this->classEntries());

@@ -6,7 +6,8 @@ import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { Campaign, Character } from '@/types'
 import { ClassSummary, characterClassDisplay } from '@/Components/ClassSummary'
-import { formatSigned, primaryAdjustment } from '@/lib/adnd2e'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
+import { ABILITY_ORDER } from '@/lib/adnd2e'
 
 interface Props {
   campaign: Campaign | null
@@ -88,8 +89,6 @@ function CharacterRow({ campaign, character }: { campaign: Campaign | null; char
     ? `/characters/${character.id}`
     : `/campaigns/${campaign!.id}/characters/${character.id}`
 
-  const mod = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, character.exceptional_strength, character.class))
   const { xpLine } = characterClassDisplay(character)
 
   return (
@@ -134,11 +133,16 @@ function CharacterRow({ campaign, character }: { campaign: Campaign | null; char
 
         {/* Ability score mods */}
         <div className="hidden md:flex items-center gap-3 shrink-0">
-          {(['strength','dexterity','constitution','intelligence','wisdom','charisma'] as const).map(ab => (
-            <div key={ab} className="text-center">
-              <div className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{ab.slice(0,3)}</div>
-              <div className="text-sm font-mono text-[var(--color-rune-bright)]">{mod(ab, character[ab])}</div>
-            </div>
+          {ABILITY_ORDER.map(({ label, key }) => (
+            <AbilityScoreBlock
+              key={key}
+              ability={key}
+              label={label}
+              score={character[key]}
+              exceptional={character.exceptional_strength}
+              characterClass={character.class}
+              variant="chip"
+            />
           ))}
         </div>
 

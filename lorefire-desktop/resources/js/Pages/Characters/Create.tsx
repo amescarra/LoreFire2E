@@ -8,9 +8,10 @@ import { Campaign } from '@/types'
 import { ClassPathFields } from '@/Components/ClassPathFields'
 import { KitField } from '@/Components/KitField'
 import { PsionicistSheetFields } from '@/Components/PsionicistSheetFields'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import {
-  ALIGNMENTS, RACES,
-  ClassPath, combinedHitDie, combinedThac0, derivedExperiencePoints, formatSigned, hasPsionicist, movementRate, primaryAdjustment,
+  ABILITY_ORDER, ALIGNMENTS, RACES,
+  ClassPath, combinedHitDie, combinedThac0, derivedExperiencePoints, hasPsionicist, movementRate,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -56,9 +57,6 @@ export default function Create({ campaign, campaigns }: Props) {
   }
 
   const entries = data.class_levels.filter(e => e.class)
-
-  const adj = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, data.exceptional_strength || null, data.class || 'Fighter'))
 
   const breadcrumbs = standalone
     ? [{ label: 'Characters', href: '/characters' }, { label: 'New Character' }]
@@ -166,21 +164,25 @@ export default function Create({ campaign, campaigns }: Props) {
 
           <RuneDivider label="Ability Scores" />
 
-          <div className="grid grid-cols-6 gap-3">
-            {([
-              ['STR', 'strength'], ['DEX', 'dexterity'], ['CON', 'constitution'],
-              ['INT', 'intelligence'], ['WIS', 'wisdom'], ['CHA', 'charisma']
-            ] as [string, keyof typeof data][]).map(([label, key]) => (
-              <div key={key} className="flex flex-col items-center gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{label}</label>
-                <input
-                  type="number" min={1} max={25}
-                  value={data[key] as number}
-                  onChange={e => setData(key, parseInt(e.target.value) || 10)}
-                  className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
-                />
-                <span className="text-xs text-[var(--color-rune)] font-mono">{adj(String(key), data[key] as number)}</span>
-              </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {ABILITY_ORDER.map(({ label, key }) => (
+              <AbilityScoreBlock
+                key={key}
+                ability={key}
+                label={label}
+                score={data[key] as number}
+                exceptional={data.exceptional_strength || null}
+                characterClass={data.class || 'Fighter'}
+                variant="form"
+                scoreControl={
+                  <input
+                    type="number" min={1} max={25}
+                    value={data[key] as number}
+                    onChange={e => setData(key, parseInt(e.target.value) || 10)}
+                    className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
+                  />
+                }
+              />
             ))}
           </div>
 

@@ -14,6 +14,7 @@ class SpellMaterialComponentsTest extends TestCase
         $this->assertSame([], SpellMaterialComponents::parse('V, S, F'));
         $this->assertSame([], SpellMaterialComponents::parse('V, S, G'));
         $this->assertSame([], SpellMaterialComponents::parse(null, 'The caster hurls a bolt of fire at the target.'));
+        $this->assertSame('pinch of sulfur', SpellMaterialComponents::parse(null, 'Material: a pinch of sulfur.')[0]['name']);
     }
 
     public function test_parenthetical_named_material_is_expendable(): void

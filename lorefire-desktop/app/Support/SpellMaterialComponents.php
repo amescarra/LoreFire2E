@@ -218,6 +218,7 @@ class SpellMaterialComponents
             }
             if (strcasecmp($hay, $needle) === 0) {
                 $best = max($best, 1000);
+
                 continue;
             }
             if (strlen($needle) < 3) {
@@ -225,6 +226,7 @@ class SpellMaterialComponents
             }
             if (str_contains($hay, $needle)) {
                 $best = max($best, 400 - min(200, strlen($hay) - strlen($needle)));
+
                 continue;
             }
             if (strlen($hay) >= 3 && str_contains($needle, $hay)) {
@@ -417,11 +419,13 @@ class SpellMaterialComponents
     }
 
     /**
+     * Leading V/S/M/F/G tokens only — never the first letter of Material/Focus.
+     *
      * @return list<string>
      */
     protected static function componentCodes(string $text): array
     {
-        if (! preg_match('/^\s*((?:[VSMFG](?:\s*[\/,]\s*[VSMFG])*)+)/i', $text, $match)) {
+        if (! preg_match('/^\s*([VSMFG](?:\s*[,\/]\s*[VSMFG])*)\b(?![a-z])/i', $text, $match)) {
             return [];
         }
         preg_match_all('/[VSMFG]/i', $match[1], $letters);
@@ -431,7 +435,7 @@ class SpellMaterialComponents
 
     protected static function stripLeadingCodes(string $text): string
     {
-        $stripped = preg_replace('/^\s*(?:[VSMFG](?:\s*[\/,]\s*[VSMFG])*)+/i', '', $text);
+        $stripped = preg_replace('/^\s*[VSMFG](?:\s*[,\/]\s*[VSMFG])*\b(?![a-z])/i', '', $text);
 
         return trim((string) $stripped);
     }

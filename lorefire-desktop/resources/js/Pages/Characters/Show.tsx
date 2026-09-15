@@ -11,7 +11,7 @@ import { Campaign, Character, InventoryItem, InventorySnapshot } from '@/types'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { SpellsTab } from '@/Components/SpellsTab'
 import {
-  SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatSigned, formatXpAmount, hasPsionicist, normalizeClassLevels, primaryAdjustment, vitalityState,
+  SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatSigned, formatXpAmount, hasPsionicist, inventoryQuantityLabel, normalizeClassLevels, primaryAdjustment, vitalityState,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -648,7 +648,7 @@ function ClassFeaturesDisplay({ cf, updateUrl, characterClass, level }: { cf: CF
 
 const ITEM_CATEGORIES = [
   'Weapon', 'Armor', 'Shield', 'Ammunition', 'Potion', 'Scroll',
-  'Wondrous Item', 'Ring', 'Rod', 'Staff', 'Wand', 'Gear', 'Tool',
+  'Wondrous Item', 'Ring', 'Rod', 'Staff', 'Wand', 'Gear', 'Component', 'Tool',
   'Mount', 'Vehicle', 'Trade Good', 'Treasure', 'Other',
 ]
 
@@ -862,15 +862,18 @@ function InventoryTab({ character }: { character: Character }) {
                 <p className="text-xs text-[var(--color-text-dim)]">Empty inventory at this point.</p>
               ) : (
                 <div className="flex flex-col gap-1">
-                  {viewingSnapshot.items.map((item, i) => (
+                  {viewingSnapshot.items.map((item, i) => {
+                    const qtyLabel = inventoryQuantityLabel(item)
+                    return (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       {item.equipped && <div className="w-1 h-1 rounded-full bg-[var(--color-rune)] shrink-0" />}
                       <span className="text-[var(--color-text-bright)] flex-1">{item.name}</span>
-                      {item.quantity > 1 && <span className="text-[var(--color-text-dim)]">×{item.quantity}</span>}
+                      {qtyLabel && <span className="text-[var(--color-text-dim)]">{qtyLabel}</span>}
                       {item.is_magical && <Badge variant="arcane">M</Badge>}
                       {item.category && <span className="text-[var(--color-text-dim)]">{item.category}</span>}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -925,6 +928,7 @@ function ItemRow({
   onDelete: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const qtyLabel = inventoryQuantityLabel(item)
 
   return (
     <div className="runic-card">
@@ -948,9 +952,9 @@ function ItemRow({
           {item.name}
         </button>
 
-        {/* Quantity */}
-        {item.quantity !== 1 && (
-          <span className="text-xs font-mono text-[var(--color-text-dim)] shrink-0">×{item.quantity}</span>
+        {/* Quantity: always for components (including ×1); otherwise when not 1 */}
+        {qtyLabel && (
+          <span className="text-xs font-mono text-[var(--color-text-dim)] shrink-0">{qtyLabel}</span>
         )}
 
         {/* Weight */}

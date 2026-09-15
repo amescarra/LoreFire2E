@@ -192,7 +192,29 @@ class SpellMaterialSpendTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Characters/Show')
                 ->where('character.spells.0.material_requirements.0.name', 'sulfur')
+                ->where('character.spells.0.material_requirements.0.quantity', 1)
                 ->where('character.spells.0.material_requirements.0.consumed', true)
+            );
+    }
+
+    public function test_material_requirements_surface_leading_counts(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $character->spells()->create([
+            'name' => 'Custom Petal Charm',
+            'level' => 1,
+            'components' => 'V, S, M (3 rose petals)',
+            'times_memorized' => 1,
+        ]);
+
+        $this->get(route('characters.show', $character))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Characters/Show')
+                ->where('character.spells.0.material_requirements.0.name', 'rose petals')
+                ->where('character.spells.0.material_requirements.0.quantity', 3)
+                ->where('character.spells.0.material_requirements.0.consumed', true)
+                ->where('character.spells.0.material_requirements.0.focus', false)
             );
     }
 }

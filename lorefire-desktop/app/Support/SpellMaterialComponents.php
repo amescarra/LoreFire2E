@@ -503,8 +503,8 @@ class SpellMaterialComponents
         $text = trim($text, " \t.:-–—");
 
         $quantity = 1;
-        if (preg_match('/^(\d+)\s*[x×]\s+(.+)$/i', $text, $match)
-            || preg_match('/^(\d+)\s+(?!gp|sp|cp|pp|gold|silver)(.+)$/i', $text, $match)
+        if (preg_match('/^(\d+)\s*[x×]\s+(.+)$/iu', $text, $match)
+            || preg_match('/^(\d+)\s+(?!gp|sp|cp|pp|gold|silver)(.+)$/iu', $text, $match)
         ) {
             $quantity = max(1, (int) $match[1]);
             $text = trim($match[2]);

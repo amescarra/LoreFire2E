@@ -10,7 +10,7 @@ import { HpBar } from '@/Components/HpBar'
 import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { Campaign, GameSession, Character, InventoryItem, CharacterSpell } from '@/types'
-import { formatSigned, missingSpellMaterials, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
+import { formatSigned, inventoryQuantityLabel, missingSpellMaterials, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -611,15 +611,22 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
             {!character.inventory_items || character.inventory_items.length === 0 ? (
               <p className="text-xs text-center py-4" style={{ color: 'var(--color-text-dim)' }}>No inventory items.</p>
             ) : (
-              character.inventory_items.map(item => (
+              character.inventory_items.map(item => {
+                const qtyLabel = inventoryQuantityLabel(item)
+                return (
                 <div key={item.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)' }}>
                   <span className="text-xs flex-1 truncate" style={{ color: item.equipped ? 'var(--color-text-white)' : 'var(--color-text-base)' }}>
                     {item.name}
                   </span>
-                  {item.quantity > 1 && <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>×{item.quantity}</span>}
+                  {qtyLabel && (
+                    <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>
+                      {qtyLabel}
+                    </span>
+                  )}
                   {item.equipped && <span className="text-[8px] uppercase tracking-widest shrink-0" style={{ color: 'var(--color-rune)' }}>Eq</span>}
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         )}

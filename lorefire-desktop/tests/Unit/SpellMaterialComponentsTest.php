@@ -82,9 +82,23 @@ class SpellMaterialComponentsTest extends TestCase
         $this->assertSame('rose petals', $petals[0]['name']);
         $this->assertSame(3, $petals[0]['quantity']);
 
+        $times = SpellMaterialComponents::parse('V, S, M (3× rose petals)');
+        $this->assertSame('rose petals', $times[0]['name']);
+        $this->assertSame(3, $times[0]['quantity']);
+
         $pearl = SpellMaterialComponents::parse('V, S, M (a pearl worth 100 gp)');
         $this->assertSame('pearl', $pearl[0]['name']);
         $this->assertSame(1, $pearl[0]['quantity']);
+    }
+
+    public function test_parsed_requirements_always_include_a_quantity_key(): void
+    {
+        foreach (SpellMaterialComponents::parse('V, S, M (sulfur)') as $req) {
+            $this->assertArrayHasKey('quantity', $req);
+            $this->assertSame(1, $req['quantity']);
+        }
+        $this->assertSame(3, SpellMaterialComponents::parse('V, S, M (3 rose petals)')[0]['quantity']);
+        $this->assertSame(3, SpellMaterialComponents::parse('V, S, M (3× rose petals)')[0]['quantity']);
     }
 
     public function test_inventory_name_matching_prefers_exact_then_contains(): void

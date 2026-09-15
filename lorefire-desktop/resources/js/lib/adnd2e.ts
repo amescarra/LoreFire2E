@@ -706,6 +706,42 @@ export function missingSpellMaterials(
     .map(req => req.name)
 }
 
+export function materialRequirementQuantity(quantity?: number | null): number {
+  const n = Number(quantity)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1
+}
+
+/** Always includes the count, including 1×. */
+export function formatMaterialAmount(name: string, quantity?: number | null): string {
+  return `${materialRequirementQuantity(quantity)}× ${name}`
+}
+
+export function formatLinkedMaterial(req: {
+  name: string
+  quantity?: number | null
+  focus?: boolean
+}): string {
+  const kind = req.focus ? 'focus' : 'spend'
+  return `${kind} ${formatMaterialAmount(req.name, req.quantity)}`
+}
+
+export function isComponentCategory(category?: string | null): boolean {
+  const c = (category ?? '').trim().toLowerCase()
+  return c === 'component' || /\bcomponents?\b/.test(c)
+}
+
+/** Visible quantity badge. Components always show an amount, including ×1. */
+export function inventoryQuantityLabel(item: {
+  quantity?: number | null
+  category?: string | null
+}): string | null {
+  const qty = item.quantity ?? 1
+  if (qty !== 1 || isComponentCategory(item.category)) {
+    return `×${qty}`
+  }
+  return null
+}
+
 export function memorizedCopyTotal(spells: Array<{ times_memorized?: number | null; is_prepared?: boolean }>): number {
   return spells.reduce((sum, spell) => sum + timesMemorizedOf(spell), 0)
 }

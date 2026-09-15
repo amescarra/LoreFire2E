@@ -1,6 +1,6 @@
 import React from 'react'
 import { CharacterSpell, InventoryItem } from '@/types'
-import { inventoryHasMaterial } from '@/lib/adnd2e'
+import { formatMaterialAmount, inventoryHasMaterial } from '@/lib/adnd2e'
 
 export function SpellMaterialHint({
   spell,
@@ -21,12 +21,12 @@ export function SpellMaterialHint({
       title={reqs.map(req => {
         const ok = inventoryHasMaterial(items, req.name, req.quantity)
         const kind = req.focus ? 'focus' : 'spend'
-        return `${req.name} (${kind}${ok ? '' : ', missing'})`
+        return `${kind} ${formatMaterialAmount(req.name, req.quantity)}${ok ? '' : ' (missing)'}`
       }).join(' · ')}
     >
       {reqs.map(req => {
         const ok = inventoryHasMaterial(items, req.name, req.quantity)
-        const label = req.quantity > 1 ? `${req.quantity}× ${req.name}` : req.name
+        const label = formatMaterialAmount(req.name, req.quantity)
         return (
           <span
             key={`${req.focus ? 'f' : 'm'}-${req.name}`}

@@ -5,7 +5,7 @@ import { Button } from '@/Components/Button'
 import { Input, Select, Textarea } from '@/Components/Input'
 import { MemorizedControl } from '@/Components/MemorizedControl'
 import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
-import { memorizedCopyTotal, remainingCopyTotal, remainingMemorizedOf, slotCapacityAtLevel, timesMemorizedOf } from '@/lib/adnd2e'
+import { formatLinkedMaterial, memorizedCopyTotal, remainingCopyTotal, remainingMemorizedOf, slotCapacityAtLevel, timesMemorizedOf } from '@/lib/adnd2e'
 
 // ── Spell school colours ──────────────────────────────────────────────
 const SCHOOL_COLORS: Record<string, string> = {
@@ -407,9 +407,7 @@ function SpellRow({
           </div>
           {(spell.material_requirements?.length ?? 0) > 0 && (
             <p className="mt-1 text-[10px]" style={{ color: 'var(--color-text-dim)' }}>
-              Linked: {spell.material_requirements!.map(req => (
-                `${req.focus ? 'focus' : 'spend'} ${req.name}`
-              )).join(' · ')}
+              Linked: {spell.material_requirements!.map(req => formatLinkedMaterial(req)).join(' · ')}
             </p>
           )}
           {spell.description && (

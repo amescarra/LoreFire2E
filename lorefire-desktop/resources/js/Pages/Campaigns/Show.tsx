@@ -9,7 +9,7 @@ import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
 import { Campaign, Character, GameSession, Npc } from '@/types'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
-import { ClassSummary, characterClassDisplay } from '@/Components/ClassSummary'
+import { ClassSummary, characterListSubtitle } from '@/Components/ClassSummary'
 import { ABILITY_ORDER } from '@/lib/adnd2e'
 
 interface Props {
@@ -294,8 +294,6 @@ export default function Show({ campaign, imageGenProvider }: Props) {
 }
 
 function CharacterCard({ character, campaignId }: { character: Character; campaignId: number }) {
-  const { xpLine } = characterClassDisplay(character)
-
   return (
     <Link href={`/campaigns/${campaignId}/characters/${character.id}`}>
       <div className="runic-card party-character-row p-3 flex flex-wrap items-center gap-x-4 gap-y-2 hover:border-[var(--color-muted)] transition-all group">
@@ -315,17 +313,15 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
           )}
         </div>
 
-        {/* Name + class/level: dedicated growing block, wraps instead of ellipsis */}
+        {/* Same class/level/XP strings as Characters Index; keep this row's current size */}
         <div className="flex-1 min-w-[16rem]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide">{character.name}</span>
             <Badge variant="muted">{character.race}</Badge>
           </div>
-          <ClassSummary character={character} showXp={Boolean(xpLine)} variant="line" />
+          <ClassSummary character={character} showXp={false} variant="line" />
           <p className="text-xs text-[var(--color-text-dim)] mt-0.5 break-words">
-            {character.class}
-            {character.subclass ? ` — ${character.subclass}` : ''}
-            {character.player_name ? ` · ${character.player_name}` : ''}
+            {characterListSubtitle(character)}
           </p>
           <HpBar current={character.current_hp} max={character.max_hp} showNumbers={false} className="mt-1.5 w-24" />
         </div>

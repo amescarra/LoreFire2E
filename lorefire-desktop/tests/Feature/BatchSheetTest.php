@@ -455,6 +455,66 @@ class BatchSheetTest extends TestCase
             );
     }
 
+    public function test_campaign_show_class_fields_match_characters_index_by_name(): void
+    {
+        $campaign = Campaign::factory()->create();
+        $thumbs = Character::factory()->create([
+            'campaign_id' => $campaign->id,
+            'name' => 'Thurmbog',
+            'race' => 'Dwarf',
+            'class' => 'Fighter/Thief',
+            'subclass' => 'Ghetto Fighter',
+            'class_path' => 'multi',
+            'class_levels' => [
+                ['class' => 'Fighter', 'level' => 11, 'xp' => 500000],
+                ['class' => 'Thief', 'level' => 12, 'xp' => 660000],
+            ],
+            'level' => 12,
+            'experience_points' => 1160000,
+        ]);
+        $logain = Character::factory()->create([
+            'campaign_id' => $campaign->id,
+            'name' => 'Logain',
+            'race' => 'Human',
+            'class' => 'Psionicist',
+            'class_path' => 'dual',
+            'class_levels' => [
+                ['class' => 'Psionicist', 'level' => 9, 'xp' => 300000],
+                ['class' => 'Fighter', 'level' => 10, 'xp' => 500000],
+            ],
+            'level' => 10,
+            'experience_points' => 500000,
+        ]);
+
+        $index = $this->get(route('characters.index'))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Characters/Index'));
+
+        $show = $this->get(route('campaigns.show', $campaign))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Campaigns/Show'));
+
+        $fromIndex = collect($index->inertiaProps('characters'))->keyBy('name');
+        $fromCampaign = collect($show->inertiaProps('campaign.characters'))->keyBy('name');
+
+        foreach (['Thurmbog', 'Logain'] as $name) {
+            $this->assertTrue($fromIndex->has($name), "Characters index missing {$name}");
+            $this->assertTrue($fromCampaign->has($name), "Campaign show missing {$name}");
+            foreach (['class', 'subclass', 'class_path', 'class_levels', 'level', 'experience_points'] as $field) {
+                $this->assertEquals(
+                    $fromIndex[$name][$field],
+                    $fromCampaign[$name][$field],
+                    "{$name}.{$field} differs between Characters index and Campaign show"
+                );
+            }
+        }
+
+        $this->assertSame('Thurmbog', $thumbs->name);
+        $this->assertSame('Logain', $logain->name);
+        $campaignNames = collect($show->inertiaProps('campaign.characters'))->pluck('name')->all();
+        $this->assertSame(['Logain', 'Thurmbog'], $campaignNames);
+    }
+
     public function test_batch_sheet_renders_abbreviations_and_per_class_xp(): void
     {
         $character = Character::factory()->create([

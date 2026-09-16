@@ -5,7 +5,7 @@ import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { Campaign, Character } from '@/types'
-import { ClassSummary, characterClassDisplay } from '@/Components/ClassSummary'
+import { ClassSummary, characterListSubtitle } from '@/Components/ClassSummary'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { ABILITY_ORDER } from '@/lib/adnd2e'
 
@@ -89,8 +89,6 @@ function CharacterRow({ campaign, character }: { campaign: Campaign | null; char
     ? `/characters/${character.id}`
     : `/campaigns/${campaign!.id}/characters/${character.id}`
 
-  const { xpLine } = characterClassDisplay(character)
-
   return (
     <Link href={href} className="block group">
       <div className="runic-card p-4 flex items-center gap-5 hover:border-[var(--color-muted)] transition-all duration-150 group-hover:bg-[var(--color-raised)]">
@@ -123,10 +121,7 @@ function CharacterRow({ campaign, character }: { campaign: Campaign | null; char
             )}
           </div>
           <p className="text-xs text-[var(--color-text-dim)] truncate">
-            {character.race} {character.class}
-            {character.subclass ? ` — ${character.subclass}` : ''}
-            {character.player_name ? ` · ${character.player_name}` : ''}
-            {xpLine ? ` · ${xpLine}` : ''}
+            {characterListSubtitle(character)}
           </p>
           <HpBar current={character.current_hp} max={character.max_hp} className="mt-2 max-w-[180px]" />
         </div>

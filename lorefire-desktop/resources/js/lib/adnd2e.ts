@@ -719,6 +719,20 @@ export function displayLevel(entries: ClassEntry[], path: ClassPath = 'single'):
   return Math.max(...entries.map(e => e.level))
 }
 
+/** Prefer stored path; if it is missing/single, infer multi/dual from class_levels or class label. */
+export function resolveClassPath(
+  classPath: ClassPath | string | null | undefined,
+  classLevels: ClassEntry[] | null | undefined,
+  characterClass = '',
+): ClassPath {
+  if (classPath === 'multi' || classPath === 'dual') return classPath
+  const label = characterClass || ''
+  if (label.includes('→') || label.includes('->')) return 'dual'
+  const n = (classLevels ?? []).filter(e => e && e.class).length
+  if (n >= 2 || label.includes('/')) return 'multi'
+  return 'single'
+}
+
 export function classAbbreviation(className: string): string {
   const name = className.trim()
   if (!name) return '?'

@@ -135,10 +135,13 @@ class KitFieldUiTest extends TestCase
         $this->assertStringContainsString("Mage: 'Wiz'", $ts);
         $this->assertStringContainsString('export function formatClassLevelsLine', $ts);
         $this->assertStringContainsString('export function formatClassXpLine', $ts);
+        $this->assertStringContainsString('export function resolveClassPath', $ts);
 
         $summary = file_get_contents($root.'/resources/js/Components/ClassSummary.tsx');
         $this->assertIsString($summary);
         $this->assertStringContainsString('formatClassLevelsLine', $summary);
+        $this->assertStringContainsString('resolveClassPath', $summary);
+        $this->assertStringContainsString('export function characterListSubtitle', $summary);
         $this->assertStringContainsString('whitespace-nowrap', $summary);
         $this->assertStringNotContainsString('truncate', $summary);
 
@@ -146,14 +149,16 @@ class KitFieldUiTest extends TestCase
             $tsx = file_get_contents($root.'/resources/js/Pages/Characters/'.$page);
             $this->assertIsString($tsx);
             $this->assertStringContainsString('ClassSummary', $tsx);
+            $this->assertStringContainsString('characterListSubtitle', $tsx);
             $this->assertStringNotContainsString('Lv {character.level}', $tsx);
         }
 
         $campaignShow = file_get_contents($root.'/resources/js/Pages/Campaigns/Show.tsx');
         $this->assertIsString($campaignShow);
         $this->assertStringContainsString('ClassSummary', $campaignShow);
-        $this->assertStringContainsString('characterClassDisplay', $campaignShow);
+        $this->assertStringContainsString('characterListSubtitle', $campaignShow);
         $this->assertStringContainsString('variant="line"', $campaignShow);
+        $this->assertStringContainsString('showXp={false}', $campaignShow);
         $this->assertStringContainsString('min-w-[16rem]', $campaignShow);
         $this->assertStringContainsString('party-character-row', $campaignShow);
         $this->assertStringNotContainsString('Level {character.level}', $campaignShow);

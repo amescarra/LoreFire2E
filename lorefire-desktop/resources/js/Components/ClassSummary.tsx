@@ -6,17 +6,18 @@ import {
   formatClassLevelsLine,
   formatClassXpLine,
   normalizeClassLevels,
+  resolveClassPath,
 } from '@/lib/adnd2e'
 
 interface Props {
   character: Character
   showXp?: boolean
-  /** badge = compact chip (Characters Index). line = full-width wrapping text (Campaign party). */
+  /** badge = compact chip (Characters Index). line = Campaign party gold line. */
   variant?: 'badge' | 'line'
 }
 
 export function characterClassDisplay(character: Character) {
-  const path = character.class_path ?? 'single'
+  const path = resolveClassPath(character.class_path, character.class_levels, character.class)
   const entries = backfillClassLevelsXp(
     normalizeClassLevels(character.class_levels, character.class, character.level, path),
     path,
@@ -29,6 +30,16 @@ export function characterClassDisplay(character: Character) {
     xpLine: formatClassXpLine(entries, path, true, true),
     xpLineFull: formatClassXpLine(entries, path, false, false),
   }
+}
+
+/** Same subtitle Characters Index uses: race class — kit · player · XP. */
+export function characterListSubtitle(character: Character): string {
+  const { xpLine } = characterClassDisplay(character)
+  let line = `${character.race} ${character.class}`
+  if (character.subclass) line += ` — ${character.subclass}`
+  if (character.player_name) line += ` · ${character.player_name}`
+  if (xpLine) line += ` · ${xpLine}`
+  return line
 }
 
 export function ClassSummary({ character, showXp = true, variant = 'badge' }: Props) {

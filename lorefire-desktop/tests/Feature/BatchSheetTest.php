@@ -406,6 +406,55 @@ class BatchSheetTest extends TestCase
             );
     }
 
+    public function test_campaign_show_includes_class_levels(): void
+    {
+        $campaign = Campaign::factory()->create();
+        Character::factory()->create([
+            'campaign_id' => $campaign->id,
+            'name' => 'Ailduin',
+            'class' => 'Fighter/Mage',
+            'class_path' => 'multi',
+            'class_levels' => [
+                ['class' => 'Fighter', 'level' => 11, 'xp' => 500000],
+                ['class' => 'Mage', 'level' => 12, 'xp' => 750000],
+            ],
+            'level' => 12,
+            'experience_points' => 1250000,
+        ]);
+        Character::factory()->create([
+            'campaign_id' => $campaign->id,
+            'name' => 'Futt',
+            'class' => 'Psionicist',
+            'class_path' => 'dual',
+            'class_levels' => [
+                ['class' => 'Psionicist', 'level' => 9],
+                ['class' => 'Fighter', 'level' => 10],
+            ],
+            'level' => 10,
+        ]);
+
+        $this->get(route('campaigns.show', $campaign))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Campaigns/Show')
+                ->has('campaign.characters', 2)
+                ->where('campaign.characters.0.name', 'Ailduin')
+                ->where('campaign.characters.0.class_path', 'multi')
+                ->where('campaign.characters.0.class_levels.0.class', 'Fighter')
+                ->where('campaign.characters.0.class_levels.0.level', 11)
+                ->where('campaign.characters.0.class_levels.0.xp', 500000)
+                ->where('campaign.characters.0.class_levels.1.class', 'Mage')
+                ->where('campaign.characters.0.class_levels.1.level', 12)
+                ->where('campaign.characters.0.class_levels.1.xp', 750000)
+                ->where('campaign.characters.1.name', 'Futt')
+                ->where('campaign.characters.1.class_path', 'dual')
+                ->where('campaign.characters.1.class_levels.0.class', 'Psionicist')
+                ->where('campaign.characters.1.class_levels.0.level', 9)
+                ->where('campaign.characters.1.class_levels.1.class', 'Fighter')
+                ->where('campaign.characters.1.class_levels.1.level', 10)
+            );
+    }
+
     public function test_batch_sheet_renders_abbreviations_and_per_class_xp(): void
     {
         $character = Character::factory()->create([

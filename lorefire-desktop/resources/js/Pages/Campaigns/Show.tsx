@@ -9,6 +9,7 @@ import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
 import { Campaign, Character, GameSession, Npc } from '@/types'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
+import { ClassSummary, characterClassDisplay } from '@/Components/ClassSummary'
 import { ABILITY_ORDER } from '@/lib/adnd2e'
 
 interface Props {
@@ -293,6 +294,8 @@ export default function Show({ campaign, imageGenProvider }: Props) {
 }
 
 function CharacterCard({ character, campaignId }: { character: Character; campaignId: number }) {
+  const { xpLine } = characterClassDisplay(character)
+
   return (
     <Link href={`/campaigns/${campaignId}/characters/${character.id}`}>
       <div className="runic-card p-3 flex items-center gap-4 hover:border-[var(--color-muted)] transition-all group">
@@ -312,14 +315,18 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
           )}
         </div>
 
-        {/* Name + class */}
+        {/* Name + class/level — same formatter as Characters Index, no ellipsis */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide">{character.name}</span>
-            <Badge variant="muted">{character.race}</Badge>
+            <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide truncate">{character.name}</span>
+            <ClassSummary character={character} showXp={false} />
+            <Badge variant="muted" className="shrink-0">{character.race}</Badge>
           </div>
-          <p className="text-xs text-[var(--color-text-dim)] mt-0.5">
-            {character.class}{character.subclass ? ` · ${character.subclass}` : ''} · Level {character.level}
+          <p className="text-xs text-[var(--color-text-dim)] mt-0.5 whitespace-nowrap">
+            {character.class}
+            {character.subclass ? ` — ${character.subclass}` : ''}
+            {character.player_name ? ` · ${character.player_name}` : ''}
+            {xpLine ? ` · ${xpLine}` : ''}
           </p>
           <HpBar current={character.current_hp} max={character.max_hp} showNumbers={false} className="mt-1.5 w-24" />
         </div>

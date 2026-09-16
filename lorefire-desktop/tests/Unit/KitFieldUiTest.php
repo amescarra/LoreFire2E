@@ -139,6 +139,8 @@ class KitFieldUiTest extends TestCase
         $summary = file_get_contents($root.'/resources/js/Components/ClassSummary.tsx');
         $this->assertIsString($summary);
         $this->assertStringContainsString('formatClassLevelsLine', $summary);
+        $this->assertStringContainsString('whitespace-nowrap', $summary);
+        $this->assertStringNotContainsString('truncate', $summary);
 
         foreach (['Index.tsx'] as $page) {
             $tsx = file_get_contents($root.'/resources/js/Pages/Characters/'.$page);
@@ -146,6 +148,18 @@ class KitFieldUiTest extends TestCase
             $this->assertStringContainsString('ClassSummary', $tsx);
             $this->assertStringNotContainsString('Lv {character.level}', $tsx);
         }
+
+        $campaignShow = file_get_contents($root.'/resources/js/Pages/Campaigns/Show.tsx');
+        $this->assertIsString($campaignShow);
+        $this->assertStringContainsString('ClassSummary', $campaignShow);
+        $this->assertStringContainsString('characterClassDisplay', $campaignShow);
+        $this->assertStringContainsString('showXp={false}', $campaignShow);
+        $this->assertStringNotContainsString('Level {character.level}', $campaignShow);
+        $this->assertDoesNotMatchRegularExpression(
+            '/className="text-xs text-\[var\(--color-text-dim\)\] mt-0\.5[^"]*truncate/',
+            $campaignShow,
+            'Campaign party class line must not use truncate/ellipsis.'
+        );
 
         $batch = file_get_contents($root.'/resources/js/Pages/BatchSheets/Index.tsx');
         $this->assertIsString($batch);

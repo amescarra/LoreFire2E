@@ -33,10 +33,10 @@ export function ClassSummary({ character, showXp = true }: Props) {
   const { levelsLine, xpLine } = characterClassDisplay(character)
 
   return (
-    <div className="flex flex-col gap-0.5 min-w-0">
-      <Badge variant="rune" className="normal-case tracking-wider">{levelsLine}</Badge>
+    <div className="flex flex-col gap-0.5 shrink-0">
+      <Badge variant="rune" className="normal-case tracking-wider whitespace-nowrap">{levelsLine}</Badge>
       {showXp && xpLine && (
-        <span className="text-[10px] font-mono text-[var(--color-text-dim)] tracking-wide truncate">
+        <span className="text-[10px] font-mono text-[var(--color-text-dim)] tracking-wide whitespace-nowrap">
           {xpLine}
         </span>
       )}

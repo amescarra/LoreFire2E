@@ -201,10 +201,10 @@ export default function Show({ campaign, imageGenProvider }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem] gap-6">
 
           {/* ── Characters ──────────────────────────────────────────────── */}
-          <div className="col-span-2 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 min-w-0">
             <div className="flex items-center justify-between">
               <h2 className="font-heading text-xs uppercase tracking-widest text-[var(--color-text-dim)]">
                 Party
@@ -298,7 +298,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
 
   return (
     <Link href={`/campaigns/${campaignId}/characters/${character.id}`}>
-      <div className="runic-card p-3 flex items-center gap-4 hover:border-[var(--color-muted)] transition-all group">
+      <div className="runic-card party-character-row p-3 flex flex-wrap items-center gap-x-4 gap-y-2 hover:border-[var(--color-muted)] transition-all group">
         {/* Portrait placeholder */}
         <div
           className="w-10 h-10 rounded shrink-0 overflow-hidden flex items-center justify-center text-[var(--color-rune)] border border-[var(--color-border)]"
@@ -315,23 +315,22 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
           )}
         </div>
 
-        {/* Name + class/level — same formatter as Characters Index, no ellipsis */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide truncate">{character.name}</span>
-            <ClassSummary character={character} showXp={false} />
-            <Badge variant="muted" className="shrink-0">{character.race}</Badge>
+        {/* Name + class/level: dedicated growing block, wraps instead of ellipsis */}
+        <div className="flex-1 min-w-[16rem]">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide">{character.name}</span>
+            <Badge variant="muted">{character.race}</Badge>
           </div>
-          <p className="text-xs text-[var(--color-text-dim)] mt-0.5 whitespace-nowrap">
+          <ClassSummary character={character} showXp={Boolean(xpLine)} variant="line" />
+          <p className="text-xs text-[var(--color-text-dim)] mt-0.5 break-words">
             {character.class}
             {character.subclass ? ` — ${character.subclass}` : ''}
             {character.player_name ? ` · ${character.player_name}` : ''}
-            {xpLine ? ` · ${xpLine}` : ''}
           </p>
           <HpBar current={character.current_hp} max={character.max_hp} showNumbers={false} className="mt-1.5 w-24" />
         </div>
 
-        {/* Key stats */}
+        {/* Key stats — wrap below class/level when the row is narrow */}
         <div className="flex gap-3 shrink-0 text-center">
           {ABILITY_ORDER.slice(0, 3).map(({ label, key }) => (
             <AbilityScoreBlock

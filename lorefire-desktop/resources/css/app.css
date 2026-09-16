@@ -123,6 +123,13 @@ body {
     background: linear-gradient(90deg, transparent, var(--color-rune), transparent);
     opacity: 0.6;
 }
+/* Party rows: do not clip class/level text; keep the top rune bar rounded. */
+.runic-card.party-character-row {
+    overflow: visible;
+}
+.runic-card.party-character-row::before {
+    border-radius: 6px 6px 0 0;
+}
 
 /* ─── HP bar ──────────────────────────────────────────────────────────────── */
 .hp-bar-track {

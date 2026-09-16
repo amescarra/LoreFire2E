@@ -11,6 +11,8 @@ import {
 interface Props {
   character: Character
   showXp?: boolean
+  /** badge = compact chip (Characters Index). line = full-width wrapping text (Campaign party). */
+  variant?: 'badge' | 'line'
 }
 
 export function characterClassDisplay(character: Character) {
@@ -29,8 +31,17 @@ export function characterClassDisplay(character: Character) {
   }
 }
 
-export function ClassSummary({ character, showXp = true }: Props) {
+export function ClassSummary({ character, showXp = true, variant = 'badge' }: Props) {
   const { levelsLine, xpLine } = characterClassDisplay(character)
+
+  if (variant === 'line') {
+    return (
+      <p className="text-[11px] font-medium text-[var(--color-rune)] tracking-wide break-words">
+        {levelsLine}
+        {showXp && xpLine ? ` · ${xpLine}` : ''}
+      </p>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-0.5 shrink-0">

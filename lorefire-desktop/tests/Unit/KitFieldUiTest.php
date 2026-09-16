@@ -153,13 +153,21 @@ class KitFieldUiTest extends TestCase
         $this->assertIsString($campaignShow);
         $this->assertStringContainsString('ClassSummary', $campaignShow);
         $this->assertStringContainsString('characterClassDisplay', $campaignShow);
-        $this->assertStringContainsString('showXp={false}', $campaignShow);
+        $this->assertStringContainsString('variant="line"', $campaignShow);
+        $this->assertStringContainsString('min-w-[16rem]', $campaignShow);
+        $this->assertStringContainsString('party-character-row', $campaignShow);
         $this->assertStringNotContainsString('Level {character.level}', $campaignShow);
+        $this->assertStringNotContainsString('whitespace-nowrap', $campaignShow);
         $this->assertDoesNotMatchRegularExpression(
-            '/className="text-xs text-\[var\(--color-text-dim\)\] mt-0\.5[^"]*truncate/',
+            '/function CharacterCard[\s\S]*?truncate[\s\S]*?function SessionRow/',
             $campaignShow,
-            'Campaign party class line must not use truncate/ellipsis.'
+            'Campaign party CharacterCard must not use truncate/ellipsis.'
         );
+
+        $css = file_get_contents($root.'/resources/css/app.css');
+        $this->assertIsString($css);
+        $this->assertStringContainsString('.runic-card.party-character-row', $css);
+        $this->assertStringContainsString('overflow: visible', $css);
 
         $batch = file_get_contents($root.'/resources/js/Pages/BatchSheets/Index.tsx');
         $this->assertIsString($batch);

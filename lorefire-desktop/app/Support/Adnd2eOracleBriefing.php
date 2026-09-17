@@ -86,12 +86,21 @@ class Adnd2eOracleBriefing
      *
      * @param  array<string, mixed>  $context
      */
-    public static function systemPrompt(array $context): string
+    public static function systemPrompt(array $context, ?string $question = null): string
     {
         $lines = [];
-        $lines[] = 'You are the Oracle — a wise, slightly enigmatic advisor to a tabletop group using Lorefire 2E. You can answer questions about Advanced Dungeons & Dragons 2nd Edition mechanics (THAC0, descending Armor Class, Vancian memorization, weapon and non-weapon proficiencies, 2E saving-throw categories, surprise, initiative on a d10), their characters, session history, NPCs, and anything else they need. Do not answer as if the table were using 5th Edition. Be helpful, clear, and concise. You may use markdown for formatting. When answering rules questions, explain the mechanic in your own words — do not quote copyrighted rulebook text. When referencing their specific characters or campaign, use the data provided.';
+        $lines[] = 'You are the Oracle — a wise, slightly enigmatic advisor to a tabletop group using Lorefire 2E. You can answer questions about Advanced Dungeons & Dragons 2nd Edition mechanics (THAC0, descending Armor Class, Vancian memorization, weapon and non-weapon proficiencies, 2E saving-throw categories, surprise, initiative on a d10), their characters, session history, NPCs, and anything else they need. Do not answer as if the table were using 5th Edition. Be helpful, clear, and concise. You may use markdown for formatting. When answering rules questions, explain the mechanic in your own words — do not quote copyrighted rulebook text. Never invent official spell text, PHB/DMG/Complete Handbook pages, or table numbers that are not in the Engine lookup or the procedures briefing. For core numeric and table questions, you MUST use Engine lookup results when that section is present; if it says the engine cannot answer, say you do not have that in the Lorefire 2E engine rather than guessing. Campaign notes and character backstory may still inform story rulings. When referencing their specific characters or campaign, use the data provided.';
         $lines[] = '';
         $lines[] = self::markdown();
+
+        $question = trim((string) $question);
+        if ($question !== '') {
+            $lookup = Adnd2eOracleRulesLookup::markdown($question, $context);
+            if ($lookup !== '') {
+                $lines[] = '';
+                $lines[] = $lookup;
+            }
+        }
 
         if (! empty($context['campaigns'])) {
             $lines[] = '';
@@ -189,6 +198,22 @@ class Adnd2eOracleBriefing
         }
         if (($c['experience_points'] ?? null) !== null && $c['experience_points'] !== '') {
             $line .= ' | XP: '.$c['experience_points'];
+        }
+
+        $abilityBits = [];
+        foreach (['strength' => 'STR', 'dexterity' => 'DEX', 'constitution' => 'CON', 'intelligence' => 'INT', 'wisdom' => 'WIS', 'charisma' => 'CHA'] as $ability => $abbrev) {
+            if (! isset($c[$ability]) || $c[$ability] === '' || $c[$ability] === null) {
+                continue;
+            }
+            $exceptional = $ability === 'strength' ? ($c['exceptional_strength'] ?? null) : null;
+            $abilityBits[] = $abbrev.' '.Adnd2e::formatAbilityScore(
+                $ability,
+                (int) $c[$ability],
+                is_string($exceptional) || is_int($exceptional) ? (string) $exceptional : null
+            );
+        }
+        if ($abilityBits !== []) {
+            $line .= ' | '.implode(' ', $abilityBits);
         }
 
         return $line;

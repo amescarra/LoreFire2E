@@ -13,7 +13,9 @@ class Adnd2eOracleBriefingTest extends TestCase
 
         $this->assertStringContainsString('You are the Oracle', $prompt);
         $this->assertStringContainsString('do not quote copyrighted rulebook text', $prompt);
+        $this->assertStringContainsString('Never invent official spell text', $prompt);
         $this->assertStringContainsString('Do not answer as if the table were using 5th Edition', $prompt);
+        $this->assertStringNotContainsString('## Engine lookup', $prompt);
         $this->assertStringContainsString('Lorefire 2E procedures', $prompt);
         $this->assertStringContainsString('THAC0', $prompt);
         $this->assertStringContainsString('descending', $prompt);
@@ -190,5 +192,27 @@ class Adnd2eOracleBriefingTest extends TestCase
         $this->assertStringContainsString('HP: 18/22', $line);
         $this->assertStringContainsString('kit: Battlerager', $line);
         $this->assertStringContainsString('[single]', $line);
+    }
+
+    public function test_character_line_includes_ability_scores(): void
+    {
+        $line = Adnd2eOracleBriefing::formatCharacterLine([
+            'name' => 'Thurmbog',
+            'strength' => 18,
+            'exceptional_strength' => '67',
+            'dexterity' => 17,
+        ]);
+
+        $this->assertStringContainsString('STR 18/67', $line);
+        $this->assertStringContainsString('DEX 17', $line);
+    }
+
+    public function test_rule_math_question_injects_engine_lookup_into_prompt(): void
+    {
+        $prompt = Adnd2eOracleBriefing::systemPrompt([], 'Fighter THAC0 at level 5?');
+
+        $this->assertStringContainsString('## Engine lookup', $prompt);
+        $this->assertStringContainsString('Fighter 5 THAC0: 16', $prompt);
+        $this->assertStringContainsString('MUST use Engine lookup', $prompt);
     }
 }

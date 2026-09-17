@@ -42,16 +42,19 @@ class OracleController extends Controller
         ]);
 
         $sheetUpdated = false;
+        $messages = $request->input('messages');
+        $lastUser = collect($messages)
+            ->reverse()
+            ->first(fn ($m) => ($m['role'] ?? '') === 'user');
+        $question = is_array($lastUser) ? (string) ($lastUser['content'] ?? '') : '';
+
         $sessionId = $request->input('session_id');
         if ($sessionId) {
             $session = GameSession::find($sessionId);
-            $lastUser = collect($request->input('messages'))
-                ->reverse()
-                ->first(fn ($m) => ($m['role'] ?? '') === 'user');
-            if ($session && is_array($lastUser) && ! empty($lastUser['content'])) {
+            if ($session && $question !== '') {
                 $sheetUpdated = SessionSheetUpdates::applyFromText(
                     $session,
-                    (string) $lastUser['content'],
+                    $question,
                     'oracle-'.uniqid('', true)
                 );
             }
@@ -66,8 +69,7 @@ class OracleController extends Controller
             ], 422);
         }
 
-        $systemPrompt = $this->buildSystemPrompt($request->input('context', []));
-        $messages     = $request->input('messages');
+        $systemPrompt = $this->buildSystemPrompt($request->input('context', []), $question);
 
         $reply = OracleReply::create(['status' => 'pending']);
 
@@ -92,8 +94,8 @@ class OracleController extends Controller
 
     // ── System prompt ──────────────────────────────────────────────────────
 
-    public function buildSystemPrompt(array $context): string
+    public function buildSystemPrompt(array $context, ?string $question = null): string
     {
-        return Adnd2eOracleBriefing::systemPrompt($context);
+        return Adnd2eOracleBriefing::systemPrompt($context, $question);
     }
 }

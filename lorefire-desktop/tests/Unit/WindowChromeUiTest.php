@@ -37,6 +37,7 @@ class WindowChromeUiTest extends TestCase
         $this->assertStringContainsString('data-testid="window-minimize"', $controls);
         $this->assertStringContainsString('data-testid="window-maximize"', $controls);
         $this->assertStringContainsString('data-testid="window-close"', $controls);
+        $this->assertStringContainsString('text-[var(--color-text-bright)]', $controls);
         $this->assertStringContainsString('window-controls', $controls);
         $this->assertStringContainsString('no-drag', $controls);
         $this->assertStringContainsString("runWindowChrome('minimize')", $controls);

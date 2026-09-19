@@ -174,7 +174,10 @@ export default function Onboarding({ python_status, python_error }: Props) {
     >
       <Head title="Welcome to Lorefire" />
 
-      <div className="fixed top-0 left-0 right-0 z-20 h-12 flex items-stretch">
+      <div
+        className="fixed top-0 left-0 right-0 z-20 h-12 flex items-stretch border-b"
+        style={{ background: 'var(--color-abyss)', borderColor: 'var(--color-border)' }}
+      >
         <div className="drag-region flex-1 h-full" title="Drag window" />
         <WindowControls />
       </div>

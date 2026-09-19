@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { isWindowMaximized, needsCustomWindowControls, runWindowChrome } from '@/lib/windowChrome'
 
-function ChromeIcon({ d, size = 10 }: { d: string; size?: number }) {
+function ChromeIcon({ d, size = 12 }: { d: string; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.25" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
       <path d={d} />
     </svg>
   )
@@ -23,7 +23,7 @@ export function WindowControls({ className = '' }: { className?: string }) {
   }
 
   const btn =
-    'no-drag inline-flex items-center justify-center h-full w-11 text-[var(--color-text-dim)] hover:text-[var(--color-text-white)] hover:bg-[var(--color-deep)] transition-colors'
+    'no-drag inline-flex items-center justify-center h-full w-12 text-[var(--color-text-bright)] hover:text-[var(--color-text-white)] hover:bg-[var(--color-surface)] transition-colors'
 
   return (
     <div

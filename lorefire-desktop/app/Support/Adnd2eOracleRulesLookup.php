@@ -507,6 +507,11 @@ class Adnd2eOracleRulesLookup
         if (! self::mentions($question, 'memoriz|vancian|spell capacity|spell slots?|memorization slots?|how many .{0,40}spells|bonus spells')) {
             return;
         }
+        if (self::mentions($question, 'bonus spells')
+            && self::mentions($question, 'wis')
+            && ! self::mentions($question, 'memoriz|vancian|spell capacity|spell slots?|how many|mage|wizard|cleric|priest')) {
+            return;
+        }
 
         $class = self::parseClass($question) ?? (self::mentions($question, 'priest|cleric') ? 'Cleric' : 'Mage');
         $levels = self::parseLevels($question, $class);

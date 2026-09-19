@@ -5,6 +5,7 @@ import { Button } from '@/Components/Button'
 import { Input, Select } from '@/Components/Input'
 import { SetupLog } from '@/Components/SetupLog'
 import { PageProps } from '@/types'
+import { WindowControls } from '@/Components/WindowControls'
 
 // ── Types ────────────────────────────────────────────────────────────
 type Step = 'welcome' | 'python' | 'llm' | 'campaign' | 'done'
@@ -172,6 +173,11 @@ export default function Onboarding({ python_status, python_error }: Props) {
       style={{ background: 'var(--color-void)' }}
     >
       <Head title="Welcome to Lorefire" />
+
+      <div className="fixed top-0 left-0 right-0 z-20 h-12 flex items-stretch">
+        <div className="drag-region flex-1 h-full" title="Drag window" />
+        <WindowControls />
+      </div>
 
       {/* Background runic decoration */}
       <div className="fixed inset-0 pointer-events-none flex items-center justify-center">

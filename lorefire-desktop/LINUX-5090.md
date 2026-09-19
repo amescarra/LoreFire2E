@@ -273,6 +273,14 @@ ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve
 
 Do not put `ELECTRON_DISABLE_SANDBOX=1` in a packaged/prod build. Prefer the `chown`/`chmod` for day-to-day `native:serve`.
 
+## 4d. Window chrome (close / minimize / maximize)
+
+`NativeAppServiceProvider` opens a **hidden title bar** (`titleBarHidden()`). macOS still gets traffic lights. **Linux and Windows do not** — Electron draws no native close / minimize / maximize buttons.
+
+Lorefire therefore paints custom controls in the title bar (and on onboarding / splash). They sit **outside** `-webkit-app-region: drag` so they stay clickable. Close / minimize / maximize talk to Electron (`@electron/remote`) first, then NativePHP `Window::close()` / `minimize()` / `maximize()`.
+
+On Ubuntu, use the **right-hand** close button (red on hover) if the window has no OS decorations. `Alt` still reveals the hidden Electron menu. Windows ARM uses the same custom buttons because the window is frameless there too.
+
 ## 5. First run
 
 ```bash

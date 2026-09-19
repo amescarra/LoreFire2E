@@ -161,7 +161,9 @@ h1, h2, h3, .heading {
 .drag-region {
     -webkit-app-region: drag;
 }
-.no-drag {
+.no-drag,
+.window-controls,
+.window-controls * {
     -webkit-app-region: no-drag;
 }
 

@@ -224,7 +224,7 @@ Resolute `php` is **8.5.4**. Stock native:serve therefore opens `php-8.5.zip` â†
 
 **Lasting fix (this branch):** `native:serve` on Linux x64 selects `NATIVEPHP_PHP_BINARY_VERSION=8.4` when `php-8.5.zip` is missing and `php-8.4.zip` exists. Electron unzips the real 8.4 php-bin. `php.js` does the same fallback if artisan still sent 8.5. System PHP (`NATIVEPHP_PHP_EXECUTABLE`) is only the last resort when **no** linux/x64 zip exists. Windows ARM is unchanged (no `win/arm64` zip; still system ARM `php.exe`).
 
-A `ln -sfn php-8.4.zip php-8.5.zip` is an **emergency** only. Do not leave it. After pulling this branch:
+A `ln -sfn php-8.4.zip php-8.5.zip` is an **emergency** only. Do not leave it. After pulling this branch, run `composer install` so cweagans re-applies `patches/nativephp-electron-windows-arm64-system-php.patch` (Linux `linuxX64SystemPhpWhenBinMissing` plus Windows ARM). A git pull alone leaves an older `vendor/nativephp/electron` if that package was already installed.
 
 ```bash
 cd lorefire/lorefire-desktop

@@ -41,6 +41,15 @@ fi
 
 php_ver="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
 echo "    PHP     : $(php -v | head -1) ($php_ver)"
+if php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'; then
+  :
+else
+  echo "ERROR: this repo's composer.lock needs PHP 8.4+ (Ubuntu 24.04 default is 8.3)."
+  echo "  sudo add-apt-repository -y ppa:ondrej/php && sudo apt update"
+  echo "  sudo apt install -y php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath"
+  echo "  sudo update-alternatives --set php /usr/bin/php8.4"
+  exit 1
+fi
 echo "    Node    : $(node -v)"
 echo "    Python  : $(python3 --version)"
 echo ""

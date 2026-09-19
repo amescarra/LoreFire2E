@@ -21,7 +21,7 @@ Lorefire stays **local**. Transcription is WhisperX in a Python venv. The LLM is
 sudo apt update
 sudo apt install -y \
   git curl wget ca-certificates build-essential pkg-config \
-  php-cli php-xml php-mbstring php-sqlite3 php-curl php-zip php-bcmath \
+  php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath \
   composer \
   nodejs npm \
   python3 python3-venv python3-pip python3-dev \
@@ -30,10 +30,19 @@ sudo apt install -y \
   ubuntu-drivers-common
 ```
 
-Ubuntu 24.04 ships PHP 8.3, which is fine (Lorefire needs PHP 8.2+). Confirm:
+This repo’s Composer lock needs **PHP 8.4**. Ubuntu 24.04’s default `php-cli` is 8.3 — add [ondrej/php](https://launchpad.net/~ondrej/+archive/ubuntu/php) first:
 
 ```bash
-php -v          # 8.2+
+sudo add-apt-repository -y ppa:ondrej/php
+sudo apt update
+sudo apt install -y php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath
+sudo update-alternatives --set php /usr/bin/php8.4
+```
+
+Confirm:
+
+```bash
+php -v          # 8.4+
 node -v         # 20+
 python3 --version
 composer -V

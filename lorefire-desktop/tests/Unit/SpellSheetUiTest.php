@@ -45,5 +45,19 @@ class SpellSheetUiTest extends TestCase
 
         $this->assertStringContainsString('timesMemorizedOf', $live);
         $this->assertStringNotContainsString('Prepared', $live);
+        $this->assertStringContainsString('SpellMaterialHint', $tab);
+        $this->assertStringContainsString('SpellMaterialHint', $live);
+        $this->assertStringContainsString('inventoryItems', $tab);
+        $this->assertStringContainsString('missingSpellMaterials', $live);
+
+        $hint = file_get_contents(dirname(__DIR__, 2).'/resources/js/Components/SpellMaterialHint.tsx');
+        $this->assertIsString($hint);
+        $this->assertStringContainsString('formatMaterialAmount', $hint);
+        $this->assertStringNotContainsString('req.quantity > 1', $hint);
+        $this->assertStringContainsString('formatLinkedMaterial', $tab);
+        $this->assertStringNotContainsString('focus ? \'focus\' : \'spend\'} ${req.name}', $tab);
+        $this->assertStringContainsString('inventoryQuantityLabel', $show);
+        $this->assertStringContainsString("'Component'", $show);
+        $this->assertStringContainsString('inventoryQuantityLabel', $live);
     }
 }

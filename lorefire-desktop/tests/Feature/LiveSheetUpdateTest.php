@@ -134,6 +134,68 @@ class LiveSheetUpdateTest extends TestCase
         $this->assertSame('longsword', $character->inventoryItems()->firstOrFail()->name);
     }
 
+    public function test_spoken_cast_spends_named_material_from_inventory(): void
+    {
+        [, $session, $character] = $this->liveTable();
+        $spell = $character->spells()->firstOrFail();
+        $spell->update(['components' => 'V, S, M (sulfur)']);
+        $character->inventoryItems()->create([
+            'name' => 'Sulfur',
+            'quantity' => 2,
+        ]);
+
+        $this->assertTrue(SessionSheetUpdates::applyFromText($session, 'Elara casts Fireball', 'mat-1'));
+
+        $this->assertSame(1, (int) $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $character->inventoryItems()->firstOrFail()->quantity);
+    }
+
+    public function test_spoken_cast_is_blocked_when_named_material_is_missing(): void
+    {
+        [, $session, $character] = $this->liveTable();
+        $spell = $character->spells()->firstOrFail();
+        $spell->update(['components' => 'V, S, M (sulfur)']);
+
+        $this->assertFalse(SessionSheetUpdates::applyFromText($session, 'Elara casts Fireball', 'mat-miss'));
+
+        $this->assertSame(0, (int) $spell->fresh()->times_cast);
+        $this->assertSame(0, $character->inventoryItems()->count());
+    }
+
+    public function test_spoken_cast_does_not_consume_a_named_focus(): void
+    {
+        [, $session, $character] = $this->liveTable();
+        $spell = $character->spells()->firstOrFail();
+        $spell->update(['components' => 'V, S, F (holy symbol)']);
+        $character->inventoryItems()->create([
+            'name' => 'Holy Symbol',
+            'quantity' => 1,
+        ]);
+
+        $this->assertTrue(SessionSheetUpdates::applyFromText($session, 'Elara casts Fireball', 'mat-focus'));
+
+        $this->assertSame(1, (int) $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $character->inventoryItems()->firstOrFail()->quantity);
+    }
+
+    public function test_overnight_rest_after_spoken_cast_does_not_refund_materials(): void
+    {
+        [, $session, $character] = $this->liveTable();
+        $spell = $character->spells()->firstOrFail();
+        $spell->update(['components' => 'V, S, M (sulfur)']);
+        $character->inventoryItems()->create([
+            'name' => 'Sulfur',
+            'quantity' => 1,
+        ]);
+
+        SessionSheetUpdates::applyFromText($session, 'Elara casts Fireball', 'mat-rest-1');
+        $this->assertSame(0, $character->inventoryItems()->count());
+
+        SessionSheetUpdates::applyFromText($session, 'Elara takes an overnight rest', 'mat-rest-2');
+        $this->assertSame(0, (int) $spell->fresh()->times_cast);
+        $this->assertSame(0, $character->inventoryItems()->count());
+    }
+
     public function test_overnight_rest_rememorizes_remaining_copies(): void
     {
         [, $session, $character] = $this->liveTable();

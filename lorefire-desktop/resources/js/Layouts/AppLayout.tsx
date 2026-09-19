@@ -3,6 +3,7 @@ import { Link, usePage } from '@inertiajs/react'
 import { Toast } from '@/Components/Toast'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { SplashOverlay } from '@/Components/SplashOverlay'
+import { goBack } from '@/lib/navigation'
 
 // Module-level: tracks which session IDs have already triggered the recording modal.
 // Lives outside React so it survives AppLayout re-mounts on Inertia navigation.
@@ -61,6 +62,12 @@ const navItems: NavItem[] = [
     icon: <SidebarIcon d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" />,
   },
   {
+    label: 'Batch Sheets',
+    href: '/batch-sheets',
+    match: '/batch-sheets',
+    icon: <SidebarIcon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8" />,
+  },
+  {
     label: 'Oracle',
     href: '/oracle',
     match: '/oracle',
@@ -107,7 +114,7 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
 
       {/* ── Sidebar ─────────────────────────────────────────────────── */}
       <aside
-        className="w-16 relative flex flex-col items-center pb-4 shrink-0"
+        className="w-16 relative flex flex-col items-center pb-4 shrink-0 no-drag"
         style={{
           background: 'var(--color-abyss)',
           borderRight: '1px solid var(--color-border)',
@@ -168,67 +175,70 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
         {/* ── Main content ─────────────────────────────────────────────── */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-          {/* Title bar / header */}
-          {(title || breadcrumbs) && (
-            <header
-              className="drag-region shrink-0 flex items-center gap-3 px-6 h-12 border-b"
-              style={{
-                background: 'var(--color-abyss)',
-                borderColor: 'var(--color-border)',
-              }}
+          {/* Title bar — interactive controls are NEVER inside drag-region (Windows/Electron). */}
+          <header
+            className="shrink-0 flex items-center gap-3 px-6 h-12 border-b"
+            style={{
+              background: 'var(--color-abyss)',
+              borderColor: 'var(--color-border)',
+            }}
+          >
+            <button
+              type="button"
+              data-testid="nav-back"
+              onClick={() => goBack()}
+              className="no-drag shrink-0 flex items-center justify-center w-7 h-7 rounded text-[var(--color-text-dim)] hover:text-[var(--color-text-base)] hover:bg-[var(--color-deep)] transition-colors"
+              title="Back"
+              aria-label="Back"
             >
-              {/* Breadcrumbs */}
-              {breadcrumbs && (
-                <nav className="no-drag flex items-center gap-2 text-xs text-[var(--color-text-dim)]">
-                  {breadcrumbs.map((crumb, i) => (
-                    <React.Fragment key={i}>
-                      {i > 0 && <span className="text-[var(--color-border)]">›</span>}
-                      {crumb.href
-                        ? <Link href={crumb.href} className="hover:text-[var(--color-text-base)] transition-colors">{crumb.label}</Link>
-                        : <span className="text-[var(--color-text-bright)]">{crumb.label}</span>
-                      }
-                    </React.Fragment>
-                  ))}
-                </nav>
-              )}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
 
-              {/* Title (if no breadcrumbs) */}
-              {title && !breadcrumbs && (
-                <h1 className="no-drag font-heading text-sm text-[var(--color-text-white)] tracking-widest uppercase">
-                  {title}
-                </h1>
-              )}
+            {breadcrumbs && (
+              <nav className="no-drag flex items-center gap-2 text-xs text-[var(--color-text-dim)] min-w-0">
+                {breadcrumbs.map((crumb, i) => (
+                  <React.Fragment key={i}>
+                    {i > 0 && <span className="text-[var(--color-border)]">›</span>}
+                    {crumb.href
+                      ? <Link href={crumb.href} className="hover:text-[var(--color-text-base)] transition-colors truncate">{crumb.label}</Link>
+                      : <span className="text-[var(--color-text-bright)] truncate">{crumb.label}</span>
+                    }
+                  </React.Fragment>
+                ))}
+              </nav>
+            )}
 
-              {/* Drag affordance hint */}
-              <div className="ml-auto flex items-center gap-3">
-                {/* Recording badge — clickable, jumps to live session overview */}
-                {isRecording && (
-                  <Link
-                    href={activeLiveUrl ?? '#'}
-                    className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-                    style={{ background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
-                  >
-                    <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                    Recording · {fmtTime(recordingSeconds)}
-                  </Link>
-                )}
-                {isUploading && (
-                  <div className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(180,83,9,0.15)', color: '#fbbf24' }}>
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    {uploadProgress ?? 'Saving…'}
-                  </div>
-                )}
-                <div className="flex gap-1 opacity-20">
-                  {[0,1,2].map(i => (
-                    <div key={i} className="w-1 h-1 rounded-full bg-[var(--color-text-dim)]" />
-                  ))}
+            {title && !breadcrumbs && (
+              <h1 className="no-drag font-heading text-sm text-[var(--color-text-white)] tracking-widest uppercase">
+                {title}
+              </h1>
+            )}
+
+            <div className="ml-auto flex items-center gap-3 min-w-0 flex-1 justify-end h-full">
+              {isRecording && (
+                <Link
+                  href={activeLiveUrl ?? '#'}
+                  className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                  style={{ background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  Recording · {fmtTime(recordingSeconds)}
+                </Link>
+              )}
+              {isUploading && (
+                <div className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(180,83,9,0.15)', color: '#fbbf24' }}>
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  {uploadProgress ?? 'Saving…'}
                 </div>
-              </div>
-            </header>
-          )}
+              )}
+              <div className="drag-region flex-1 h-full min-w-[64px]" title="Drag window" />
+            </div>
+          </header>
 
           {/* Page body */}
-          <main className="flex-1 overflow-y-auto p-6">
+          <main className="flex-1 overflow-y-auto p-6 no-drag">
             {children}
           </main>
         </div>

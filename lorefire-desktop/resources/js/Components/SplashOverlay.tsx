@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { router, usePage } from '@inertiajs/react'
+import { usePage } from '@inertiajs/react'
 import { PageProps } from '@/types'
+import { fetchPythonSetupStatus } from '@/lib/pythonSetup'
 
 type OverlayState = 'hidden' | 'visible' | 'fading'
 
-// Large animated flame — reuses the same paths as the sidebar LogoMark
+/** Survives AppLayout remounts on Inertia visits so the splash cannot trap navigation. */
+let sessionOverlay: OverlayState | null = null
+
 function FlameIcon({ size = 72 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"
@@ -26,61 +29,71 @@ function FlameIcon({ size = 72 }: { size?: number }) {
   )
 }
 
+function initialOverlay(status?: string): OverlayState {
+  if (sessionOverlay === 'visible') return 'visible'
+  if (sessionOverlay === 'fading' || sessionOverlay === 'hidden') return 'hidden'
+  return status === 'running' ? 'visible' : 'hidden'
+}
+
 export function SplashOverlay() {
   const { python_setup } = usePage<PageProps>().props
-  const initiallyRunning = python_setup?.status === 'running'
-
-  const [overlayState, setOverlayState] = useState<OverlayState>(initiallyRunning ? 'visible' : 'hidden')
+  const [overlayState, setOverlayState] = useState<OverlayState>(() => initialOverlay(python_setup?.status))
+  const [logLine, setLogLine] = useState(python_setup?.log ?? '')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Start polling while visible
+  const dismiss = () => {
+    setOverlayState(current => (current === 'hidden' ? current : 'fading'))
+    window.setTimeout(() => setOverlayState('hidden'), 700)
+  }
+
+  useEffect(() => {
+    sessionOverlay = overlayState === 'fading' ? 'hidden' : overlayState
+  }, [overlayState])
+
   useEffect(() => {
     if (overlayState !== 'visible') return
 
-    pollRef.current = setInterval(() => {
-      router.reload({ only: ['python_setup'] })
-    }, 2000)
+    const poll = async () => {
+      const payload = await fetchPythonSetupStatus()
+      if (!payload) return
+      if (payload.log) setLogLine(payload.log)
+      if (payload.status === 'ready' || payload.status === 'failed') {
+        dismiss()
+      }
+    }
 
-    // Do not block the UI for the whole first-run install (can be 10–20 min).
-    const dismiss = setTimeout(() => {
-      setOverlayState(current => (current === 'visible' ? 'fading' : current))
-      setTimeout(() => setOverlayState('hidden'), 700)
-    }, 8000)
+    poll()
+    pollRef.current = setInterval(poll, 2000)
+
+    const autoHide = setTimeout(() => dismiss(), 8000)
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
-      clearTimeout(dismiss)
+      clearTimeout(autoHide)
     }
   }, [overlayState])
 
-  // React to status changes from polling
-  useEffect(() => {
-    if (overlayState !== 'visible') return
-    const status = python_setup?.status
-    if (status === 'ready' || status === 'failed') {
-      if (pollRef.current) clearInterval(pollRef.current)
-      setOverlayState('fading')
-      setTimeout(() => setOverlayState('hidden'), 700)
-    }
-  }, [python_setup?.status])
-
   if (overlayState === 'hidden') return null
+
+  const lastLog = logLine.trim().split('\n').filter(Boolean).slice(-1)[0]
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8 drag-region"
+      data-testid="splash-overlay"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-8"
       style={{
         background: 'var(--color-void)',
         opacity: overlayState === 'fading' ? 0 : 1,
         transition: 'opacity 0.7s ease',
+        pointerEvents: overlayState === 'fading' ? 'none' : 'auto',
       }}
     >
-      {/* Flame */}
+      <div className="drag-region absolute top-0 left-0 right-0 h-12" />
+
       <div style={{ animation: 'splash-pulse 2.4s ease-in-out infinite' }}>
         <FlameIcon size={80} />
       </div>
 
-      {/* Title + status */}
       <div className="flex flex-col items-center gap-3 no-drag">
         <h1
           className="font-heading text-3xl tracking-[0.5em] uppercase"
@@ -91,17 +104,25 @@ export function SplashOverlay() {
         <p className="text-xs tracking-widest uppercase font-mono" style={{ color: 'var(--color-text-dim)' }}>
           Setting up transcription engine…
         </p>
-        {python_setup?.log && (
+        {lastLog && (
           <p
             className="max-w-md text-center text-[10px] font-mono leading-relaxed px-4"
             style={{ color: 'var(--color-text-dim)', opacity: 0.8 }}
           >
-            {python_setup.log.trim().split('\n').filter(Boolean).slice(-1)[0]}
+            {lastLog}
           </p>
         )}
+        <button
+          type="button"
+          data-testid="splash-continue"
+          onClick={dismiss}
+          className="mt-2 text-[10px] uppercase tracking-widest font-mono px-3 py-1 rounded border"
+          style={{ color: 'var(--color-rune)', borderColor: 'var(--color-rune-dim)' }}
+        >
+          Continue
+        </button>
       </div>
 
-      {/* Animated dots */}
       <div className="flex gap-2 no-drag">
         {[0, 1, 2].map(i => (
           <div

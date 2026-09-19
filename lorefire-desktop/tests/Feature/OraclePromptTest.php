@@ -64,4 +64,32 @@ class OraclePromptTest extends TestCase
         $this->assertStringNotContainsStringIgnoringCase('spell slots', $prompt);
         $this->assertStringNotContainsStringIgnoringCase('proficiency bonus', $prompt);
     }
+
+    public function test_controller_prompt_injects_engine_backed_rule_numbers(): void
+    {
+        $prompt = app(OracleController::class)->buildSystemPrompt(
+            [],
+            'What is the missile adjustment for DEX 17?'
+        );
+
+        $this->assertStringContainsString('## Engine lookup', $prompt);
+        $this->assertStringContainsString('missile: +2', $prompt);
+        $this->assertStringContainsString('Adnd2e::dexterityAdjustments', $prompt);
+        $this->assertStringContainsString('Never invent official spell text', $prompt);
+
+        $thac0 = app(OracleController::class)->buildSystemPrompt([], 'fighter THAC0 at level 5');
+        $this->assertStringContainsString('Fighter 5 THAC0: 16', $thac0);
+
+        $open = app(OracleController::class)->buildSystemPrompt([], 'STR 18/01 open doors');
+        $this->assertStringContainsString('open doors: 12', $open);
+
+        $armor = app(OracleController::class)->buildSystemPrompt([], 'What is the AC of chain mail?');
+        $this->assertStringContainsString('Chain mail base AC: 5', $armor);
+
+        $spell = app(OracleController::class)->buildSystemPrompt([], 'What level is Fireball for a mage?');
+        $this->assertStringContainsString('Fireball: Mage L3 invocation', $spell);
+
+        $magicPlate = app(OracleController::class)->buildSystemPrompt([], 'What is the AC of plate mail +1?');
+        $this->assertStringContainsString('Plate mail +1: armor AC 2', $magicPlate);
+    }
 }

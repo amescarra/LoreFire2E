@@ -36,6 +36,22 @@ class Adnd2e
         'Psionicist',
     ];
 
+    /**
+     * Compact class labels for list cards, show, and printable sheets.
+     * Mage uses mixed-case "Wiz" (user-requested); others are 2–3 letter codes.
+     */
+    public const CLASS_ABBREVIATIONS = [
+        'Fighter' => 'FR',
+        'Paladin' => 'PAL',
+        'Ranger' => 'RAN',
+        'Mage' => 'Wiz',
+        'Cleric' => 'CLR',
+        'Druid' => 'DRU',
+        'Thief' => 'TH',
+        'Bard' => 'BRD',
+        'Psionicist' => 'PSI',
+    ];
+
     /** House dual-class: original class must be this level before a new class may begin. */
     public const HOUSE_DUAL_MIN_ORIGINAL_LEVEL = 6;
 
@@ -287,7 +303,7 @@ class Adnd2e
 
     /**
      * @param  array<int, mixed>|null  $classLevels
-     * @return array<int, array{class: string, level: int}>
+     * @return array<int, array{class: string, level: int, xp?: int}>
      */
     public static function normalizeClassLevels(?array $classLevels, string $class, int $level, string $path = 'single'): array
     {
@@ -302,10 +318,17 @@ class Adnd2e
                     continue;
                 }
                 $rewritten = self::rewriteLegacyClass($name);
-                $entries[] = [
+                $normalized = [
                     'class' => $rewritten['class'],
                     'level' => max(1, min(20, (int) ($entry['level'] ?? $level))),
                 ];
+                if (array_key_exists('xp', $entry) && $entry['xp'] !== null && $entry['xp'] !== '') {
+                    $xp = (int) $entry['xp'];
+                    if ($xp >= 0) {
+                        $normalized['xp'] = $xp;
+                    }
+                }
+                $entries[] = $normalized;
             }
         }
 
@@ -358,6 +381,143 @@ class Adnd2e
         }
 
         return max(array_map(fn (array $e) => (int) $e['level'], $entries));
+    }
+
+    public static function classAbbreviation(string $class): string
+    {
+        $name = trim($class);
+        if ($name === '') {
+            return '?';
+        }
+        if (isset(self::CLASS_ABBREVIATIONS[$name])) {
+            return self::CLASS_ABBREVIATIONS[$name];
+        }
+
+        $rewritten = self::rewriteLegacyClass($name);
+        $normalized = (string) ($rewritten['class'] ?? $name);
+        if (isset(self::CLASS_ABBREVIATIONS[$normalized])) {
+            return self::CLASS_ABBREVIATIONS[$normalized];
+        }
+        if (in_array($name, self::SPECIALIST_SCHOOLS, true) || in_array($normalized, self::SPECIALIST_SCHOOLS, true)) {
+            return 'Wiz';
+        }
+
+        $clean = preg_replace('/[^A-Za-z]/', '', $name) ?? '';
+        $abbr = strtoupper(substr($clean, 0, 3));
+
+        return $abbr !== '' ? $abbr : '?';
+    }
+
+    /**
+     * Compact class/level line: "FR 11 / Wiz 12", "PSI 9 → FR 10", "CLR 10".
+     *
+     * @param  array<int, array{class: string, level: int, xp?: int}>  $entries
+     */
+    public static function formatClassLevelsLine(array $entries, string $path = 'single'): string
+    {
+        $parts = [];
+        foreach ($entries as $entry) {
+            $name = trim((string) ($entry['class'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $parts[] = self::classAbbreviation($name).' '.(int) ($entry['level'] ?? 1);
+        }
+        if ($parts === []) {
+            return '';
+        }
+        if ($path === 'dual' && count($parts) >= 2) {
+            return implode(' → ', $parts);
+        }
+
+        return implode(' / ', $parts);
+    }
+
+    public static function formatXpAmount(int $xp, bool $compact = false): string
+    {
+        if ($compact && $xp >= 10000 && $xp % 1000 === 0) {
+            return ((int) ($xp / 1000)).'k';
+        }
+
+        return number_format($xp);
+    }
+
+    /**
+     * Per-class XP line. Missing xp is "—" unless $omitMissing is true.
+     *
+     * @param  array<int, array{class: string, level: int, xp?: int|null}>  $entries
+     */
+    public static function formatClassXpLine(array $entries, string $path = 'single', bool $compact = true, bool $omitMissing = false): string
+    {
+        $parts = [];
+        foreach ($entries as $entry) {
+            $name = trim((string) ($entry['class'] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $abbr = self::classAbbreviation($name);
+            if (array_key_exists('xp', $entry) && $entry['xp'] !== null && $entry['xp'] !== '') {
+                $parts[] = $abbr.' '.self::formatXpAmount((int) $entry['xp'], $compact);
+            } elseif (! $omitMissing) {
+                $parts[] = $abbr.' —';
+            }
+        }
+
+        return implode(' · ', $parts);
+    }
+
+    /**
+     * Sum per-class xp when any entry has it; otherwise the legacy total.
+     *
+     * @param  array<int, array{class: string, level: int, xp?: int}>  $entries
+     */
+    public static function derivedExperiencePoints(array $entries, mixed $legacyXp = 0): int
+    {
+        $sum = 0;
+        $any = false;
+        foreach ($entries as $entry) {
+            if (array_key_exists('xp', $entry) && $entry['xp'] !== null && $entry['xp'] !== '') {
+                $sum += max(0, (int) $entry['xp']);
+                $any = true;
+            }
+        }
+
+        return $any ? $sum : max(0, (int) $legacyXp);
+    }
+
+    /**
+     * Copy a legacy experience_points total into class_levels when per-class
+     * xp is missing. Does not invent splits:
+     * - single: copy onto the only entry
+     * - dual: copy onto the current (last) class
+     * - multi: leave per-class xp empty
+     *
+     * @param  array<int, array{class: string, level: int, xp?: int}>  $entries
+     * @return array<int, array{class: string, level: int, xp?: int}>
+     */
+    public static function backfillClassLevelsXp(array $entries, ?string $path, mixed $legacyXp): array
+    {
+        $hasXp = false;
+        foreach ($entries as $entry) {
+            if (array_key_exists('xp', $entry) && $entry['xp'] !== null && $entry['xp'] !== '') {
+                $hasXp = true;
+                break;
+            }
+        }
+        $legacy = max(0, (int) $legacyXp);
+        if ($hasXp || $legacy <= 0 || $entries === []) {
+            return $entries;
+        }
+
+        $path = in_array($path, ['single', 'multi', 'dual'], true) ? $path : 'single';
+        if ($path === 'multi') {
+            return $entries;
+        }
+
+        $index = $path === 'dual' ? array_key_last($entries) : array_key_first($entries);
+        $entries[$index]['xp'] = $legacy;
+
+        return $entries;
     }
 
     /**
@@ -491,10 +651,15 @@ class Adnd2e
         return false;
     }
 
+    /** Shield bonus on descending AC (lower is better). */
+    public const SHIELD_AC_BONUS = -1;
+
     /**
-     * Published weapon speed factors (initiative modifier). Names only.
+     * Compact weapon row: SM/L dice and speed factor. Labels only.
+     *
+     * @return array{name: string, sm: string, l: string, speed: int}|null
      */
-    public static function weaponSpeed(?string $weapon): ?int
+    public static function weaponStats(?string $weapon): ?array
     {
         if ($weapon === null || trim($weapon) === '') {
             return null;
@@ -503,17 +668,132 @@ class Adnd2e
         $key = mb_strtolower(trim($weapon));
         $key = preg_replace('/^(a|an|the)\s+/', '', $key) ?? $key;
 
-        return match (true) {
-            str_contains($key, 'dagger') || str_contains($key, 'dart') => 2,
-            str_contains($key, 'short sword') => 3,
-            str_contains($key, 'hand axe') || str_contains($key, 'club') || str_contains($key, 'staff') || str_contains($key, 'warhammer') || str_contains($key, 'javelin') => 4,
-            str_contains($key, 'long sword') || str_contains($key, 'spear') || str_contains($key, 'mace') || str_contains($key, 'sling') => 5,
-            str_contains($key, 'bastard') || str_contains($key, 'flail') || str_contains($key, 'morning') => 6,
-            str_contains($key, 'battle axe') || str_contains($key, 'short bow') || str_contains($key, 'light crossbow') => 7,
-            str_contains($key, 'long bow') || str_contains($key, 'lance') => 8,
-            str_contains($key, 'halberd') => 9,
-            str_contains($key, 'two-handed') || str_contains($key, 'two handed') || str_contains($key, 'heavy crossbow') => 10,
-            default => null,
+        foreach (self::weaponRows() as $row) {
+            foreach ($row['aliases'] as $alias) {
+                if (str_contains($key, $alias)) {
+                    return [
+                        'name' => $row['name'],
+                        'sm' => $row['sm'],
+                        'l' => $row['l'],
+                        'speed' => $row['speed'],
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Published weapon speed factors (initiative modifier). Names only.
+     */
+    public static function weaponSpeed(?string $weapon): ?int
+    {
+        return self::weaponStats($weapon)['speed'] ?? null;
+    }
+
+    /**
+     * @return list<array{name: string, sm: string, l: string, speed: int}>
+     */
+    public static function weaponCatalog(): array
+    {
+        return array_map(fn (array $row) => [
+            'name' => $row['name'],
+            'sm' => $row['sm'],
+            'l' => $row['l'],
+            'speed' => $row['speed'],
+        ], self::weaponRows());
+    }
+
+    /**
+     * Base descending AC for a named armor. Shield is a separate −1.
+     *
+     * @return array{name: string, ac: int}|null
+     */
+    public static function armorStats(?string $armor): ?array
+    {
+        if ($armor === null || trim($armor) === '') {
+            return null;
+        }
+
+        $key = mb_strtolower(trim($armor));
+        $key = preg_replace('/^(a|an|the)\s+/', '', $key) ?? $key;
+
+        foreach (self::armorRows() as $row) {
+            foreach ($row['aliases'] as $alias) {
+                if (str_contains($key, $alias)) {
+                    return [
+                        'name' => $row['name'],
+                        'ac' => $row['ac'],
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static function armorBaseAc(?string $armor): ?int
+    {
+        return self::armorStats($armor)['ac'] ?? null;
+    }
+
+    /**
+     * Descending AC for a named suit, optional shield. Shield-only is AC 9.
+     */
+    public static function descendingArmorClass(?string $armor = 'none', bool $shield = false): ?int
+    {
+        $row = self::armorStats($armor);
+        if ($row === null) {
+            return null;
+        }
+        $ac = $row['ac'];
+        if ($shield && $row['name'] !== 'Shield only') {
+            $ac += self::SHIELD_AC_BONUS;
+        }
+
+        return $ac;
+    }
+
+    /**
+     * @return list<array{name: string, ac: int}>
+     */
+    public static function armorCatalog(): array
+    {
+        return array_map(fn (array $row) => [
+            'name' => $row['name'],
+            'ac' => $row['ac'],
+        ], self::armorRows());
+    }
+
+    /**
+     * Priest sphere access as tags only. No spell names or prose.
+     *
+     * @return array{major: list<string>, minor: list<string>}
+     */
+    public static function priestSpheres(string $class): array
+    {
+        return match (self::normalizeClass($class)) {
+            'Cleric' => [
+                'major' => [
+                    'All', 'Astral', 'Charm', 'Combat', 'Creation', 'Divination',
+                    'Guardian', 'Healing', 'Necromantic', 'Protection', 'Summoning', 'Sun',
+                ],
+                'minor' => ['Elemental'],
+            ],
+            'Druid' => [
+                'major' => ['All', 'Animal', 'Elemental', 'Healing', 'Plant', 'Weather'],
+                'minor' => ['Divination'],
+            ],
+            'Paladin' => [
+                'major' => [],
+                'minor' => ['Combat', 'Divination', 'Healing', 'Protection'],
+            ],
+            'Ranger' => [
+                'major' => [],
+                'minor' => ['Animal', 'Plant'],
+            ],
+            default => ['major' => [], 'minor' => []],
         };
     }
 
@@ -603,6 +883,80 @@ class Adnd2e
     }
 
     /**
+     * Encumbrance weight caps (lb) from STR weight allow → max press, four equal steps.
+     *
+     * @return array{none: int, light: int, moderate: int, heavy: int, severe: int, weight_allow: int, max_press: int}
+     */
+    public static function encumbranceThresholds(int $strength, ?string $exceptional = null): array
+    {
+        $row = self::strengthAdjustments($strength, $exceptional);
+        $allow = $row['weight_allow'];
+        $press = $row['max_press'];
+        $step = intdiv(max(0, $press - $allow), 4);
+
+        return [
+            'none' => $allow,
+            'light' => $allow + $step,
+            'moderate' => $allow + (2 * $step),
+            'heavy' => $allow + (3 * $step),
+            'severe' => $press,
+            'weight_allow' => $allow,
+            'max_press' => $press,
+        ];
+    }
+
+    /**
+     * @return 'none'|'light'|'moderate'|'heavy'|'severe'|'immobile'
+     */
+    public static function encumbranceCategory(int $carriedLbs, int $strength, ?string $exceptional = null): string
+    {
+        $t = self::encumbranceThresholds($strength, $exceptional);
+        if ($carriedLbs <= $t['none']) {
+            return 'none';
+        }
+        if ($carriedLbs <= $t['light']) {
+            return 'light';
+        }
+        if ($carriedLbs <= $t['moderate']) {
+            return 'moderate';
+        }
+        if ($carriedLbs <= $t['heavy']) {
+            return 'heavy';
+        }
+        if ($carriedLbs <= $t['severe']) {
+            return 'severe';
+        }
+
+        return 'immobile';
+    }
+
+    public static function movementAtEncumbrance(string $race, string $category): int
+    {
+        $base = self::movementRate($race);
+
+        return match ($category) {
+            'none' => $base,
+            'light' => max(1, intdiv($base * 3, 4)),
+            'moderate' => max(1, intdiv($base, 2)),
+            'heavy' => max(1, intdiv($base, 3)),
+            'severe' => 1,
+            default => 0,
+        };
+    }
+
+    public static function movementAtLoad(string $race, int $carriedLbs, int $strength, ?string $exceptional = null): array
+    {
+        $category = self::encumbranceCategory($carriedLbs, $strength, $exceptional);
+
+        return [
+            'category' => $category,
+            'movement' => self::movementAtEncumbrance($race, $category),
+            'base' => self::movementRate($race),
+            'thresholds' => self::encumbranceThresholds($strength, $exceptional),
+        ];
+    }
+
+    /**
      * Base THAC0 for class and level (lower is better).
      */
     public static function thac0(string $class, int $level): int
@@ -635,6 +989,21 @@ class Adnd2e
                 default => 14,
             },
         };
+    }
+
+    /**
+     * THAC0 for levels 1–20 (lower is better).
+     *
+     * @return array<int, int>
+     */
+    public static function thac0Progression(string $class): array
+    {
+        $out = [];
+        for ($level = 1; $level <= 20; $level++) {
+            $out[$level] = self::thac0($class, $level);
+        }
+
+        return $out;
     }
 
     /**
@@ -693,64 +1062,133 @@ class Adnd2e
     }
 
     /**
-     * Strength hit / damage adjustments, including exceptional strength.
+     * Consecutive level bands that share one save row.
      *
-     * @return array{hit: int, damage: int}
+     * @return list<array{from: int, to: int, saves: array{paralyzation: int, rod: int, petrification: int, breath: int, spell: int}}>
+     */
+    public static function savingThrowBands(string $class): array
+    {
+        $bands = [];
+        $start = 1;
+        $prev = self::savingThrows($class, 1);
+        for ($level = 2; $level <= 20; $level++) {
+            $row = self::savingThrows($class, $level);
+            if ($row !== $prev) {
+                $bands[] = ['from' => $start, 'to' => $level - 1, 'saves' => $prev];
+                $start = $level;
+                $prev = $row;
+            }
+        }
+        $bands[] = ['from' => $start, 'to' => 20, 'saves' => $prev];
+
+        return $bands;
+    }
+
+    public static function savingThrow(string $class, int $level, string $category): ?int
+    {
+        $row = self::savingThrows($class, $level);
+
+        return $row[$category] ?? null;
+    }
+
+    /**
+     * Strength adjustments, including exceptional strength (18/01–00).
+     *
+     * Hit and damage match the existing combat columns. Weight allow, max
+     * press, open doors, and bend bars/lift gates fill the remaining 2E table.
+     *
+     * @return array{hit: int, damage: int, weight_allow: int, max_press: int, open_doors: string, bend_bars: int}
      */
     public static function strengthAdjustments(int $score, ?string $exceptional = null): array
     {
         if ($score <= 1) {
-            return ['hit' => -5, 'damage' => -4];
+            return self::strengthRow(-5, -4, 1, 3, '1', 0);
         }
         if ($score === 2) {
-            return ['hit' => -3, 'damage' => -2];
+            return self::strengthRow(-3, -2, 1, 5, '1', 0);
         }
         if ($score === 3) {
-            return ['hit' => -3, 'damage' => -1];
+            return self::strengthRow(-3, -1, 5, 10, '2', 0);
         }
         if ($score <= 5) {
-            return ['hit' => -2, 'damage' => -1];
+            return self::strengthRow(-2, -1, 10, 25, '3', 0);
         }
         if ($score <= 7) {
-            return ['hit' => -1, 'damage' => 0];
+            return self::strengthRow(-1, 0, 20, 55, '4', 0);
+        }
+        if ($score <= 9) {
+            return self::strengthRow(0, 0, 35, 90, '5', 1);
+        }
+        if ($score <= 11) {
+            return self::strengthRow(0, 0, 40, 115, '6', 2);
+        }
+        if ($score <= 13) {
+            return self::strengthRow(0, 0, 45, 140, '7', 4);
         }
         if ($score <= 15) {
-            return ['hit' => 0, 'damage' => 0];
+            return self::strengthRow(0, 0, 55, 170, '8', 7);
         }
         if ($score === 16) {
-            return ['hit' => 0, 'damage' => 1];
+            return self::strengthRow(0, 1, 70, 195, '9', 10);
         }
         if ($score === 17) {
-            return ['hit' => 1, 'damage' => 1];
+            return self::strengthRow(1, 1, 85, 220, '10', 13);
         }
         if ($score === 18) {
             $exc = self::normalizeExceptional($exceptional);
             if ($exc === null) {
-                return ['hit' => 1, 'damage' => 2];
+                return self::strengthRow(1, 2, 110, 255, '11', 16);
             }
             if ($exc <= 50) {
-                return ['hit' => 1, 'damage' => 3];
+                return self::strengthRow(1, 3, 135, 280, '12', 20);
             }
             if ($exc <= 75) {
-                return ['hit' => 2, 'damage' => 3];
+                return self::strengthRow(2, 3, 160, 305, '13', 25);
             }
             if ($exc <= 90) {
-                return ['hit' => 2, 'damage' => 4];
+                return self::strengthRow(2, 4, 185, 330, '14', 30);
             }
             if ($exc <= 99) {
-                return ['hit' => 3, 'damage' => 5];
+                return self::strengthRow(3, 5, 235, 380, '15 (3)', 35);
             }
 
-            return ['hit' => 3, 'damage' => 6];
+            return self::strengthRow(3, 6, 335, 480, '16 (6)', 40);
         }
         if ($score === 19) {
-            return ['hit' => 3, 'damage' => 7];
+            return self::strengthRow(3, 7, 485, 640, '16 (8)', 50);
         }
         if ($score === 20) {
-            return ['hit' => 3, 'damage' => 8];
+            return self::strengthRow(3, 8, 535, 700, '17 (10)', 60);
+        }
+        if ($score === 21) {
+            return self::strengthRow(4, 9, 635, 810, '17 (12)', 70);
+        }
+        if ($score === 22) {
+            return self::strengthRow(4, 10, 785, 960, '18 (14)', 80);
+        }
+        if ($score === 23) {
+            return self::strengthRow(5, 11, 935, 1130, '18 (16)', 90);
+        }
+        if ($score === 24) {
+            return self::strengthRow(6, 12, 1235, 1440, '19 (17)', 95);
         }
 
-        return ['hit' => 4, 'damage' => 9];
+        return self::strengthRow(7, 14, 1535, 1750, '19 (19)', 99);
+    }
+
+    /**
+     * @return array{hit: int, damage: int, weight_allow: int, max_press: int, open_doors: string, bend_bars: int}
+     */
+    private static function strengthRow(int $hit, int $damage, int $weight, int $press, string $open, int $bend): array
+    {
+        return [
+            'hit' => $hit,
+            'damage' => $damage,
+            'weight_allow' => $weight,
+            'max_press' => $press,
+            'open_doors' => $open,
+            'bend_bars' => $bend,
+        ];
     }
 
     /**
@@ -799,6 +1237,50 @@ class Adnd2e
     }
 
     /**
+     * Constitution table: HP adj plus shock, resurrection, poison, regen.
+     *
+     * @return array{hp: int, system_shock: int, resurrection: int, poison_save: int, regeneration: string|null}
+     */
+    public static function constitutionAdjustments(int $score, string $class = 'Fighter'): array
+    {
+        [$shock, $resurrection, $poison, $regen] = match (true) {
+            $score <= 1 => [25, 30, 0, null],
+            $score === 2 => [30, 35, 0, null],
+            $score === 3 => [35, 40, 0, null],
+            $score === 4 => [40, 45, 0, null],
+            $score === 5 => [45, 50, 0, null],
+            $score === 6 => [50, 55, 0, null],
+            $score === 7 => [55, 60, 0, null],
+            $score === 8 => [60, 65, 0, null],
+            $score === 9 => [65, 70, 0, null],
+            $score === 10 => [70, 75, 0, null],
+            $score === 11 => [75, 80, 0, null],
+            $score === 12 => [80, 85, 0, null],
+            $score === 13 => [85, 90, 0, null],
+            $score === 14 => [88, 92, 0, null],
+            $score === 15 => [90, 94, 0, null],
+            $score === 16 => [95, 96, 0, null],
+            $score === 17 => [97, 98, 0, null],
+            $score === 18 => [99, 100, 0, null],
+            $score === 19 => [99, 100, 1, null],
+            $score === 20 => [99, 100, 1, '1/6 turns'],
+            $score === 21 => [99, 100, 2, '1/5 turns'],
+            $score === 22 => [99, 100, 2, '1/4 turns'],
+            $score === 23 => [99, 100, 3, '1/3 turns'],
+            $score === 24 => [99, 100, 3, '1/2 turns'],
+            default => [100, 100, 4, '1/1 turn'],
+        };
+
+        return [
+            'hp' => self::constitutionHpAdjustment($score, $class),
+            'system_shock' => $shock,
+            'resurrection' => $resurrection,
+            'poison_save' => $poison,
+            'regeneration' => $regen,
+        ];
+    }
+
+    /**
      * Wisdom magical-defense adjustment (applied to mental/spell saves).
      */
     public static function wisdomMagicalDefense(int $score): int
@@ -831,7 +1313,48 @@ class Adnd2e
             $score === 15 => [1 => 2, 2 => 1],
             $score === 16 => [1 => 2, 2 => 2],
             $score === 17 => [1 => 2, 2 => 2, 3 => 1],
-            default => [1 => 2, 2 => 2, 3 => 1, 4 => 1],
+            $score === 18 => [1 => 2, 2 => 2, 3 => 1, 4 => 1],
+            $score === 19 => [1 => 3, 2 => 2, 3 => 1, 4 => 1],
+            $score === 20 => [1 => 3, 2 => 3, 3 => 1, 4 => 2],
+            $score === 21 => [1 => 3, 2 => 3, 3 => 2, 4 => 2],
+            $score === 22 => [1 => 3, 2 => 3, 3 => 2, 4 => 3],
+            $score === 23 => [1 => 4, 2 => 3, 3 => 2, 4 => 3],
+            $score === 24 => [1 => 4, 2 => 3, 3 => 3, 4 => 3],
+            default => [1 => 4, 2 => 4, 3 => 3, 4 => 3],
+        };
+    }
+
+    /**
+     * @return array{magical_defense: int, bonus_spells: array<int, int>, spell_failure: int}
+     */
+    public static function wisdomAdjustments(int $score): array
+    {
+        return [
+            'magical_defense' => self::wisdomMagicalDefense($score),
+            'bonus_spells' => self::wisdomBonusSpells($score),
+            'spell_failure' => self::wisdomSpellFailure($score),
+        ];
+    }
+
+    /**
+     * Chance of priest spell failure by wisdom.
+     */
+    public static function wisdomSpellFailure(int $score): int
+    {
+        return match (true) {
+            $score <= 1 => 80,
+            $score === 2 => 60,
+            $score === 3 => 50,
+            $score === 4 => 45,
+            $score === 5 => 40,
+            $score === 6 => 35,
+            $score === 7 => 30,
+            $score === 8 => 25,
+            $score === 9 => 20,
+            $score === 10 => 15,
+            $score === 11 => 10,
+            $score === 12 => 5,
+            default => 0,
         };
     }
 
@@ -854,25 +1377,43 @@ class Adnd2e
             $score === 15 => ['max_henchmen' => 7, 'loyalty' => 3, 'reaction' => 3],
             $score === 16 => ['max_henchmen' => 8, 'loyalty' => 4, 'reaction' => 5],
             $score === 17 => ['max_henchmen' => 10, 'loyalty' => 6, 'reaction' => 6],
-            default => ['max_henchmen' => 15, 'loyalty' => 8, 'reaction' => 7],
+            $score === 18 => ['max_henchmen' => 15, 'loyalty' => 8, 'reaction' => 7],
+            $score === 19 => ['max_henchmen' => 15, 'loyalty' => 10, 'reaction' => 8],
+            $score === 20 => ['max_henchmen' => 20, 'loyalty' => 12, 'reaction' => 9],
+            $score === 21 => ['max_henchmen' => 25, 'loyalty' => 14, 'reaction' => 10],
+            $score === 22 => ['max_henchmen' => 30, 'loyalty' => 16, 'reaction' => 11],
+            $score === 23 => ['max_henchmen' => 35, 'loyalty' => 18, 'reaction' => 12],
+            $score === 24 => ['max_henchmen' => 40, 'loyalty' => 20, 'reaction' => 13],
+            default => ['max_henchmen' => 50, 'loyalty' => 20, 'reaction' => 15],
         };
     }
 
     /**
-     * Intelligence: languages and max wizard spell level.
+     * Intelligence: languages, max wizard spell level, chance to learn, max spells/level.
      *
-     * @return array{languages: int, max_spell_level: int|null}
+     * @return array{languages: int, max_spell_level: int|null, chance_to_learn: int|null, max_spells_per_level: int|null}
      */
     public static function intelligenceLimits(int $score): array
     {
         return match (true) {
-            $score <= 8 => ['languages' => 1, 'max_spell_level' => null],
-            $score === 9 => ['languages' => 2, 'max_spell_level' => 4],
-            $score === 10, $score === 11 => ['languages' => 2, 'max_spell_level' => 5],
-            $score === 12, $score === 13 => ['languages' => 3, 'max_spell_level' => 6],
-            $score === 14, $score === 15 => ['languages' => 4, 'max_spell_level' => 7],
-            $score === 16, $score === 17 => ['languages' => 5, 'max_spell_level' => 8],
-            default => ['languages' => 7, 'max_spell_level' => 9],
+            $score <= 8 => ['languages' => 1, 'max_spell_level' => null, 'chance_to_learn' => null, 'max_spells_per_level' => null],
+            $score === 9 => ['languages' => 2, 'max_spell_level' => 4, 'chance_to_learn' => 35, 'max_spells_per_level' => 6],
+            $score === 10 => ['languages' => 2, 'max_spell_level' => 5, 'chance_to_learn' => 40, 'max_spells_per_level' => 7],
+            $score === 11 => ['languages' => 2, 'max_spell_level' => 5, 'chance_to_learn' => 45, 'max_spells_per_level' => 7],
+            $score === 12 => ['languages' => 3, 'max_spell_level' => 6, 'chance_to_learn' => 50, 'max_spells_per_level' => 7],
+            $score === 13 => ['languages' => 3, 'max_spell_level' => 6, 'chance_to_learn' => 55, 'max_spells_per_level' => 9],
+            $score === 14 => ['languages' => 4, 'max_spell_level' => 7, 'chance_to_learn' => 60, 'max_spells_per_level' => 9],
+            $score === 15 => ['languages' => 4, 'max_spell_level' => 7, 'chance_to_learn' => 65, 'max_spells_per_level' => 11],
+            $score === 16 => ['languages' => 5, 'max_spell_level' => 8, 'chance_to_learn' => 70, 'max_spells_per_level' => 11],
+            $score === 17 => ['languages' => 5, 'max_spell_level' => 8, 'chance_to_learn' => 75, 'max_spells_per_level' => 14],
+            $score === 18 => ['languages' => 7, 'max_spell_level' => 9, 'chance_to_learn' => 85, 'max_spells_per_level' => 18],
+            $score === 19 => ['languages' => 8, 'max_spell_level' => 9, 'chance_to_learn' => 95, 'max_spells_per_level' => null],
+            $score === 20 => ['languages' => 9, 'max_spell_level' => 9, 'chance_to_learn' => 96, 'max_spells_per_level' => null],
+            $score === 21 => ['languages' => 10, 'max_spell_level' => 9, 'chance_to_learn' => 97, 'max_spells_per_level' => null],
+            $score === 22 => ['languages' => 11, 'max_spell_level' => 9, 'chance_to_learn' => 98, 'max_spells_per_level' => null],
+            $score === 23 => ['languages' => 12, 'max_spell_level' => 9, 'chance_to_learn' => 99, 'max_spells_per_level' => null],
+            $score === 24 => ['languages' => 15, 'max_spell_level' => 9, 'chance_to_learn' => 100, 'max_spells_per_level' => null],
+            default => ['languages' => 20, 'max_spell_level' => 9, 'chance_to_learn' => 100, 'max_spells_per_level' => null],
         };
     }
 
@@ -890,6 +1431,181 @@ class Adnd2e
             'charisma' => self::charismaAdjustments($score)['reaction'],
             default => 0,
         };
+    }
+
+    /**
+     * Short label for the number returned by primaryAdjustment().
+     */
+    public static function primaryAdjustmentLabel(string $ability): string
+    {
+        return match ($ability) {
+            'strength' => 'hit',
+            'dexterity' => 'missile',
+            'constitution' => 'HP',
+            'intelligence' => 'lang',
+            'wisdom' => 'MD',
+            'charisma' => 'react',
+            default => 'mod',
+        };
+    }
+
+    /**
+     * Display score, including exceptional strength as 18/67.
+     */
+    public static function formatAbilityScore(string $ability, int $score, ?string $exceptional = null): string
+    {
+        if ($ability !== 'strength' || $score !== 18) {
+            return (string) $score;
+        }
+
+        $raw = $exceptional === null ? '' : strtoupper(trim($exceptional));
+        if ($raw === '') {
+            return '18';
+        }
+        if ($raw === '00' || $raw === '100') {
+            return '18/00';
+        }
+        if (! preg_match('/^\d{1,3}$/', $raw)) {
+            return '18';
+        }
+
+        return '18/'.str_pad($raw, 2, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Compact labeled 2E table columns for one ability.
+     *
+     * @return list<array{label: string, value: string}>
+     */
+    public static function abilityAdjustmentLines(string $ability, int $score, ?string $exceptional = null, string $class = 'Fighter'): array
+    {
+        return match ($ability) {
+            'strength' => self::strengthAdjustmentLines($score, $exceptional),
+            'dexterity' => self::dexterityAdjustmentLines($score),
+            'constitution' => self::constitutionAdjustmentLines($score, $class),
+            'intelligence' => self::intelligenceAdjustmentLines($score),
+            'wisdom' => self::wisdomAdjustmentLines($score),
+            'charisma' => self::charismaAdjustmentLines($score),
+            default => [],
+        };
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function strengthAdjustmentLines(int $score, ?string $exceptional): array
+    {
+        $row = self::strengthAdjustments($score, $exceptional);
+
+        return [
+            ['label' => 'hit', 'value' => self::formatSigned($row['hit'])],
+            ['label' => 'dmg', 'value' => self::formatSigned($row['damage'])],
+            ['label' => 'wt', 'value' => (string) $row['weight_allow']],
+            ['label' => 'press', 'value' => (string) $row['max_press']],
+            ['label' => 'open', 'value' => $row['open_doors']],
+            ['label' => 'BB', 'value' => $row['bend_bars'].'%'],
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function dexterityAdjustmentLines(int $score): array
+    {
+        $row = self::dexterityAdjustments($score);
+
+        return [
+            ['label' => 'react', 'value' => self::formatSigned($row['reaction'])],
+            ['label' => 'missile', 'value' => self::formatSigned($row['missile'])],
+            ['label' => 'def', 'value' => self::formatSigned($row['defensive'])],
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function constitutionAdjustmentLines(int $score, string $class): array
+    {
+        $row = self::constitutionAdjustments($score, $class);
+        $lines = [
+            ['label' => 'HP', 'value' => self::formatSigned($row['hp'])],
+            ['label' => 'shock', 'value' => $row['system_shock'].'%'],
+            ['label' => 'resurrect', 'value' => $row['resurrection'].'%'],
+            ['label' => 'poison', 'value' => self::formatSigned($row['poison_save'])],
+        ];
+        if ($row['regeneration'] !== null) {
+            $lines[] = ['label' => 'regen', 'value' => $row['regeneration']];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function intelligenceAdjustmentLines(int $score): array
+    {
+        $row = self::intelligenceLimits($score);
+        $lines = [
+            ['label' => 'langs', 'value' => (string) $row['languages']],
+        ];
+        if ($row['max_spell_level'] !== null) {
+            $lines[] = ['label' => 'spell lvl', 'value' => (string) $row['max_spell_level']];
+        }
+        if ($row['chance_to_learn'] !== null) {
+            $lines[] = ['label' => 'learn', 'value' => $row['chance_to_learn'].'%'];
+        }
+        if ($row['max_spells_per_level'] !== null) {
+            $lines[] = ['label' => 'max/lvl', 'value' => (string) $row['max_spells_per_level']];
+        } elseif ($row['max_spell_level'] !== null) {
+            $lines[] = ['label' => 'max/lvl', 'value' => 'all'];
+        }
+
+        return $lines;
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function wisdomAdjustmentLines(int $score): array
+    {
+        return [
+            ['label' => 'MD', 'value' => self::formatSigned(self::wisdomMagicalDefense($score))],
+            ['label' => 'bonus', 'value' => self::formatWisdomBonusSpells(self::wisdomBonusSpells($score))],
+            ['label' => 'fail', 'value' => self::wisdomSpellFailure($score).'%'],
+        ];
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    private static function charismaAdjustmentLines(int $score): array
+    {
+        $row = self::charismaAdjustments($score);
+
+        return [
+            ['label' => 'hench', 'value' => (string) $row['max_henchmen']],
+            ['label' => 'loyalty', 'value' => self::formatSigned($row['loyalty'])],
+            ['label' => 'react', 'value' => self::formatSigned($row['reaction'])],
+        ];
+    }
+
+    /**
+     * @param  array<int, int>  $bonus
+     */
+    public static function formatWisdomBonusSpells(array $bonus): string
+    {
+        if ($bonus === []) {
+            return '—';
+        }
+
+        $ordinal = [1 => '1st', 2 => '2nd', 3 => '3rd', 4 => '4th', 5 => '5th', 6 => '6th', 7 => '7th'];
+        $parts = [];
+        foreach ($bonus as $level => $count) {
+            $parts[] = ($ordinal[$level] ?? $level.'th').'×'.$count;
+        }
+
+        return implode(', ', $parts);
     }
 
     /**
@@ -926,6 +1642,21 @@ class Adnd2e
         }
 
         return array_filter($base, fn (int $n) => $n > 0);
+    }
+
+    /**
+     * Memorization counts by character level 1–20. Keys are spell levels.
+     *
+     * @return array<int, array<int, int>>
+     */
+    public static function memorizationProgression(string $class, int $wisdom = 10, ?string $subclass = null): array
+    {
+        $out = [];
+        for ($level = 1; $level <= 20; $level++) {
+            $out[$level] = self::memorizationCapacity($class, $level, $wisdom, $subclass);
+        }
+
+        return $out;
     }
 
     /**
@@ -1172,10 +1903,12 @@ class Adnd2e
         $primary = $entries[0]['class'] ?? 'Fighter';
         $spheres = null;
         foreach ($entries as $entry) {
-            if (self::normalizeClass($entry['class']) === 'Cleric') {
-                $spheres = ['major' => ['All', 'Healing'], 'minor' => ['Divination']];
-            } elseif (self::normalizeClass($entry['class']) === 'Druid') {
-                $spheres = ['major' => ['All', 'Animal', 'Elemental', 'Healing', 'Plant', 'Weather'], 'minor' => []];
+            $access = self::priestSpheres($entry['class']);
+            if ($access['major'] === [] && $access['minor'] === []) {
+                continue;
+            }
+            $spheres = $access;
+            if (self::normalizeClass($entry['class']) === 'Druid') {
                 break;
             }
         }
@@ -1410,5 +2143,64 @@ class Adnd2e
         }
 
         return $a;
+    }
+
+    /**
+     * Alias match order matches the historic weaponSpeed contains chain.
+     *
+     * @return list<array{aliases: list<string>, name: string, sm: string, l: string, speed: int}>
+     */
+    private static function weaponRows(): array
+    {
+        return [
+            ['aliases' => ['dagger'], 'name' => 'Dagger', 'sm' => '1d4', 'l' => '1d3', 'speed' => 2],
+            ['aliases' => ['dart'], 'name' => 'Dart', 'sm' => '1d3', 'l' => '1d2', 'speed' => 2],
+            ['aliases' => ['short sword'], 'name' => 'Short sword', 'sm' => '1d6', 'l' => '1d8', 'speed' => 3],
+            ['aliases' => ['hand axe'], 'name' => 'Hand axe', 'sm' => '1d6', 'l' => '1d4', 'speed' => 4],
+            ['aliases' => ['warhammer'], 'name' => 'Warhammer', 'sm' => '1d4+1', 'l' => '1d4', 'speed' => 4],
+            ['aliases' => ['javelin'], 'name' => 'Javelin', 'sm' => '1d6', 'l' => '1d6', 'speed' => 4],
+            ['aliases' => ['quarterstaff', 'staff'], 'name' => 'Quarterstaff', 'sm' => '1d6', 'l' => '1d6', 'speed' => 4],
+            ['aliases' => ['club'], 'name' => 'Club', 'sm' => '1d6', 'l' => '1d3', 'speed' => 4],
+            ['aliases' => ['long sword'], 'name' => 'Long sword', 'sm' => '1d8', 'l' => '1d12', 'speed' => 5],
+            ['aliases' => ['spear'], 'name' => 'Spear', 'sm' => '1d6', 'l' => '1d8', 'speed' => 5],
+            ['aliases' => ['mace'], 'name' => 'Mace', 'sm' => '1d6+1', 'l' => '1d6', 'speed' => 5],
+            ['aliases' => ['sling'], 'name' => 'Sling', 'sm' => '1d4', 'l' => '1d4', 'speed' => 5],
+            ['aliases' => ['bastard'], 'name' => 'Bastard sword', 'sm' => '1d8', 'l' => '1d12', 'speed' => 6],
+            ['aliases' => ['flail'], 'name' => 'Flail', 'sm' => '1d6+1', 'l' => '2d4', 'speed' => 6],
+            ['aliases' => ['morning'], 'name' => 'Morning star', 'sm' => '2d4', 'l' => '1d6+1', 'speed' => 6],
+            ['aliases' => ['battle axe'], 'name' => 'Battle axe', 'sm' => '1d8', 'l' => '1d8', 'speed' => 7],
+            ['aliases' => ['short bow'], 'name' => 'Short bow', 'sm' => '1d6', 'l' => '1d6', 'speed' => 7],
+            ['aliases' => ['light crossbow', 'crossbow, light'], 'name' => 'Crossbow, light', 'sm' => '1d4', 'l' => '1d4', 'speed' => 7],
+            ['aliases' => ['long bow'], 'name' => 'Long bow', 'sm' => '1d6', 'l' => '1d6', 'speed' => 8],
+            ['aliases' => ['lance'], 'name' => 'Lance', 'sm' => '1d6+1', 'l' => '2d6', 'speed' => 8],
+            ['aliases' => ['halberd'], 'name' => 'Halberd', 'sm' => '1d10', 'l' => '2d6', 'speed' => 9],
+            ['aliases' => ['two-handed', 'two handed'], 'name' => 'Two-handed sword', 'sm' => '1d10', 'l' => '3d6', 'speed' => 10],
+            ['aliases' => ['heavy crossbow', 'crossbow, heavy'], 'name' => 'Crossbow, heavy', 'sm' => '1d4+1', 'l' => '1d6+1', 'speed' => 10],
+        ];
+    }
+
+    /**
+     * @return list<array{aliases: list<string>, name: string, ac: int}>
+     */
+    private static function armorRows(): array
+    {
+        return [
+            ['aliases' => ['shield only'], 'name' => 'Shield only', 'ac' => 9],
+            ['aliases' => ['unarmored', 'unarmoured', 'no armor', 'none'], 'name' => 'None', 'ac' => 10],
+            ['aliases' => ['padded'], 'name' => 'Padded', 'ac' => 8],
+            ['aliases' => ['studded'], 'name' => 'Studded leather', 'ac' => 7],
+            ['aliases' => ['leather'], 'name' => 'Leather', 'ac' => 8],
+            ['aliases' => ['ring mail', 'ring'], 'name' => 'Ring mail', 'ac' => 7],
+            ['aliases' => ['scale'], 'name' => 'Scale mail', 'ac' => 6],
+            ['aliases' => ['hide'], 'name' => 'Hide', 'ac' => 6],
+            ['aliases' => ['brigandine'], 'name' => 'Brigandine', 'ac' => 6],
+            ['aliases' => ['chain'], 'name' => 'Chain mail', 'ac' => 5],
+            ['aliases' => ['splint'], 'name' => 'Splint mail', 'ac' => 4],
+            ['aliases' => ['banded'], 'name' => 'Banded mail', 'ac' => 4],
+            ['aliases' => ['bronze plate'], 'name' => 'Bronze plate', 'ac' => 4],
+            ['aliases' => ['full plate'], 'name' => 'Full plate', 'ac' => 1],
+            ['aliases' => ['field plate'], 'name' => 'Field plate', 'ac' => 2],
+            ['aliases' => ['plate mail', 'plate'], 'name' => 'Plate mail', 'ac' => 3],
+        ];
     }
 }

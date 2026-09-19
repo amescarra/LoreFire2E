@@ -118,7 +118,7 @@ class Character extends Model
     }
 
     /**
-     * @return array<int, array{class: string, level: int}>
+     * @return array<int, array{class: string, level: int, xp?: int}>
      */
     public function classEntries(): array
     {
@@ -130,12 +130,44 @@ class Character extends Model
         );
     }
 
+    /**
+     * Class entries with display-time XP backfill (does not persist).
+     *
+     * @return array<int, array{class: string, level: int, xp?: int}>
+     */
+    public function displayClassEntries(): array
+    {
+        return Adnd2e::backfillClassLevelsXp(
+            $this->classEntries(),
+            (string) ($this->class_path ?? 'single'),
+            $this->experience_points,
+        );
+    }
+
     public function getModifier(string $ability): int
     {
         $exceptional = $ability === 'strength' ? $this->exceptional_strength : null;
         $primary = $this->classEntries()[0]['class'] ?? (string) $this->class;
 
         return Adnd2e::primaryAdjustment($ability, (int) $this->{$ability}, $exceptional, $primary);
+    }
+
+    public function formattedAbilityScore(string $ability): string
+    {
+        $exceptional = $ability === 'strength' ? $this->exceptional_strength : null;
+
+        return Adnd2e::formatAbilityScore($ability, (int) $this->{$ability}, $exceptional);
+    }
+
+    /**
+     * @return list<array{label: string, value: string}>
+     */
+    public function abilityAdjustmentLines(string $ability): array
+    {
+        $exceptional = $ability === 'strength' ? $this->exceptional_strength : null;
+        $primary = $this->classEntries()[0]['class'] ?? (string) $this->class;
+
+        return Adnd2e::abilityAdjustmentLines($ability, (int) $this->{$ability}, $exceptional, $primary);
     }
 
     public function resolvedThac0(): int

@@ -8,9 +8,10 @@ import { Campaign } from '@/types'
 import { ClassPathFields } from '@/Components/ClassPathFields'
 import { KitField } from '@/Components/KitField'
 import { PsionicistSheetFields } from '@/Components/PsionicistSheetFields'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import {
-  ALIGNMENTS, RACES,
-  ClassPath, combinedHitDie, combinedThac0, formatSigned, hasPsionicist, movementRate, primaryAdjustment,
+  ABILITY_ORDER, ALIGNMENTS, RACES,
+  ClassPath, combinedHitDie, combinedThac0, derivedExperiencePoints, hasPsionicist, movementRate,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -21,11 +22,11 @@ interface Props {
 export default function Create({ campaign, campaigns }: Props) {
   const standalone = campaign === null
 
-  const { data, setData, post, processing, errors } = useForm({
+  const { data, setData, post, transform, processing, errors } = useForm({
     name: '', player_name: '', race: '', subrace: '', class: '', subclass: '',
     class_path: 'single' as ClassPath,
     class_levels: [{ class: '', level: 1 }],
-    level: 1, background: '', alignment: '',
+    level: 1, experience_points: 0, background: '', alignment: '',
     strength: 10, exceptional_strength: '', dexterity: 10, constitution: 10,
     intelligence: 10, wisdom: 10, charisma: 10,
     max_hp: 8, current_hp: 8, armor_class: 10, speed: 12,
@@ -33,6 +34,17 @@ export default function Create({ campaign, campaigns }: Props) {
     psp_current: null as number | null,
     psp_max: null as number | null,
     psionic_powers: [] as string[],
+  })
+
+  transform((d) => {
+    const class_levels = d.class_path === 'single' && d.class_levels[0]
+      ? [{ ...d.class_levels[0], xp: Math.max(0, Number(d.experience_points) || 0) }]
+      : d.class_levels
+    return {
+      ...d,
+      class_levels,
+      experience_points: derivedExperiencePoints(class_levels, d.experience_points),
+    }
   })
 
   const submit = (e: React.FormEvent) => {
@@ -45,9 +57,6 @@ export default function Create({ campaign, campaigns }: Props) {
   }
 
   const entries = data.class_levels.filter(e => e.class)
-
-  const adj = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, data.exceptional_strength || null, data.class || 'Fighter'))
 
   const breadcrumbs = standalone
     ? [{ label: 'Characters', href: '/characters' }, { label: 'New Character' }]
@@ -118,6 +127,21 @@ export default function Create({ campaign, campaigns }: Props) {
           />
           {errors.class && <p className="text-xs text-[var(--color-danger)]">{errors.class}</p>}
 
+          {data.class_path === 'single' && (
+            <Input
+              label="Experience Points"
+              type="number"
+              min={0}
+              value={data.experience_points}
+              onChange={e => {
+                const xp = Math.max(0, parseInt(e.target.value) || 0)
+                setData('experience_points', xp)
+                const first = data.class_levels[0] ?? { class: '', level: 1 }
+                setData('class_levels', [{ ...first, xp }])
+              }}
+            />
+          )}
+
           <KitField
             race={data.race}
             entries={data.class_levels}
@@ -140,21 +164,25 @@ export default function Create({ campaign, campaigns }: Props) {
 
           <RuneDivider label="Ability Scores" />
 
-          <div className="grid grid-cols-6 gap-3">
-            {([
-              ['STR', 'strength'], ['DEX', 'dexterity'], ['CON', 'constitution'],
-              ['INT', 'intelligence'], ['WIS', 'wisdom'], ['CHA', 'charisma']
-            ] as [string, keyof typeof data][]).map(([label, key]) => (
-              <div key={key} className="flex flex-col items-center gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{label}</label>
-                <input
-                  type="number" min={1} max={25}
-                  value={data[key] as number}
-                  onChange={e => setData(key, parseInt(e.target.value) || 10)}
-                  className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
-                />
-                <span className="text-xs text-[var(--color-rune)] font-mono">{adj(String(key), data[key] as number)}</span>
-              </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {ABILITY_ORDER.map(({ label, key }) => (
+              <AbilityScoreBlock
+                key={key}
+                ability={key}
+                label={label}
+                score={data[key] as number}
+                exceptional={data.exceptional_strength || null}
+                characterClass={data.class || 'Fighter'}
+                variant="form"
+                scoreControl={
+                  <input
+                    type="number" min={1} max={25}
+                    value={data[key] as number}
+                    onChange={e => setData(key, parseInt(e.target.value) || 10)}
+                    className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
+                  />
+                }
+              />
             ))}
           </div>
 

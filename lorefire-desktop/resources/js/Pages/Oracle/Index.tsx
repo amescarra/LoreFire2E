@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Link } from '@inertiajs/react'
 import ReactMarkdown from 'react-markdown'
 import AppLayout from '@/Layouts/AppLayout'
-import { Campaign, Character, GameSession } from '@/types'
+import { Campaign, Character, GameSession, Npc } from '@/types'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -16,6 +16,7 @@ interface Props {
 
 const SUGGESTED_PROMPTS = [
   'How does THAC0 vs descending Armor Class work?',
+  'What is the missile adjustment for DEX 17?',
   'Summarize my most recent session.',
   'What are the 2E saving-throw categories?',
   'How does wizard spell memorization work?',
@@ -39,7 +40,15 @@ export function oracleCampaignContext(campaigns: Campaign[]) {
       class: c.class,
       level: c.level,
       class_path: c.class_path,
+      class_levels: c.class_levels,
       subclass: c.subclass,
+      strength: c.strength,
+      exceptional_strength: c.exceptional_strength,
+      dexterity: c.dexterity,
+      constitution: c.constitution,
+      intelligence: c.intelligence,
+      wisdom: c.wisdom,
+      charisma: c.charisma,
       current_hp: c.current_hp,
       max_hp: c.max_hp,
       armor_class: c.armor_class,
@@ -53,6 +62,17 @@ export function oracleCampaignContext(campaigns: Campaign[]) {
       title: s.title,
       played_at: s.played_at,
       session_notes: s.session_notes,
+    })),
+    npcs: (campaign.npcs ?? []).map((npc: Npc) => ({
+      name: npc.name,
+      race: npc.race,
+      role: npc.role,
+      location: npc.location,
+      last_seen: npc.last_seen,
+      tags: npc.tags,
+      attitude: npc.attitude,
+      stat_block: npc.stat_block,
+      is_alive: npc.is_alive,
     })),
   }))
 }

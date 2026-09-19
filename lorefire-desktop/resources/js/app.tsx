@@ -5,6 +5,9 @@ import { createRoot } from 'react-dom/client';
 import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { RecordingProvider } from '@/Contexts/RecordingContext';
+import { installHistoryGuard } from '@/lib/navigation';
+
+installHistoryGuard();
 
 createInertiaApp({
     title: (title) => title ? `${title} — Lorefire` : 'Lorefire',

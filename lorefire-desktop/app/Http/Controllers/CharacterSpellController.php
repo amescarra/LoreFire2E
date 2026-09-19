@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Character;
 use App\Models\CharacterSpell;
 use App\Support\Adnd2e;
+use App\Support\SpellMaterialComponents;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -61,11 +62,16 @@ class CharacterSpellController extends Controller
             'action' => 'nullable|in:use,recover',
         ])['action'] ?? 'use';
 
-        $flags = $action === 'recover'
-            ? Adnd2e::restoreMemorizedInstance($times, (int) $spell->times_cast)
-            : Adnd2e::burnMemorizedInstance($times, (int) $spell->times_cast);
+        if ($action === 'recover') {
+            $spell->update(Adnd2e::restoreMemorizedInstance($times, (int) $spell->times_cast));
 
-        $spell->update($flags);
+            return back();
+        }
+
+        $result = SpellMaterialComponents::tryBurnOneCopy($character, $spell);
+        if (! $result['ok']) {
+            return back()->with('error', $result['error']);
+        }
 
         return back();
     }

@@ -10,8 +10,9 @@ import { Input } from '@/Components/Input'
 import { Campaign, Character, InventoryItem, InventorySnapshot } from '@/types'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { SpellsTab } from '@/Components/SpellsTab'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import {
-  SAVE_CATEGORIES, anyCaster, formatSigned, hasPsionicist, normalizeClassLevels, primaryAdjustment, vitalityState,
+  ABILITY_ORDER, SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatXpAmount, hasPsionicist, inventoryQuantityLabel, normalizeClassLevels, vitalityState,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -86,21 +87,15 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
     router.patch(memorizationUrl, { level, action }, { preserveScroll: true })
   }
 
-  const adj = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, character.exceptional_strength, character.class))
-
   const vitality = vitalityState(character.current_hp)
 
-  const abilities = [
-    { label: 'STR', key: 'strength' as const },
-    { label: 'DEX', key: 'dexterity' as const },
-    { label: 'CON', key: 'constitution' as const },
-    { label: 'INT', key: 'intelligence' as const },
-    { label: 'WIS', key: 'wisdom' as const },
-    { label: 'CHA', key: 'charisma' as const },
-  ]
-
-  const classEntries = normalizeClassLevels(character.class_levels, character.class, character.level, character.class_path ?? 'single')
+  const classPath = character.class_path ?? 'single'
+  const classEntries = backfillClassLevelsXp(
+    normalizeClassLevels(character.class_levels, character.class, character.level, classPath),
+    classPath,
+    character.experience_points ?? 0,
+  )
+  const classLevelsLine = formatClassLevelsLine(classEntries, classPath)
   const hasMemorization = anyCaster(classEntries)
     || (character.memorization && Object.keys(character.memorization).length > 0)
 
@@ -158,7 +153,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="font-heading text-2xl text-[var(--color-text-white)] tracking-widest uppercase">{character.name}</h1>
-              <Badge variant="rune">Level {character.level}</Badge>
+              <Badge variant="rune" className="normal-case tracking-wider">{classLevelsLine || `Level ${character.level}`}</Badge>
               {character.class_path && character.class_path !== 'single' && (
                 <Badge variant="muted">{character.class_path === 'dual' ? 'Dual-class' : 'Multi-class'}</Badge>
               )}
@@ -167,6 +162,19 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
               {character.race}{character.subrace ? ` (${character.subrace})` : ''} · {character.class}{character.subclass ? ` — ${character.subclass}` : ''}
               {character.background ? ` · ${character.background}` : ''}
             </p>
+            <ul className="mt-1.5 text-xs text-[var(--color-text-dim)] flex flex-col gap-0.5">
+              {classEntries.map((entry, i) => (
+                <li key={`${entry.class}-${i}`} className="font-mono">
+                  {classAbbreviation(entry.class)} {entry.level}
+                  <span className="opacity-70">
+                    {' · '}
+                    {entry.xp !== undefined && entry.xp !== null
+                      ? `${formatXpAmount(entry.xp)} XP`
+                      : '— XP'}
+                  </span>
+                </li>
+              ))}
+            </ul>
             <div className="mt-2">
               <ConditionManager characterId={character.id} conditions={character.conditions ?? []} />
             </div>
@@ -243,13 +251,17 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
         </div>
 
         {/* ── Ability scores ────────────────────────────────────────── */}
-        <div className="grid grid-cols-6 gap-2">
-          {abilities.map(({ label, key }) => (
-            <div key={key} className="runic-card p-3 flex flex-col items-center gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{label}</span>
-              <span className="font-heading text-xl text-[var(--color-text-white)] leading-none">{character[key]}</span>
-              <span className="text-sm text-[var(--color-rune)] font-mono">{adj(key, character[key] as number)}</span>
-            </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+          {ABILITY_ORDER.map(({ label, key }) => (
+            <AbilityScoreBlock
+              key={key}
+              ability={key}
+              label={label}
+              score={character[key] as number}
+              exceptional={character.exceptional_strength}
+              characterClass={character.class}
+              variant="sheet"
+            />
           ))}
         </div>
 
@@ -430,6 +442,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
               characterClass={character.class}
               spells={character.spells ?? []}
               memorization={character.memorization}
+              inventoryItems={character.inventory_items ?? []}
             />
           </div>
         )}
@@ -628,7 +641,7 @@ function ClassFeaturesDisplay({ cf, updateUrl, characterClass, level }: { cf: CF
 
 const ITEM_CATEGORIES = [
   'Weapon', 'Armor', 'Shield', 'Ammunition', 'Potion', 'Scroll',
-  'Wondrous Item', 'Ring', 'Rod', 'Staff', 'Wand', 'Gear', 'Tool',
+  'Wondrous Item', 'Ring', 'Rod', 'Staff', 'Wand', 'Gear', 'Component', 'Tool',
   'Mount', 'Vehicle', 'Trade Good', 'Treasure', 'Other',
 ]
 
@@ -842,15 +855,18 @@ function InventoryTab({ character }: { character: Character }) {
                 <p className="text-xs text-[var(--color-text-dim)]">Empty inventory at this point.</p>
               ) : (
                 <div className="flex flex-col gap-1">
-                  {viewingSnapshot.items.map((item, i) => (
+                  {viewingSnapshot.items.map((item, i) => {
+                    const qtyLabel = inventoryQuantityLabel(item)
+                    return (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       {item.equipped && <div className="w-1 h-1 rounded-full bg-[var(--color-rune)] shrink-0" />}
                       <span className="text-[var(--color-text-bright)] flex-1">{item.name}</span>
-                      {item.quantity > 1 && <span className="text-[var(--color-text-dim)]">×{item.quantity}</span>}
+                      {qtyLabel && <span className="text-[var(--color-text-dim)]">{qtyLabel}</span>}
                       {item.is_magical && <Badge variant="arcane">M</Badge>}
                       {item.category && <span className="text-[var(--color-text-dim)]">{item.category}</span>}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
@@ -905,6 +921,7 @@ function ItemRow({
   onDelete: () => void
 }) {
   const [expanded, setExpanded] = useState(false)
+  const qtyLabel = inventoryQuantityLabel(item)
 
   return (
     <div className="runic-card">
@@ -928,9 +945,9 @@ function ItemRow({
           {item.name}
         </button>
 
-        {/* Quantity */}
-        {item.quantity !== 1 && (
-          <span className="text-xs font-mono text-[var(--color-text-dim)] shrink-0">×{item.quantity}</span>
+        {/* Quantity: always for components (including ×1); otherwise when not 1 */}
+        {qtyLabel && (
+          <span className="text-xs font-mono text-[var(--color-text-dim)] shrink-0">{qtyLabel}</span>
         )}
 
         {/* Weight */}

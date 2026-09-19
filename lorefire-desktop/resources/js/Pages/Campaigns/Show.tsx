@@ -8,7 +8,9 @@ import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
 import { Campaign, Character, GameSession, Npc } from '@/types'
-import { formatSigned, primaryAdjustment } from '@/lib/adnd2e'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
+import { ClassSummary, characterListSubtitle } from '@/Components/ClassSummary'
+import { ABILITY_ORDER } from '@/lib/adnd2e'
 
 interface Props {
   campaign: Campaign & {
@@ -174,8 +176,8 @@ export default function Show({ campaign, imageGenProvider }: Props) {
               )}
             </div>
             <div className="flex gap-2 shrink-0">
-              <Button variant="ghost" onClick={pdf.trigger} disabled={pdf.status === 'pending'} size="sm">
-                {pdf.status === 'pending' ? 'Generating PDF...' : pdf.status === 'done' ? 'PDF Saved!' : pdf.status === 'failed' ? 'Export Failed' : 'Export PDF'}
+              <Button variant="ghost" onClick={() => pdf.trigger()} disabled={pdf.status === 'pending'} size="sm">
+                {pdf.status === 'pending' ? 'Generating PDF…' : pdf.status === 'done' ? 'PDF Saved!' : pdf.status === 'preview' ? 'Opening print preview…' : pdf.status === 'failed' ? 'Export Failed' : 'Export PDF'}
               </Button>
               <Button variant="ghost" as="a" href={`/campaigns/${campaign.id}/edit`} size="sm">
                 Edit
@@ -199,10 +201,10 @@ export default function Show({ campaign, imageGenProvider }: Props) {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_16rem] gap-6">
 
           {/* ── Characters ──────────────────────────────────────────────── */}
-          <div className="col-span-2 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 min-w-0">
             <div className="flex items-center justify-between">
               <h2 className="font-heading text-xs uppercase tracking-widest text-[var(--color-text-dim)]">
                 Party
@@ -292,12 +294,9 @@ export default function Show({ campaign, imageGenProvider }: Props) {
 }
 
 function CharacterCard({ character, campaignId }: { character: Character; campaignId: number }) {
-  const mod = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, character.exceptional_strength, character.class))
-
   return (
     <Link href={`/campaigns/${campaignId}/characters/${character.id}`}>
-      <div className="runic-card p-3 flex items-center gap-4 hover:border-[var(--color-muted)] transition-all group">
+      <div className="runic-card party-character-row p-3 flex flex-wrap items-center gap-x-4 gap-y-2 hover:border-[var(--color-muted)] transition-all group">
         {/* Portrait placeholder */}
         <div
           className="w-10 h-10 rounded shrink-0 overflow-hidden flex items-center justify-center text-[var(--color-rune)] border border-[var(--color-border)]"
@@ -314,25 +313,31 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
           )}
         </div>
 
-        {/* Name + class */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+        {/* Same class/level/XP strings as Characters Index; keep this row's current size */}
+        <div className="flex-1 min-w-[16rem]">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-heading text-sm text-[var(--color-text-white)] tracking-wide">{character.name}</span>
             <Badge variant="muted">{character.race}</Badge>
           </div>
-          <p className="text-xs text-[var(--color-text-dim)] mt-0.5">
-            {character.class}{character.subclass ? ` · ${character.subclass}` : ''} · Level {character.level}
+          <ClassSummary character={character} showXp={false} variant="line" />
+          <p className="text-xs text-[var(--color-text-dim)] mt-0.5 break-words">
+            {characterListSubtitle(character)}
           </p>
           <HpBar current={character.current_hp} max={character.max_hp} showNumbers={false} className="mt-1.5 w-24" />
         </div>
 
-        {/* Key stats */}
+        {/* Key stats — wrap below class/level when the row is narrow */}
         <div className="flex gap-3 shrink-0 text-center">
-          {(['strength','dexterity','constitution','intelligence','wisdom','charisma'] as const).slice(0,3).map(stat => (
-            <div key={stat} className="text-center">
-              <div className="text-xs font-heading text-[var(--color-rune-bright)]">{mod(stat, character[stat])}</div>
-              <div className="text-[10px] uppercase text-[var(--color-text-dim)]">{stat.slice(0,3)}</div>
-            </div>
+          {ABILITY_ORDER.slice(0, 3).map(({ label, key }) => (
+            <AbilityScoreBlock
+              key={key}
+              ability={key}
+              label={label}
+              score={character[key]}
+              exceptional={character.exceptional_strength}
+              characterClass={character.class}
+              variant="chip"
+            />
           ))}
         </div>
 

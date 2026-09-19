@@ -4,6 +4,19 @@ export const RACES = ['Human', 'Dwarf', 'Elf', 'Gnome', 'Half-Elf', 'Halfling', 
 
 export const CLASSES = ['Fighter', 'Paladin', 'Ranger', 'Mage', 'Cleric', 'Druid', 'Thief', 'Bard', 'Psionicist'] as const
 
+/** Compact class labels. Mage is mixed-case "Wiz" to match the sheet request. */
+export const CLASS_ABBREVIATIONS: Record<string, string> = {
+  Fighter: 'FR',
+  Paladin: 'PAL',
+  Ranger: 'RAN',
+  Mage: 'Wiz',
+  Cleric: 'CLR',
+  Druid: 'DRU',
+  Thief: 'TH',
+  Bard: 'BRD',
+  Psionicist: 'PSI',
+}
+
 /** Discipline name labels for the typed-power datalist only. Not kits. */
 export const PSIONIC_DISCIPLINES = [
   'Clairsentience',
@@ -261,6 +274,50 @@ export function movementRate(race: string): number {
   return race === 'Dwarf' || race === 'Gnome' || race === 'Halfling' ? 6 : 12
 }
 
+export function encumbranceThresholds(strength: number, exceptional?: string | null): {
+  none: number
+  light: number
+  moderate: number
+  heavy: number
+  severe: number
+  weight_allow: number
+  max_press: number
+} {
+  const row = strengthAdjustments(strength, exceptional)
+  const allow = row.weight_allow
+  const press = row.max_press
+  const step = Math.floor(Math.max(0, press - allow) / 4)
+  return {
+    none: allow,
+    light: allow + step,
+    moderate: allow + 2 * step,
+    heavy: allow + 3 * step,
+    severe: press,
+    weight_allow: allow,
+    max_press: press,
+  }
+}
+
+export function encumbranceCategory(carriedLbs: number, strength: number, exceptional?: string | null): string {
+  const t = encumbranceThresholds(strength, exceptional)
+  if (carriedLbs <= t.none) return 'none'
+  if (carriedLbs <= t.light) return 'light'
+  if (carriedLbs <= t.moderate) return 'moderate'
+  if (carriedLbs <= t.heavy) return 'heavy'
+  if (carriedLbs <= t.severe) return 'severe'
+  return 'immobile'
+}
+
+export function movementAtEncumbrance(race: string, category: string): number {
+  const base = movementRate(race)
+  if (category === 'none') return base
+  if (category === 'light') return Math.max(1, Math.floor((base * 3) / 4))
+  if (category === 'moderate') return Math.max(1, Math.floor(base / 2))
+  if (category === 'heavy') return Math.max(1, Math.floor(base / 3))
+  if (category === 'severe') return 1
+  return 0
+}
+
 export function thac0(characterClass: string, level: number): number {
   const lv = Math.max(1, Math.min(20, level))
   switch (classGroup(characterClass)) {
@@ -327,27 +384,41 @@ export function savingThrows(characterClass: string, level: number): SavingThrow
   return { paralyzation: row[0], rod: row[1], petrification: row[2], breath: row[3], spell: row[4] }
 }
 
-export function strengthAdjustments(score: number, exceptional?: string | null): { hit: number; damage: number } {
-  if (score <= 1) return { hit: -5, damage: -4 }
-  if (score === 2) return { hit: -3, damage: -2 }
-  if (score === 3) return { hit: -3, damage: -1 }
-  if (score <= 5) return { hit: -2, damage: -1 }
-  if (score <= 7) return { hit: -1, damage: 0 }
-  if (score <= 15) return { hit: 0, damage: 0 }
-  if (score === 16) return { hit: 0, damage: 1 }
-  if (score === 17) return { hit: 1, damage: 1 }
+export function strengthAdjustments(score: number, exceptional?: string | null): {
+  hit: number
+  damage: number
+  weight_allow: number
+  max_press: number
+  open_doors: string
+  bend_bars: number
+} {
+  if (score <= 1) return { hit: -5, damage: -4, weight_allow: 1, max_press: 3, open_doors: '1', bend_bars: 0 }
+  if (score === 2) return { hit: -3, damage: -2, weight_allow: 1, max_press: 5, open_doors: '1', bend_bars: 0 }
+  if (score === 3) return { hit: -3, damage: -1, weight_allow: 5, max_press: 10, open_doors: '2', bend_bars: 0 }
+  if (score <= 5) return { hit: -2, damage: -1, weight_allow: 10, max_press: 25, open_doors: '3', bend_bars: 0 }
+  if (score <= 7) return { hit: -1, damage: 0, weight_allow: 20, max_press: 55, open_doors: '4', bend_bars: 0 }
+  if (score <= 9) return { hit: 0, damage: 0, weight_allow: 35, max_press: 90, open_doors: '5', bend_bars: 1 }
+  if (score <= 11) return { hit: 0, damage: 0, weight_allow: 40, max_press: 115, open_doors: '6', bend_bars: 2 }
+  if (score <= 13) return { hit: 0, damage: 0, weight_allow: 45, max_press: 140, open_doors: '7', bend_bars: 4 }
+  if (score <= 15) return { hit: 0, damage: 0, weight_allow: 55, max_press: 170, open_doors: '8', bend_bars: 7 }
+  if (score === 16) return { hit: 0, damage: 1, weight_allow: 70, max_press: 195, open_doors: '9', bend_bars: 10 }
+  if (score === 17) return { hit: 1, damage: 1, weight_allow: 85, max_press: 220, open_doors: '10', bend_bars: 13 }
   if (score === 18) {
     const exc = parseExceptional(exceptional)
-    if (exc === null) return { hit: 1, damage: 2 }
-    if (exc <= 50) return { hit: 1, damage: 3 }
-    if (exc <= 75) return { hit: 2, damage: 3 }
-    if (exc <= 90) return { hit: 2, damage: 4 }
-    if (exc <= 99) return { hit: 3, damage: 5 }
-    return { hit: 3, damage: 6 }
+    if (exc === null) return { hit: 1, damage: 2, weight_allow: 110, max_press: 255, open_doors: '11', bend_bars: 16 }
+    if (exc <= 50) return { hit: 1, damage: 3, weight_allow: 135, max_press: 280, open_doors: '12', bend_bars: 20 }
+    if (exc <= 75) return { hit: 2, damage: 3, weight_allow: 160, max_press: 305, open_doors: '13', bend_bars: 25 }
+    if (exc <= 90) return { hit: 2, damage: 4, weight_allow: 185, max_press: 330, open_doors: '14', bend_bars: 30 }
+    if (exc <= 99) return { hit: 3, damage: 5, weight_allow: 235, max_press: 380, open_doors: '15 (3)', bend_bars: 35 }
+    return { hit: 3, damage: 6, weight_allow: 335, max_press: 480, open_doors: '16 (6)', bend_bars: 40 }
   }
-  if (score === 19) return { hit: 3, damage: 7 }
-  if (score === 20) return { hit: 3, damage: 8 }
-  return { hit: 4, damage: 9 }
+  if (score === 19) return { hit: 3, damage: 7, weight_allow: 485, max_press: 640, open_doors: '16 (8)', bend_bars: 50 }
+  if (score === 20) return { hit: 3, damage: 8, weight_allow: 535, max_press: 700, open_doors: '17 (10)', bend_bars: 60 }
+  if (score === 21) return { hit: 4, damage: 9, weight_allow: 635, max_press: 810, open_doors: '17 (12)', bend_bars: 70 }
+  if (score === 22) return { hit: 4, damage: 10, weight_allow: 785, max_press: 960, open_doors: '18 (14)', bend_bars: 80 }
+  if (score === 23) return { hit: 5, damage: 11, weight_allow: 935, max_press: 1130, open_doors: '18 (16)', bend_bars: 90 }
+  if (score === 24) return { hit: 6, damage: 12, weight_allow: 1235, max_press: 1440, open_doors: '19 (17)', bend_bars: 95 }
+  return { hit: 7, damage: 14, weight_allow: 1535, max_press: 1750, open_doors: '19 (19)', bend_bars: 99 }
 }
 
 export function dexterityAdjustments(score: number): { reaction: number; missile: number; defensive: number } {
@@ -378,6 +449,52 @@ export function constitutionHpAdjustment(score: number, characterClass = 'Fighte
   return warrior ? 5 : 2
 }
 
+export function constitutionAdjustments(score: number, characterClass = 'Fighter'): {
+  hp: number
+  system_shock: number
+  resurrection: number
+  poison_save: number
+  regeneration: string | null
+} {
+  let shock = 70
+  let resurrection = 75
+  let poison = 0
+  let regen: string | null = null
+  if (score <= 1) { shock = 25; resurrection = 30 }
+  else if (score === 2) { shock = 30; resurrection = 35 }
+  else if (score === 3) { shock = 35; resurrection = 40 }
+  else if (score === 4) { shock = 40; resurrection = 45 }
+  else if (score === 5) { shock = 45; resurrection = 50 }
+  else if (score === 6) { shock = 50; resurrection = 55 }
+  else if (score === 7) { shock = 55; resurrection = 60 }
+  else if (score === 8) { shock = 60; resurrection = 65 }
+  else if (score === 9) { shock = 65; resurrection = 70 }
+  else if (score === 10) { shock = 70; resurrection = 75 }
+  else if (score === 11) { shock = 75; resurrection = 80 }
+  else if (score === 12) { shock = 80; resurrection = 85 }
+  else if (score === 13) { shock = 85; resurrection = 90 }
+  else if (score === 14) { shock = 88; resurrection = 92 }
+  else if (score === 15) { shock = 90; resurrection = 94 }
+  else if (score === 16) { shock = 95; resurrection = 96 }
+  else if (score === 17) { shock = 97; resurrection = 98 }
+  else if (score === 18) { shock = 99; resurrection = 100 }
+  else if (score === 19) { shock = 99; resurrection = 100; poison = 1 }
+  else if (score === 20) { shock = 99; resurrection = 100; poison = 1; regen = '1/6 turns' }
+  else if (score === 21) { shock = 99; resurrection = 100; poison = 2; regen = '1/5 turns' }
+  else if (score === 22) { shock = 99; resurrection = 100; poison = 2; regen = '1/4 turns' }
+  else if (score === 23) { shock = 99; resurrection = 100; poison = 3; regen = '1/3 turns' }
+  else if (score === 24) { shock = 99; resurrection = 100; poison = 3; regen = '1/2 turns' }
+  else { shock = 100; resurrection = 100; poison = 4; regen = '1/1 turn' }
+
+  return {
+    hp: constitutionHpAdjustment(score, characterClass),
+    system_shock: shock,
+    resurrection,
+    poison_save: poison,
+    regeneration: regen,
+  }
+}
+
 export function wisdomMagicalDefense(score: number): number {
   if (score <= 1) return -6
   if (score === 2) return -4
@@ -389,6 +506,39 @@ export function wisdomMagicalDefense(score: number): number {
   if (score === 16) return 2
   if (score === 17) return 3
   return 4
+}
+
+export function wisdomBonusSpells(score: number): Record<number, number> {
+  if (score <= 12) return {}
+  if (score === 13) return { 1: 1 }
+  if (score === 14) return { 1: 2 }
+  if (score === 15) return { 1: 2, 2: 1 }
+  if (score === 16) return { 1: 2, 2: 2 }
+  if (score === 17) return { 1: 2, 2: 2, 3: 1 }
+  if (score === 18) return { 1: 2, 2: 2, 3: 1, 4: 1 }
+  if (score === 19) return { 1: 3, 2: 2, 3: 1, 4: 1 }
+  if (score === 20) return { 1: 3, 2: 3, 3: 1, 4: 2 }
+  if (score === 21) return { 1: 3, 2: 3, 3: 2, 4: 2 }
+  if (score === 22) return { 1: 3, 2: 3, 3: 2, 4: 3 }
+  if (score === 23) return { 1: 4, 2: 3, 3: 2, 4: 3 }
+  if (score === 24) return { 1: 4, 2: 3, 3: 3, 4: 3 }
+  return { 1: 4, 2: 4, 3: 3, 4: 3 }
+}
+
+export function wisdomSpellFailure(score: number): number {
+  if (score <= 1) return 80
+  if (score === 2) return 60
+  if (score === 3) return 50
+  if (score === 4) return 45
+  if (score === 5) return 40
+  if (score === 6) return 35
+  if (score === 7) return 30
+  if (score === 8) return 25
+  if (score === 9) return 20
+  if (score === 10) return 15
+  if (score === 11) return 10
+  if (score === 12) return 5
+  return 0
 }
 
 export function charismaAdjustments(score: number): { max_henchmen: number; loyalty: number; reaction: number } {
@@ -403,7 +553,40 @@ export function charismaAdjustments(score: number): { max_henchmen: number; loya
   if (score === 15) return { max_henchmen: 7, loyalty: 3, reaction: 3 }
   if (score === 16) return { max_henchmen: 8, loyalty: 4, reaction: 5 }
   if (score === 17) return { max_henchmen: 10, loyalty: 6, reaction: 6 }
-  return { max_henchmen: 15, loyalty: 8, reaction: 7 }
+  if (score === 18) return { max_henchmen: 15, loyalty: 8, reaction: 7 }
+  if (score === 19) return { max_henchmen: 15, loyalty: 10, reaction: 8 }
+  if (score === 20) return { max_henchmen: 20, loyalty: 12, reaction: 9 }
+  if (score === 21) return { max_henchmen: 25, loyalty: 14, reaction: 10 }
+  if (score === 22) return { max_henchmen: 30, loyalty: 16, reaction: 11 }
+  if (score === 23) return { max_henchmen: 35, loyalty: 18, reaction: 12 }
+  if (score === 24) return { max_henchmen: 40, loyalty: 20, reaction: 13 }
+  return { max_henchmen: 50, loyalty: 20, reaction: 15 }
+}
+
+export function intelligenceLimits(score: number): {
+  languages: number
+  max_spell_level: number | null
+  chance_to_learn: number | null
+  max_spells_per_level: number | null
+} {
+  if (score <= 8) return { languages: 1, max_spell_level: null, chance_to_learn: null, max_spells_per_level: null }
+  if (score === 9) return { languages: 2, max_spell_level: 4, chance_to_learn: 35, max_spells_per_level: 6 }
+  if (score === 10) return { languages: 2, max_spell_level: 5, chance_to_learn: 40, max_spells_per_level: 7 }
+  if (score === 11) return { languages: 2, max_spell_level: 5, chance_to_learn: 45, max_spells_per_level: 7 }
+  if (score === 12) return { languages: 3, max_spell_level: 6, chance_to_learn: 50, max_spells_per_level: 7 }
+  if (score === 13) return { languages: 3, max_spell_level: 6, chance_to_learn: 55, max_spells_per_level: 9 }
+  if (score === 14) return { languages: 4, max_spell_level: 7, chance_to_learn: 60, max_spells_per_level: 9 }
+  if (score === 15) return { languages: 4, max_spell_level: 7, chance_to_learn: 65, max_spells_per_level: 11 }
+  if (score === 16) return { languages: 5, max_spell_level: 8, chance_to_learn: 70, max_spells_per_level: 11 }
+  if (score === 17) return { languages: 5, max_spell_level: 8, chance_to_learn: 75, max_spells_per_level: 14 }
+  if (score === 18) return { languages: 7, max_spell_level: 9, chance_to_learn: 85, max_spells_per_level: 18 }
+  if (score === 19) return { languages: 8, max_spell_level: 9, chance_to_learn: 95, max_spells_per_level: null }
+  if (score === 20) return { languages: 9, max_spell_level: 9, chance_to_learn: 96, max_spells_per_level: null }
+  if (score === 21) return { languages: 10, max_spell_level: 9, chance_to_learn: 97, max_spells_per_level: null }
+  if (score === 22) return { languages: 11, max_spell_level: 9, chance_to_learn: 98, max_spells_per_level: null }
+  if (score === 23) return { languages: 12, max_spell_level: 9, chance_to_learn: 99, max_spells_per_level: null }
+  if (score === 24) return { languages: 15, max_spell_level: 9, chance_to_learn: 100, max_spells_per_level: null }
+  return { languages: 20, max_spell_level: 9, chance_to_learn: 100, max_spells_per_level: null }
 }
 
 export function primaryAdjustment(ability: string, score: number, exceptional?: string | null, characterClass = 'Fighter'): number {
@@ -411,11 +594,115 @@ export function primaryAdjustment(ability: string, score: number, exceptional?: 
     case 'strength': return strengthAdjustments(score, exceptional).hit
     case 'dexterity': return dexterityAdjustments(score).missile
     case 'constitution': return constitutionHpAdjustment(score, characterClass)
-    case 'intelligence': return score <= 8 ? -1 : score >= 16 ? 3 : score >= 12 ? 1 : 0
+    case 'intelligence': return intelligenceLimits(score).languages - 2
     case 'wisdom': return wisdomMagicalDefense(score)
     case 'charisma': return charismaAdjustments(score).reaction
     default: return 0
   }
+}
+
+export function primaryAdjustmentLabel(ability: string): string {
+  switch (ability) {
+    case 'strength': return 'hit'
+    case 'dexterity': return 'missile'
+    case 'constitution': return 'HP'
+    case 'intelligence': return 'lang'
+    case 'wisdom': return 'MD'
+    case 'charisma': return 'react'
+    default: return 'mod'
+  }
+}
+
+export function formatAbilityScore(ability: string, score: number, exceptional?: string | null): string {
+  if (ability !== 'strength' || score !== 18) return String(score)
+  const raw = (exceptional ?? '').toUpperCase().trim()
+  if (!raw) return '18'
+  if (raw === '00' || raw === '100') return '18/00'
+  if (!/^\d{1,3}$/.test(raw)) return '18'
+  return `18/${raw.padStart(2, '0')}`
+}
+
+export function formatWisdomBonusSpells(bonus: Record<number, number>): string {
+  const levels = Object.keys(bonus).map(Number).sort((a, b) => a - b)
+  if (levels.length === 0) return '—'
+  const ordinal: Record<number, string> = { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th', 6: '6th', 7: '7th' }
+  return levels.map(level => `${ordinal[level] ?? `${level}th`}×${bonus[level]}`).join(', ')
+}
+
+export type AbilityAdjustmentLine = { label: string; value: string }
+
+export const ABILITY_ORDER = [
+  { key: 'strength', label: 'STR' },
+  { key: 'dexterity', label: 'DEX' },
+  { key: 'constitution', label: 'CON' },
+  { key: 'intelligence', label: 'INT' },
+  { key: 'wisdom', label: 'WIS' },
+  { key: 'charisma', label: 'CHA' },
+] as const
+
+export type AbilityKey = typeof ABILITY_ORDER[number]['key']
+
+export function abilityAdjustmentLines(
+  ability: string,
+  score: number,
+  exceptional?: string | null,
+  characterClass = 'Fighter',
+): AbilityAdjustmentLine[] {
+  if (ability === 'strength') {
+    const row = strengthAdjustments(score, exceptional)
+    return [
+      { label: 'hit', value: formatSigned(row.hit) },
+      { label: 'dmg', value: formatSigned(row.damage) },
+      { label: 'wt', value: String(row.weight_allow) },
+      { label: 'press', value: String(row.max_press) },
+      { label: 'open', value: row.open_doors },
+      { label: 'BB', value: `${row.bend_bars}%` },
+    ]
+  }
+  if (ability === 'dexterity') {
+    const row = dexterityAdjustments(score)
+    return [
+      { label: 'react', value: formatSigned(row.reaction) },
+      { label: 'missile', value: formatSigned(row.missile) },
+      { label: 'def', value: formatSigned(row.defensive) },
+    ]
+  }
+  if (ability === 'constitution') {
+    const row = constitutionAdjustments(score, characterClass)
+    const lines: AbilityAdjustmentLine[] = [
+      { label: 'HP', value: formatSigned(row.hp) },
+      { label: 'shock', value: `${row.system_shock}%` },
+      { label: 'resurrect', value: `${row.resurrection}%` },
+      { label: 'poison', value: formatSigned(row.poison_save) },
+    ]
+    if (row.regeneration) lines.push({ label: 'regen', value: row.regeneration })
+    return lines
+  }
+  if (ability === 'intelligence') {
+    const row = intelligenceLimits(score)
+    const lines: AbilityAdjustmentLine[] = [{ label: 'langs', value: String(row.languages) }]
+    if (row.max_spell_level !== null) lines.push({ label: 'spell lvl', value: String(row.max_spell_level) })
+    if (row.chance_to_learn !== null) lines.push({ label: 'learn', value: `${row.chance_to_learn}%` })
+    if (row.max_spells_per_level !== null) lines.push({ label: 'max/lvl', value: String(row.max_spells_per_level) })
+    else if (row.max_spell_level !== null) lines.push({ label: 'max/lvl', value: 'all' })
+    return lines
+  }
+  if (ability === 'wisdom') {
+    return [
+      { label: 'MD', value: formatSigned(wisdomMagicalDefense(score)) },
+      { label: 'bonus', value: formatWisdomBonusSpells(wisdomBonusSpells(score)) },
+      { label: 'fail', value: `${wisdomSpellFailure(score)}%` },
+    ]
+  }
+  if (ability === 'charisma') {
+    const row = charismaAdjustments(score)
+    return [
+      { label: 'hench', value: String(row.max_henchmen) },
+      { label: 'loyalty', value: formatSigned(row.loyalty) },
+      { label: 'react', value: formatSigned(row.reaction) },
+    ]
+  }
+  return []
 }
 
 export function formatSigned(n: number): string {
@@ -445,7 +732,7 @@ export function vitalityState(currentHp: number): 'ok' | 'unconscious' | 'dying'
   return 'ok'
 }
 
-export type ClassEntry = { class: string; level: number }
+export type ClassEntry = { class: string; level: number; xp?: number | null }
 export type ClassPath = 'single' | 'multi' | 'dual'
 
 export function rewriteLegacyClass(name: string): string {
@@ -466,7 +753,17 @@ export function normalizeClassLevels(
 ): ClassEntry[] {
   const fromJson = (classLevels ?? [])
     .filter(e => e && e.class)
-    .map(e => ({ class: rewriteLegacyClass(e.class), level: Math.max(1, Math.min(20, Number(e.level) || level)) }))
+    .map(e => {
+      const entry: ClassEntry = {
+        class: rewriteLegacyClass(e.class),
+        level: Math.max(1, Math.min(20, Number(e.level) || level)),
+      }
+      if (e.xp !== undefined && e.xp !== null && e.xp !== ('' as unknown as number)) {
+        const xp = Number(e.xp)
+        if (Number.isFinite(xp) && xp >= 0) entry.xp = xp
+      }
+      return entry
+    })
   let entries = fromJson
   if (entries.length === 0) {
     if (characterClass.includes('/')) {
@@ -490,6 +787,100 @@ export function displayLevel(entries: ClassEntry[], path: ClassPath = 'single'):
   if (entries.length === 0) return 1
   if (path === 'dual') return entries[entries.length - 1].level
   return Math.max(...entries.map(e => e.level))
+}
+
+/** Prefer stored path; if it is missing/single, infer multi/dual from class_levels or class label. */
+export function resolveClassPath(
+  classPath: ClassPath | string | null | undefined,
+  classLevels: ClassEntry[] | null | undefined,
+  characterClass = '',
+): ClassPath {
+  if (classPath === 'multi' || classPath === 'dual') return classPath
+  const label = characterClass || ''
+  if (label.includes('→') || label.includes('->')) return 'dual'
+  const n = (classLevels ?? []).filter(e => e && e.class).length
+  if (n >= 2 || label.includes('/')) return 'multi'
+  return 'single'
+}
+
+export function classAbbreviation(className: string): string {
+  const name = className.trim()
+  if (!name) return '?'
+  if (CLASS_ABBREVIATIONS[name]) return CLASS_ABBREVIATIONS[name]
+  const normalized = rewriteLegacyClass(name)
+  if (CLASS_ABBREVIATIONS[normalized]) return CLASS_ABBREVIATIONS[normalized]
+  if ((SPECIALIST_SCHOOLS as readonly string[]).includes(name) || (SPECIALIST_SCHOOLS as readonly string[]).includes(normalized)) {
+    return 'Wiz'
+  }
+  const clean = name.replace(/[^A-Za-z]/g, '')
+  return clean ? clean.slice(0, 3).toUpperCase() : '?'
+}
+
+/** Compact class/level line: "FR 11 / Wiz 12", "PSI 9 → FR 10", "CLR 10". */
+export function formatClassLevelsLine(entries: ClassEntry[], path: ClassPath = 'single'): string {
+  const parts = entries
+    .filter(e => e.class)
+    .map(e => `${classAbbreviation(e.class)} ${e.level}`)
+  if (parts.length === 0) return ''
+  if (path === 'dual' && parts.length >= 2) return parts.join(' → ')
+  return parts.join(' / ')
+}
+
+export function formatXpAmount(xp: number, compact = false): string {
+  if (compact && xp >= 10000 && xp % 1000 === 0) return `${xp / 1000}k`
+  return xp.toLocaleString()
+}
+
+export function formatClassXpLine(
+  entries: ClassEntry[],
+  _path: ClassPath = 'single',
+  compact = true,
+  omitMissing = false,
+): string {
+  const parts: string[] = []
+  for (const entry of entries) {
+    if (!entry.class) continue
+    const abbr = classAbbreviation(entry.class)
+    if (entry.xp !== undefined && entry.xp !== null) {
+      parts.push(`${abbr} ${formatXpAmount(entry.xp, compact)}`)
+    } else if (!omitMissing) {
+      parts.push(`${abbr} —`)
+    }
+  }
+  return parts.join(' · ')
+}
+
+export function derivedExperiencePoints(entries: ClassEntry[], legacyXp = 0): number {
+  let sum = 0
+  let any = false
+  for (const entry of entries) {
+    if (entry.xp !== undefined && entry.xp !== null) {
+      sum += Math.max(0, entry.xp)
+      any = true
+    }
+  }
+  return any ? sum : Math.max(0, legacyXp)
+}
+
+/**
+ * Copy a legacy experience_points total into class_levels when per-class xp
+ * is missing. Does not invent splits: single → only entry; dual → last class;
+ * multi → leave empty.
+ */
+export function backfillClassLevelsXp(
+  entries: ClassEntry[],
+  path: ClassPath | string | null | undefined,
+  legacyXp: number,
+): ClassEntry[] {
+  const hasXp = entries.some(e => e.xp !== undefined && e.xp !== null)
+  const legacy = Math.max(0, Number(legacyXp) || 0)
+  if (hasXp || legacy <= 0 || entries.length === 0) return entries
+  const resolved: ClassPath = path === 'multi' || path === 'dual' ? path : 'single'
+  if (resolved === 'multi') return entries
+  const next = entries.map(e => ({ ...e }))
+  const index = resolved === 'dual' ? next.length - 1 : 0
+  next[index] = { ...next[index], xp: legacy }
+  return next
 }
 
 /** House dual-class: begin a new class only after the original is 6th. */
@@ -538,19 +929,110 @@ export function anyCaster(entries: ClassEntry[]): boolean {
   return entries.some(e => isCaster(e.class, e.level))
 }
 
-export function weaponSpeed(weapon?: string | null): number | null {
+export type WeaponStats = { name: string; sm: string; l: string; speed: number }
+export type ArmorStats = { name: string; ac: number }
+
+const WEAPON_ROWS: Array<{ aliases: string[] } & WeaponStats> = [
+  { aliases: ['dagger'], name: 'Dagger', sm: '1d4', l: '1d3', speed: 2 },
+  { aliases: ['dart'], name: 'Dart', sm: '1d3', l: '1d2', speed: 2 },
+  { aliases: ['short sword'], name: 'Short sword', sm: '1d6', l: '1d8', speed: 3 },
+  { aliases: ['hand axe'], name: 'Hand axe', sm: '1d6', l: '1d4', speed: 4 },
+  { aliases: ['warhammer'], name: 'Warhammer', sm: '1d4+1', l: '1d4', speed: 4 },
+  { aliases: ['javelin'], name: 'Javelin', sm: '1d6', l: '1d6', speed: 4 },
+  { aliases: ['quarterstaff', 'staff'], name: 'Quarterstaff', sm: '1d6', l: '1d6', speed: 4 },
+  { aliases: ['club'], name: 'Club', sm: '1d6', l: '1d3', speed: 4 },
+  { aliases: ['long sword'], name: 'Long sword', sm: '1d8', l: '1d12', speed: 5 },
+  { aliases: ['spear'], name: 'Spear', sm: '1d6', l: '1d8', speed: 5 },
+  { aliases: ['mace'], name: 'Mace', sm: '1d6+1', l: '1d6', speed: 5 },
+  { aliases: ['sling'], name: 'Sling', sm: '1d4', l: '1d4', speed: 5 },
+  { aliases: ['bastard'], name: 'Bastard sword', sm: '1d8', l: '1d12', speed: 6 },
+  { aliases: ['flail'], name: 'Flail', sm: '1d6+1', l: '2d4', speed: 6 },
+  { aliases: ['morning'], name: 'Morning star', sm: '2d4', l: '1d6+1', speed: 6 },
+  { aliases: ['battle axe'], name: 'Battle axe', sm: '1d8', l: '1d8', speed: 7 },
+  { aliases: ['short bow'], name: 'Short bow', sm: '1d6', l: '1d6', speed: 7 },
+  { aliases: ['light crossbow', 'crossbow, light'], name: 'Crossbow, light', sm: '1d4', l: '1d4', speed: 7 },
+  { aliases: ['long bow'], name: 'Long bow', sm: '1d6', l: '1d6', speed: 8 },
+  { aliases: ['lance'], name: 'Lance', sm: '1d6+1', l: '2d6', speed: 8 },
+  { aliases: ['halberd'], name: 'Halberd', sm: '1d10', l: '2d6', speed: 9 },
+  { aliases: ['two-handed', 'two handed'], name: 'Two-handed sword', sm: '1d10', l: '3d6', speed: 10 },
+  { aliases: ['heavy crossbow', 'crossbow, heavy'], name: 'Crossbow, heavy', sm: '1d4+1', l: '1d6+1', speed: 10 },
+]
+
+export function weaponStats(weapon?: string | null): WeaponStats | null {
   if (!weapon) return null
   const key = weapon.toLowerCase().replace(/^(a|an|the)\s+/, '')
-  if (key.includes('dagger') || key.includes('dart')) return 2
-  if (key.includes('short sword')) return 3
-  if (key.includes('hand axe') || key.includes('club') || key.includes('staff') || key.includes('warhammer') || key.includes('javelin')) return 4
-  if (key.includes('long sword') || key.includes('spear') || key.includes('mace') || key.includes('sling')) return 5
-  if (key.includes('bastard') || key.includes('flail') || key.includes('morning')) return 6
-  if (key.includes('battle axe') || key.includes('short bow') || key.includes('light crossbow')) return 7
-  if (key.includes('long bow') || key.includes('lance')) return 8
-  if (key.includes('halberd')) return 9
-  if (key.includes('two-handed') || key.includes('two handed') || key.includes('heavy crossbow')) return 10
+  for (const row of WEAPON_ROWS) {
+    if (row.aliases.some(alias => key.includes(alias))) {
+      return { name: row.name, sm: row.sm, l: row.l, speed: row.speed }
+    }
+  }
   return null
+}
+
+export function weaponSpeed(weapon?: string | null): number | null {
+  return weaponStats(weapon)?.speed ?? null
+}
+
+export const SHIELD_AC_BONUS = -1
+
+const ARMOR_ROWS: Array<{ aliases: string[] } & ArmorStats> = [
+  { aliases: ['shield only'], name: 'Shield only', ac: 9 },
+  { aliases: ['unarmored', 'unarmoured', 'no armor', 'none'], name: 'None', ac: 10 },
+  { aliases: ['padded'], name: 'Padded', ac: 8 },
+  { aliases: ['studded'], name: 'Studded leather', ac: 7 },
+  { aliases: ['leather'], name: 'Leather', ac: 8 },
+  { aliases: ['ring mail', 'ring'], name: 'Ring mail', ac: 7 },
+  { aliases: ['scale'], name: 'Scale mail', ac: 6 },
+  { aliases: ['hide'], name: 'Hide', ac: 6 },
+  { aliases: ['brigandine'], name: 'Brigandine', ac: 6 },
+  { aliases: ['chain'], name: 'Chain mail', ac: 5 },
+  { aliases: ['splint'], name: 'Splint mail', ac: 4 },
+  { aliases: ['banded'], name: 'Banded mail', ac: 4 },
+  { aliases: ['bronze plate'], name: 'Bronze plate', ac: 4 },
+  { aliases: ['full plate'], name: 'Full plate', ac: 1 },
+  { aliases: ['field plate'], name: 'Field plate', ac: 2 },
+  { aliases: ['plate mail', 'plate'], name: 'Plate mail', ac: 3 },
+]
+
+export function armorStats(armor?: string | null): ArmorStats | null {
+  if (!armor) return null
+  const key = armor.toLowerCase().replace(/^(a|an|the)\s+/, '')
+  for (const row of ARMOR_ROWS) {
+    if (row.aliases.some(alias => key.includes(alias))) {
+      return { name: row.name, ac: row.ac }
+    }
+  }
+  return null
+}
+
+export function armorBaseAc(armor?: string | null): number | null {
+  return armorStats(armor)?.ac ?? null
+}
+
+export function descendingArmorClass(armor: string | null | undefined = 'none', shield = false): number | null {
+  const row = armorStats(armor)
+  if (!row) return null
+  return shield && row.name !== 'Shield only' ? row.ac + SHIELD_AC_BONUS : row.ac
+}
+
+export function priestSpheres(characterClass: string): { major: string[]; minor: string[] } {
+  const c = normalizeClass(characterClass)
+  if (c === 'Cleric') {
+    return {
+      major: ['All', 'Astral', 'Charm', 'Combat', 'Creation', 'Divination', 'Guardian', 'Healing', 'Necromantic', 'Protection', 'Summoning', 'Sun'],
+      minor: ['Elemental'],
+    }
+  }
+  if (c === 'Druid') {
+    return { major: ['All', 'Animal', 'Elemental', 'Healing', 'Plant', 'Weather'], minor: ['Divination'] }
+  }
+  if (c === 'Paladin') {
+    return { major: [], minor: ['Combat', 'Divination', 'Healing', 'Protection'] }
+  }
+  if (c === 'Ranger') {
+    return { major: [], minor: ['Animal', 'Plant'] }
+  }
+  return { major: [], minor: [] }
 }
 
 export function isCaster(characterClass: string, level: number): boolean {
@@ -573,6 +1055,70 @@ export function remainingMemorizedOf(spell: {
   is_prepared?: boolean
 }): number {
   return Math.max(0, timesMemorizedOf(spell) - (spell.times_cast ?? 0))
+}
+
+/** Case-insensitive name, then contains either direction (mirrors PHP matching). */
+export function inventoryHasMaterial(
+  items: Array<{ name: string; quantity?: number }> | undefined,
+  name: string,
+  quantity = 1,
+): boolean {
+  if (!items || items.length === 0) return false
+  const needle = name.trim().toLowerCase()
+  if (needle === '') return false
+  return items.some(item => {
+    const hay = (item.name ?? '').toLowerCase().trim()
+    const have = item.quantity ?? 1
+    if (have < quantity) return false
+    if (hay === needle) return true
+    if (needle.length < 3) return false
+    return hay.includes(needle) || (hay.length >= 3 && needle.includes(hay))
+  })
+}
+
+export function missingSpellMaterials(
+  spell: { material_requirements?: Array<{ name: string; quantity: number; consumed: boolean; focus: boolean }> },
+  items: Array<{ name: string; quantity?: number }> | undefined,
+): string[] {
+  return (spell.material_requirements ?? [])
+    .filter(req => !inventoryHasMaterial(items, req.name, req.quantity))
+    .map(req => req.name)
+}
+
+export function materialRequirementQuantity(quantity?: number | null): number {
+  const n = Number(quantity)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 1
+}
+
+/** Always includes the count, including 1×. */
+export function formatMaterialAmount(name: string, quantity?: number | null): string {
+  return `${materialRequirementQuantity(quantity)}× ${name}`
+}
+
+export function formatLinkedMaterial(req: {
+  name: string
+  quantity?: number | null
+  focus?: boolean
+}): string {
+  const kind = req.focus ? 'focus' : 'spend'
+  return `${kind} ${formatMaterialAmount(req.name, req.quantity)}`
+}
+
+export function isComponentCategory(category?: string | null): boolean {
+  const c = (category ?? '').trim().toLowerCase()
+  return c === 'component' || /\bcomponents?\b/.test(c)
+}
+
+/** Visible quantity badge. Components always show an amount, including ×1. */
+export function inventoryQuantityLabel(item: {
+  quantity?: number | null
+  category?: string | null
+}): string | null {
+  const qty = item.quantity ?? 1
+  if (qty !== 1 || isComponentCategory(item.category)) {
+    return `×${qty}`
+  }
+  return null
 }
 
 export function memorizedCopyTotal(spells: Array<{ times_memorized?: number | null; is_prepared?: boolean }>): number {

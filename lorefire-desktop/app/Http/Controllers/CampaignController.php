@@ -51,10 +51,18 @@ class CampaignController extends Controller
     public function show(Campaign $campaign): Response
     {
         $campaign->load([
-            'characters.inventoryItems',
             'npcs',
             'gameSessions' => fn ($q) => $q->orderByDesc('played_at'),
         ]);
+
+        // Same character payload/order as Characters Index (class_levels, kit, XP).
+        $campaign->setRelation(
+            'characters',
+            $campaign->characters()
+                ->with('inventoryItems')
+                ->orderBy('name')
+                ->get()
+        );
 
         return Inertia::render('Campaigns/Show', [
             'campaign'        => $campaign,

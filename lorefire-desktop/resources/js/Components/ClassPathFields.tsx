@@ -11,7 +11,14 @@ interface Props {
 
 export function ClassPathFields({ path, entries, onPath, onEntries }: Props) {
   const setEntry = (index: number, patch: Partial<ClassEntry>) => {
-    const next = entries.map((e, i) => i === index ? { ...e, ...patch } : e)
+    const next = entries.map((e, i) => {
+      if (i !== index) return e
+      const merged: ClassEntry = { ...e, ...patch }
+      if ('xp' in patch && (patch.xp === undefined || patch.xp === null)) {
+        delete merged.xp
+      }
+      return merged
+    })
     onEntries(next)
   }
 
@@ -61,7 +68,7 @@ export function ClassPathFields({ path, entries, onPath, onEntries }: Props) {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${path === 'single' ? 'grid-cols-2' : 'grid-cols-3'}`}>
         {rows.map((entry, i) => (
           <React.Fragment key={i}>
             <Select
@@ -80,6 +87,23 @@ export function ClassPathFields({ path, entries, onPath, onEntries }: Props) {
               value={entry.level}
               onChange={e => setEntry(i, { level: parseInt(e.target.value) || 1 })}
             />
+            {path !== 'single' && (
+              <Input
+                label={path === 'dual' ? (i === 0 ? 'Original XP' : 'Current XP') : 'XP'}
+                type="number"
+                min={0}
+                value={entry.xp ?? ''}
+                onChange={e => {
+                  const raw = e.target.value
+                  if (raw === '') {
+                    setEntry(i, { xp: undefined })
+                    return
+                  }
+                  setEntry(i, { xp: Math.max(0, parseInt(raw) || 0) })
+                }}
+                placeholder="—"
+              />
+            )}
           </React.Fragment>
         ))}
       </div>

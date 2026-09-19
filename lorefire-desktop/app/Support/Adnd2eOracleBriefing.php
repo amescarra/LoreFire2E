@@ -46,6 +46,12 @@ class Adnd2eOracleBriefing
         $specMem = Adnd2e::memorizationCapacity('Mage', 1, 10, 'Illusionist');
         $mageL1 = $mageMem[1] ?? 0;
         $specL1 = $specMem[1] ?? 0;
+        $leatherAc = Adnd2e::armorBaseAc('leather');
+        $chainAc = Adnd2e::armorBaseAc('chain mail');
+        $plateAc = Adnd2e::armorBaseAc('plate mail');
+        $longSword = Adnd2e::weaponStats('long sword');
+        $clericSpheres = Adnd2e::priestSpheres('Cleric');
+        $str10enc = Adnd2e::encumbranceThresholds(10);
 
         $lines = [
             '## Lorefire 2E procedures (app engine)',
@@ -55,8 +61,10 @@ class Adnd2eOracleBriefing
             '### Combat',
             '- Lower THAC0 is better. Warrior (Fighter, Paladin, Ranger) THAC0 at 1/5/10: '.$w1.'/'.$w5.'/'.$w10.'. Priest (Cleric, Druid) at 1/4: '.$p1.'/'.$p4.'. Rogue (Thief, Bard, and Psionicist) at 1/5: '.$r1.'/'.$r5.'. Wizard (Mage) at 1/6: '.$m1.'/'.$m6.'.',
             '- Armor Class is descending (10 unarmored; lower is better). Number needed on d20 = THAC0 minus descending AC. Example: THAC0 20 vs AC 10 needs '.$needUnarmored.'; vs AC 0 needs '.$needAc0.'. This app treats 1 as a miss and 20 as a hit.',
+            '- Armor base AC: leather '.$leatherAc.', chain mail '.$chainAc.', plate mail '.$plateAc.'. Shield '.Adnd2e::SHIELD_AC_BONUS.'.',
             '- Hit dice by group: warrior '.$warriorHd.', priest '.$priestHd.', rogue '.$rogueHd.', wizard '.$wizardHd.'.',
-            '- Initiative: d10, lower acts first. Dexterity reaction is subtracted. Weapon speed is a thin name lookup on the sheet (not a full weapon-vs-AC table).',
+            '- Initiative: d10, lower acts first. Dexterity reaction is subtracted. Long sword SM/L/speed: '.($longSword['sm'] ?? '?').'/'.($longSword['l'] ?? '?').'/'.($longSword['speed'] ?? '?').'.',
+            '- STR 10 encumbrance none/severe lb: '.$str10enc['none'].'/'.$str10enc['severe'].'. Movement drops by category (none / light / moderate / heavy / severe).',
             '',
             '### Saves, rest, vitality',
             '- Five save categories (roll d20 >= target): '.$saves.'.',
@@ -66,6 +74,10 @@ class Adnd2eOracleBriefing
             '',
             '### Magic',
             '- Vancian memorization (counts by spell level). A 1st-level generalist Mage memorizes '.$mageL1.' first-level spell. A specialist (school recorded as kit) memorizes '.$specL1.' at that level (one extra per school level they can already memorize). Priests may gain extra first- and second-level capacity from high Wisdom.',
+            '- Cleric sphere tags major: '.implode(', ', $clericSpheres['major']).'; minor: '.implode(', ', $clericSpheres['minor']).'. Names only.',
+            '- Spell headers (name/class/level/tag/components/time/range/duration; optional M names) are Adnd2eSpellCatalog. Example: Fireball Mage L3 invocation. No effect prose.',
+            '- Gear weight and magical bonus are Adnd2eEquipmentCatalog (plate mail +1 AC 2; long sword +2 bonus +2). Artifacts are name + tags only.',
+            '- Creature stubs are AC/HD/THAC0/dmg labels for math only. Prefer campaign NPC hooks over monster-manual dumps.',
             '- Classes in this app: '.$classes.'. Races: '.$races.'.',
             '- Psionicist is a class (aliases: Psion, Psionic, Psionics). Combat figures use the rogue group. PSP totals and typed power names are sheet fields the player fills; they are not simulated. Do not invent 5th Edition psionics. Do not treat Psionicist as a kit.',
             '',
@@ -86,12 +98,21 @@ class Adnd2eOracleBriefing
      *
      * @param  array<string, mixed>  $context
      */
-    public static function systemPrompt(array $context): string
+    public static function systemPrompt(array $context, ?string $question = null): string
     {
         $lines = [];
-        $lines[] = 'You are the Oracle — a wise, slightly enigmatic advisor to a tabletop group using Lorefire 2E. You can answer questions about Advanced Dungeons & Dragons 2nd Edition mechanics (THAC0, descending Armor Class, Vancian memorization, weapon and non-weapon proficiencies, 2E saving-throw categories, surprise, initiative on a d10), their characters, session history, NPCs, and anything else they need. Do not answer as if the table were using 5th Edition. Be helpful, clear, and concise. You may use markdown for formatting. When answering rules questions, explain the mechanic in your own words — do not quote copyrighted rulebook text. When referencing their specific characters or campaign, use the data provided.';
+        $lines[] = 'You are the Oracle — a wise, slightly enigmatic advisor to a tabletop group using Lorefire 2E. You can answer questions about Advanced Dungeons & Dragons 2nd Edition mechanics (THAC0, descending Armor Class, Vancian memorization, weapon and non-weapon proficiencies, 2E saving-throw categories, surprise, initiative on a d10), their characters, session history, NPCs, and anything else they need. Do not answer as if the table were using 5th Edition. Be helpful, clear, and concise. You may use markdown for formatting. When answering rules questions, explain the mechanic in your own words — do not quote copyrighted rulebook text. Never invent official spell text, PHB/DMG/Complete Handbook pages, or table numbers that are not in the Engine lookup or the procedures briefing. For core numeric and table questions, you MUST use Engine lookup results when that section is present; if it says the engine cannot answer, say you do not have that in the Lorefire 2E engine rather than guessing. Campaign notes and character backstory may still inform story rulings. When referencing their specific characters or campaign, use the data provided.';
         $lines[] = '';
         $lines[] = self::markdown();
+
+        $question = trim((string) $question);
+        if ($question !== '') {
+            $lookup = Adnd2eOracleRulesLookup::markdown($question, $context);
+            if ($lookup !== '') {
+                $lines[] = '';
+                $lines[] = $lookup;
+            }
+        }
 
         if (! empty($context['campaigns'])) {
             $lines[] = '';
@@ -126,6 +147,17 @@ class Adnd2eOracleBriefing
                             $lines[] = '  **Backstory:**';
                             $lines[] = '  '.str_replace("\n", "\n  ", $backstory);
                         }
+                    }
+                }
+
+                if (! empty($campaign['npcs']) && is_array($campaign['npcs'])) {
+                    $lines[] = '';
+                    $lines[] = '**NPCs:**';
+                    foreach ($campaign['npcs'] as $npc) {
+                        if (! is_array($npc)) {
+                            continue;
+                        }
+                        $lines[] = self::formatNpcLine($npc);
                     }
                 }
 
@@ -189,6 +221,72 @@ class Adnd2eOracleBriefing
         }
         if (($c['experience_points'] ?? null) !== null && $c['experience_points'] !== '') {
             $line .= ' | XP: '.$c['experience_points'];
+        }
+
+        $abilityBits = [];
+        foreach (['strength' => 'STR', 'dexterity' => 'DEX', 'constitution' => 'CON', 'intelligence' => 'INT', 'wisdom' => 'WIS', 'charisma' => 'CHA'] as $ability => $abbrev) {
+            if (! isset($c[$ability]) || $c[$ability] === '' || $c[$ability] === null) {
+                continue;
+            }
+            $exceptional = $ability === 'strength' ? ($c['exceptional_strength'] ?? null) : null;
+            $abilityBits[] = $abbrev.' '.Adnd2e::formatAbilityScore(
+                $ability,
+                (int) $c[$ability],
+                is_string($exceptional) || is_int($exceptional) ? (string) $exceptional : null
+            );
+        }
+        if ($abilityBits !== []) {
+            $line .= ' | '.implode(' ', $abilityBits);
+        }
+
+        return $line;
+    }
+
+    /**
+     * Campaign NPC hooks + optional stat-block labels. No description/notes prose.
+     *
+     * @param  array<string, mixed>  $npc
+     */
+    public static function formatNpcLine(array $npc): string
+    {
+        $line = '- '.($npc['name'] ?? 'Unknown');
+        if (! empty($npc['race'])) {
+            $line .= ', '.$npc['race'];
+        }
+        if (! empty($npc['role'])) {
+            $line .= ', '.$npc['role'];
+        }
+        if (! empty($npc['location'])) {
+            $line .= ' @ '.$npc['location'];
+        }
+        if (! empty($npc['attitude'])) {
+            $line .= ', '.$npc['attitude'];
+        }
+        if (! empty($npc['last_seen'])) {
+            $line .= ', last seen '.$npc['last_seen'];
+        }
+        if (! empty($npc['tags']) && is_array($npc['tags'])) {
+            $line .= ', tags '.implode('/', $npc['tags']);
+        }
+        if (array_key_exists('is_alive', $npc) && $npc['is_alive'] === false) {
+            $line .= ' [dead]';
+        }
+
+        $block = $npc['stat_block'] ?? null;
+        if (is_array($block)) {
+            $bits = [];
+            foreach (['ac' => 'AC', 'hd' => 'HD', 'thac0' => 'THAC0', 'dmg' => 'dmg', 'damage' => 'dmg'] as $key => $label) {
+                if (! isset($block[$key]) || $block[$key] === '' || $block[$key] === null) {
+                    continue;
+                }
+                if ($key === 'damage' && isset($block['dmg'])) {
+                    continue;
+                }
+                $bits[] = $label.' '.$block[$key];
+            }
+            if ($bits !== []) {
+                $line .= ' | '.implode(', ', $bits);
+            }
         }
 
         return $line;

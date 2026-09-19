@@ -121,4 +121,62 @@ class KitFieldUiTest extends TestCase
             Adnd2e::CLASSES
         );
     }
+
+    public function test_class_path_fields_and_lists_show_per_class_xp(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $fields = file_get_contents($root.'/resources/js/Components/ClassPathFields.tsx');
+        $this->assertIsString($fields);
+        $this->assertStringContainsString("label={path === 'dual' ? (i === 0 ? 'Original XP' : 'Current XP') : 'XP'}", $fields);
+
+        $ts = file_get_contents($root.'/resources/js/lib/adnd2e.ts');
+        $this->assertIsString($ts);
+        $this->assertStringContainsString("Fighter: 'FR'", $ts);
+        $this->assertStringContainsString("Mage: 'Wiz'", $ts);
+        $this->assertStringContainsString('export function formatClassLevelsLine', $ts);
+        $this->assertStringContainsString('export function formatClassXpLine', $ts);
+        $this->assertStringContainsString('export function resolveClassPath', $ts);
+
+        $summary = file_get_contents($root.'/resources/js/Components/ClassSummary.tsx');
+        $this->assertIsString($summary);
+        $this->assertStringContainsString('formatClassLevelsLine', $summary);
+        $this->assertStringContainsString('resolveClassPath', $summary);
+        $this->assertStringContainsString('export function characterListSubtitle', $summary);
+        $this->assertStringContainsString('whitespace-nowrap', $summary);
+        $this->assertStringNotContainsString('truncate', $summary);
+
+        foreach (['Index.tsx'] as $page) {
+            $tsx = file_get_contents($root.'/resources/js/Pages/Characters/'.$page);
+            $this->assertIsString($tsx);
+            $this->assertStringContainsString('ClassSummary', $tsx);
+            $this->assertStringContainsString('characterListSubtitle', $tsx);
+            $this->assertStringNotContainsString('Lv {character.level}', $tsx);
+        }
+
+        $campaignShow = file_get_contents($root.'/resources/js/Pages/Campaigns/Show.tsx');
+        $this->assertIsString($campaignShow);
+        $this->assertStringContainsString('ClassSummary', $campaignShow);
+        $this->assertStringContainsString('characterListSubtitle', $campaignShow);
+        $this->assertStringContainsString('variant="line"', $campaignShow);
+        $this->assertStringContainsString('showXp={false}', $campaignShow);
+        $this->assertStringContainsString('min-w-[16rem]', $campaignShow);
+        $this->assertStringContainsString('party-character-row', $campaignShow);
+        $this->assertStringNotContainsString('Level {character.level}', $campaignShow);
+        $this->assertStringNotContainsString('whitespace-nowrap', $campaignShow);
+        $this->assertDoesNotMatchRegularExpression(
+            '/function CharacterCard[\s\S]*?truncate[\s\S]*?function SessionRow/',
+            $campaignShow,
+            'Campaign party CharacterCard must not use truncate/ellipsis.'
+        );
+
+        $css = file_get_contents($root.'/resources/css/app.css');
+        $this->assertIsString($css);
+        $this->assertStringContainsString('.runic-card.party-character-row', $css);
+        $this->assertStringContainsString('overflow: visible', $css);
+
+        $batch = file_get_contents($root.'/resources/js/Pages/BatchSheets/Index.tsx');
+        $this->assertIsString($batch);
+        $this->assertStringContainsString('ClassSummary', $batch);
+        $this->assertStringNotContainsString('Lv {character.level}', $batch);
+    }
 }

@@ -7,9 +7,11 @@ import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { ConditionManager } from '@/Components/ConditionManager'
 import { HpBar } from '@/Components/HpBar'
+import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { Campaign, GameSession, Character, InventoryItem, CharacterSpell } from '@/types'
-import { formatSigned, primaryAdjustment, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
+import { ABILITY_ORDER, inventoryQuantityLabel, missingSpellMaterials, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,10 +29,6 @@ type LiveTab = 'characters' | 'oracle' | 'session'
 
 function csrf(): string {
   return (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
-}
-
-function mod(score: number, ability = 'dexterity', characterClass = 'Fighter'): string {
-  return formatSigned(primaryAdjustment(ability, score, null, characterClass))
 }
 
 function fmtTime(s: number): string {
@@ -460,20 +458,17 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
             )}
 
             {/* Ability scores */}
-            <div className="grid grid-cols-3 gap-1">
-              {[
-                { label: 'STR', key: 'strength' as const },
-                { label: 'DEX', key: 'dexterity' as const },
-                { label: 'CON', key: 'constitution' as const },
-                { label: 'INT', key: 'intelligence' as const },
-                { label: 'WIS', key: 'wisdom' as const },
-                { label: 'CHA', key: 'charisma' as const },
-              ].map(({ label, key }) => (
-                <div key={label} className="flex flex-col items-center py-1 rounded" style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)' }}>
-                  <span className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>{label}</span>
-                  <span className="text-sm font-bold font-heading" style={{ color: 'var(--color-text-bright)' }}>{character[key]}</span>
-                  <span className="text-[9px] font-mono" style={{ color: 'var(--color-rune)' }}>{mod(character[key] as number, key, character.class)}</span>
-                </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+              {ABILITY_ORDER.map(({ label, key }) => (
+                <AbilityScoreBlock
+                  key={key}
+                  ability={key}
+                  label={label}
+                  score={character[key] as number}
+                  exceptional={character.exceptional_strength}
+                  characterClass={character.class}
+                  variant="live"
+                />
               ))}
             </div>
 
@@ -564,12 +559,21 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
                   .map(spell => {
                     const remaining = remainingMemorizedOf(spell)
                     const copies = timesMemorizedOf(spell)
+                    const missing = missingSpellMaterials(spell, character.inventory_items)
+                    const canCast = remaining > 0
                     return (
                       <button
                         key={spell.id}
                         type="button"
-                        title={remaining > 0 ? 'Click to cast one copy · right-click to restore' : 'Right-click to restore one copy'}
-                        onClick={() => remaining > 0 && burnSpell(spell, 'use')}
+                        data-testid="live-spell-cast"
+                        title={
+                          !canCast
+                            ? 'Right-click to restore one copy'
+                            : missing.length > 0
+                              ? `Cannot cast: missing ${missing.join(', ')}`
+                              : 'Click to cast one copy · right-click to restore'
+                        }
+                        onClick={() => canCast && burnSpell(spell, 'use')}
                         onContextMenu={e => { e.preventDefault(); remaining < copies && burnSpell(spell, 'recover') }}
                         className="flex items-center gap-2 px-2 py-1 rounded text-left"
                         style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)', opacity: remaining > 0 ? 1 : 0.5 }}
@@ -578,6 +582,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
                           {spell.level}
                         </span>
                         <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-bright)' }}>{spell.name}</span>
+                        <SpellMaterialHint spell={spell} items={character.inventory_items} compact />
                         <span className="text-[8px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>
                           {remaining}/{copies}
                         </span>
@@ -600,15 +605,22 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
             {!character.inventory_items || character.inventory_items.length === 0 ? (
               <p className="text-xs text-center py-4" style={{ color: 'var(--color-text-dim)' }}>No inventory items.</p>
             ) : (
-              character.inventory_items.map(item => (
+              character.inventory_items.map(item => {
+                const qtyLabel = inventoryQuantityLabel(item)
+                return (
                 <div key={item.id} className="flex items-center gap-2 px-2 py-1 rounded" style={{ background: 'var(--color-deep)', border: '1px solid var(--color-border)' }}>
                   <span className="text-xs flex-1 truncate" style={{ color: item.equipped ? 'var(--color-text-white)' : 'var(--color-text-base)' }}>
                     {item.name}
                   </span>
-                  {item.quantity > 1 && <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>×{item.quantity}</span>}
+                  {qtyLabel && (
+                    <span className="text-[10px] font-mono shrink-0" style={{ color: 'var(--color-text-dim)' }}>
+                      {qtyLabel}
+                    </span>
+                  )}
                   {item.equipped && <span className="text-[8px] uppercase tracking-widest shrink-0" style={{ color: 'var(--color-rune)' }}>Eq</span>}
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         )}

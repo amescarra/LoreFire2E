@@ -4,6 +4,7 @@ import AppLayout from '@/Layouts/AppLayout'
 import { Button } from '@/Components/Button'
 import { Input, Textarea, Select } from '@/Components/Input'
 import { RuneDivider } from '@/Components/RuneDivider'
+import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { ClassFeatures } from '@/Components/ClassFeatures'
 import { ClassPathFields } from '@/Components/ClassPathFields'
 import { KitField } from '@/Components/KitField'
@@ -13,8 +14,8 @@ import { Campaign, Character } from '@/types'
 import {
   ALIGNMENTS, NONWEAPON_PROFICIENCY_SUGGESTIONS, PRIEST_SPHERES, RACES,
   SAVE_CATEGORIES, WEAPON_PROFICIENCY_SUGGESTIONS,
-  ClassPath, anyCaster, combinedHitDie, combinedSavingThrows, combinedThac0,
-  formatSigned, hasPsionicist, normalizeClassLevels, primaryAdjustment,
+  ClassPath, anyCaster, backfillClassLevelsXp, combinedHitDie, combinedSavingThrows, combinedThac0,
+  ABILITY_ORDER, derivedExperiencePoints, hasPsionicist, normalizeClassLevels,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -36,7 +37,11 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
     class: character.class,
     subclass: character.subclass ?? '',
     class_path: (character.class_path ?? 'single') as ClassPath,
-    class_levels: normalizeClassLevels(character.class_levels, character.class, character.level, character.class_path ?? 'single'),
+    class_levels: backfillClassLevelsXp(
+      normalizeClassLevels(character.class_levels, character.class, character.level, character.class_path ?? 'single'),
+      character.class_path ?? 'single',
+      character.experience_points ?? 0,
+    ),
     level: character.level,
     background: character.background ?? '',
     alignment: character.alignment ?? '',
@@ -81,10 +86,17 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
   })
 
   // Coerce empty string campaign_id to null so the nullable|exists validation passes
-  transform((d: any) => ({
-    ...d,
-    campaign_id: d.campaign_id === '' ? null : d.campaign_id,
-  }))
+  transform((d: any) => {
+    const class_levels = d.class_path === 'single' && d.class_levels[0]
+      ? [{ ...d.class_levels[0], xp: Math.max(0, Number(d.experience_points) || 0) }]
+      : d.class_levels
+    return {
+      ...d,
+      campaign_id: d.campaign_id === '' ? null : d.campaign_id,
+      class_levels,
+      experience_points: derivedExperiencePoints(class_levels, d.experience_points),
+    }
+  })
 
   useEffect(() => {
     const entries = data.class_levels.filter(e => e.class)
@@ -190,9 +202,6 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
         { label: character.name, href: `/campaigns/${campaign!.id}/characters/${character.id}` },
         { label: 'Edit' },
       ]
-
-  const adj = (ability: string, score: number) =>
-    formatSigned(primaryAdjustment(ability, score, data.exceptional_strength || null, data.class))
 
   return (
     <AppLayout breadcrumbs={breadcrumbs}>
@@ -329,7 +338,10 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
             path={data.class_path}
             entries={data.class_levels}
             onPath={path => setData('class_path', path)}
-            onEntries={next => setData('class_levels', next)}
+            onEntries={next => {
+              setData('class_levels', next)
+              setData('experience_points', derivedExperiencePoints(next, data.experience_points))
+            }}
           />
 
           <KitField
@@ -350,29 +362,46 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
             />
           )}
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={`grid gap-4 ${data.class_path === 'single' ? 'grid-cols-2' : 'grid-cols-1'}`}>
             <Input label="Origin / notes" value={data.background} onChange={e => setData('background', e.target.value)} placeholder="Home region, patron…" />
-            <Input label="Experience Points" type="number" min={0} value={data.experience_points} onChange={e => setData('experience_points', parseInt(e.target.value) || 0)} />
+            {data.class_path === 'single' && (
+              <Input
+                label="Experience Points"
+                type="number"
+                min={0}
+                value={data.experience_points}
+                onChange={e => {
+                  const xp = Math.max(0, parseInt(e.target.value) || 0)
+                  setData('experience_points', xp)
+                  const first = data.class_levels[0]
+                  if (first) setData('class_levels', [{ ...first, xp }])
+                }}
+              />
+            )}
           </div>
 
           {/* Ability Scores */}
           <RuneDivider label="Ability Scores" />
 
-          <div className="grid grid-cols-6 gap-3">
-            {([
-              ['STR', 'strength'], ['DEX', 'dexterity'], ['CON', 'constitution'],
-              ['INT', 'intelligence'], ['WIS', 'wisdom'], ['CHA', 'charisma']
-            ] as [string, keyof typeof data][]).map(([label, key]) => (
-              <div key={key} className="flex flex-col items-center gap-1">
-                <label className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">{label}</label>
-                <input
-                  type="number" min={1} max={30}
-                  value={data[key] as number}
-                  onChange={e => setData(key, parseInt(e.target.value) || 10)}
-                  className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
-                />
-                <span className="text-xs text-[var(--color-rune)] font-mono">{adj(String(key), data[key] as number)}</span>
-              </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {ABILITY_ORDER.map(({ label, key }) => (
+              <AbilityScoreBlock
+                key={key}
+                ability={key}
+                label={label}
+                score={data[key] as number}
+                exceptional={data.exceptional_strength || null}
+                characterClass={data.class}
+                variant="form"
+                scoreControl={
+                  <input
+                    type="number" min={1} max={30}
+                    value={data[key] as number}
+                    onChange={e => setData(key, parseInt(e.target.value) || 10)}
+                    className="w-full text-center bg-[var(--color-deep)] border border-[var(--color-border)] rounded py-2 text-[var(--color-text-white)] font-heading text-lg focus:outline-none focus:border-[var(--color-rune)]"
+                  />
+                }
+              />
             ))}
           </div>
 
@@ -552,6 +581,7 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
             characterClass={data.class}
             spells={character.spells ?? []}
             memorization={data.memorization as Record<string, number>}
+            inventoryItems={character.inventory_items ?? []}
           />
 
           {/* Notes */}

@@ -25,6 +25,8 @@ trait ValidatesAdnd2eCharacter
             'class_levels' => 'nullable|array',
             'class_levels.*.class' => 'required_with:class_levels|string|max:50',
             'class_levels.*.level' => 'required_with:class_levels|integer|min:1|max:20',
+            'class_levels.*.xp' => 'nullable|integer|min:0',
+            'experience_points' => 'nullable|integer|min:0',
             'level' => 'required|integer|min:1|max:20',
             'background' => 'nullable|string|max:255',
             'alignment' => 'nullable|string|max:50',
@@ -125,10 +127,17 @@ trait ValidatesAdnd2eCharacter
             $path = 'multi';
         }
 
+        $entries = Adnd2e::backfillClassLevelsXp(
+            $entries,
+            $path,
+            $data['experience_points'] ?? 0,
+        );
+
         $data['class_path'] = $path;
         $data['class_levels'] = $entries;
         $data['class'] = Adnd2e::displayClassName($entries, $path);
         $data['level'] = Adnd2e::displayLevel($entries, $path);
+        $data['experience_points'] = Adnd2e::derivedExperiencePoints($entries, $data['experience_points'] ?? 0);
 
         return $data;
     }

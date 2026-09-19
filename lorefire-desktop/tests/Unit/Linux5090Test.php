@@ -226,7 +226,7 @@ class Linux5090Test extends TestCase
         $this->assertStringNotContainsString('linux-5090', $ps1);
     }
 
-    public function test_php_bin_linux_x64_zip_path_and_system_php_fallback(): void
+    public function test_php_bin_linux_x64_requests_8_4_when_8_5_zip_missing(): void
     {
         $this->assertSame(
             '/tmp/php-bin/bin/linux/x64/php-8.5.zip',
@@ -234,21 +234,49 @@ class Linux5090Test extends TestCase
         );
         $this->assertFalse(Linux5090::phpBinHasLinuxX64Zip('/tmp/definitely-missing-php-bin', '8.5'));
 
-        $this->assertTrue(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', false));
-        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', true));
-        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'aarch64', false));
-        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Windows', 'x86_64', false));
+        $dir = sys_get_temp_dir().'/lorefire-php-bin-'.bin2hex(random_bytes(4)).'/bin';
+        mkdir($dir.'/linux/x64', 0777, true);
+        try {
+            file_put_contents($dir.'/linux/x64/php-8.3.zip', 'x');
+            file_put_contents($dir.'/linux/x64/php-8.4.zip', 'x');
+
+            $this->assertSame('8.4', Linux5090::phpBinServeVersion($dir, '8.5', 'Linux', 'x86_64'));
+            $this->assertSame('8.4', Linux5090::phpBinServeVersion($dir, '8.4', 'Linux', 'x86_64'));
+            $this->assertSame('8.5', Linux5090::phpBinServeVersion($dir, '8.5', 'Windows', 'x86_64'));
+            $this->assertSame('8.5', Linux5090::phpBinServeVersion($dir, '8.5', 'Linux', 'aarch64'));
+            $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', $dir));
+
+            unlink($dir.'/linux/x64/php-8.4.zip');
+            $this->assertSame('8.3', Linux5090::phpBinServeVersion($dir, '8.5', 'Linux', 'x86_64'));
+
+            unlink($dir.'/linux/x64/php-8.3.zip');
+            $this->assertSame('8.5', Linux5090::phpBinServeVersion($dir, '8.5', 'Linux', 'x86_64'));
+            $this->assertTrue(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', $dir));
+        } finally {
+            @unlink($dir.'/linux/x64/php-8.3.zip');
+            @unlink($dir.'/linux/x64/php-8.4.zip');
+            @rmdir($dir.'/linux/x64');
+            @rmdir($dir.'/linux');
+            @rmdir($dir);
+        }
+
+        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'aarch64'));
+        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Windows', 'x86_64'));
 
         $previous = getenv('NATIVEPHP_PHP_EXECUTABLE') ?: null;
+        $previousVer = getenv('NATIVEPHP_PHP_BINARY_VERSION') ?: null;
         putenv('NATIVEPHP_PHP_EXECUTABLE');
-        unset($_ENV['NATIVEPHP_PHP_EXECUTABLE']);
+        putenv('NATIVEPHP_PHP_BINARY_VERSION');
+        unset($_ENV['NATIVEPHP_PHP_EXECUTABLE'], $_ENV['NATIVEPHP_PHP_BINARY_VERSION']);
 
         try {
-            $this->assertNull(Linux5090::servePhpExecutable('Windows', 'ARM64', false));
-            $this->assertNull(Linux5090::servePhpExecutable('Linux', 'x86_64', true));
+            $this->assertNull(Linux5090::servePhpExecutable('Windows', 'ARM64', '/tmp/missing-php-bin'));
 
             if (Linux5090::isLinuxX86() && is_file(PHP_BINARY)) {
-                $this->assertSame(PHP_BINARY, Linux5090::servePhpExecutable('Linux', 'x86_64', false));
+                $this->assertSame(
+                    PHP_BINARY,
+                    Linux5090::servePhpExecutable('Linux', 'x86_64', '/tmp/definitely-missing-php-bin')
+                );
             }
         } finally {
             if ($previous) {
@@ -257,6 +285,13 @@ class Linux5090Test extends TestCase
             } else {
                 putenv('NATIVEPHP_PHP_EXECUTABLE');
                 unset($_ENV['NATIVEPHP_PHP_EXECUTABLE']);
+            }
+            if ($previousVer) {
+                putenv('NATIVEPHP_PHP_BINARY_VERSION='.$previousVer);
+                $_ENV['NATIVEPHP_PHP_BINARY_VERSION'] = $previousVer;
+            } else {
+                putenv('NATIVEPHP_PHP_BINARY_VERSION');
+                unset($_ENV['NATIVEPHP_PHP_BINARY_VERSION']);
             }
         }
     }
@@ -275,21 +310,26 @@ class Linux5090Test extends TestCase
 
         $this->assertStringContainsString('php-8.5.zip', $md);
         $this->assertStringContainsString('php-8.3.zip`, `php-8.4.zip` only', $md);
-        $this->assertStringContainsString('1.2.0', $md);
-        $this->assertStringContainsString('composer update nativephp/php-bin', $md);
-        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', $md);
+        $this->assertStringContainsString('NATIVEPHP_PHP_BINARY_VERSION', $md);
+        $this->assertStringContainsString('Laravel config for the zip version', $md);
+        $this->assertStringContainsString('selects `NATIVEPHP_PHP_BINARY_VERSION=8.4`', $md);
+        $this->assertStringContainsString('ln -sfn php-8.4.zip php-8.5.zip', $md);
+        $this->assertStringContainsString('if [ -L "$zip" ]; then rm -f "$zip"; fi', $md);
         $this->assertStringContainsString('win/arm64', $md);
 
-        $this->assertStringContainsString('composer update nativephp/php-bin --with-all-dependencies', $sh);
-        $this->assertStringContainsString('php-8.3.zip and php-8.4.zip only', $sh);
+        $this->assertStringContainsString('NATIVEPHP_PHP_BINARY_VERSION=8.4', $sh);
+        $this->assertStringContainsString('Removing temp symlink', $sh);
+        $this->assertStringContainsString('Do not ln -s php-8.4.zip php-8.5.zip', $sh);
         $this->assertStringContainsString('vendor/nativephp/php-bin/bin/linux/x64', $sh);
 
         $this->assertStringContainsString('"nativephp/php-bin": "^1.2"', $composer);
 
         $this->assertStringContainsString('linuxX64Serve', $patch);
+        $this->assertStringContainsString('nativephpPhpBinaryVersion', $patch);
         $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $patch);
         $this->assertStringContainsString('winArmServe', $patch);
         $this->assertStringContainsString('windowsArm64SystemPhp', $patch);
+        $this->assertStringContainsString('using php-\' + fallback + \'.zip', $patch);
         $this->assertStringContainsString('Packaged Windows ARM64 is blocked', $patch);
         $this->assertStringContainsString('php.exe on PATH', $patch);
     }

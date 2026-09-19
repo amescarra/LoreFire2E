@@ -201,47 +201,43 @@ Leave `DB_DATABASE` unset in `.env` on this path. Laravel then uses `database/da
 
 `python:setup` on Linux x86_64 auto-enables `--gpu` when `nvidia-smi` works. `--cpu` forces the old CPU wheels.
 
-## 4b. NativePHP PHP binary (`php-8.5.zip`)
+## 4b. NativePHP PHP binary (`php-8.5.zip` missing on php-bin 1.1.1)
 
-`php artisan native:serve` sets `NATIVEPHP_PHP_BINARY_VERSION` from the **running** PHP (major.minor) and opens:
+**Investigated (do not assume a config key):** NativePHP has **no** Laravel config for the zip version. `config/nativephp.php` `binary_path` / `NATIVEPHP_PHP_BINARY_PATH` is the php-bin **directory** (`vendor/nativephp/php-bin/`), not 8.4 vs 8.5.
+
+The real knob is env **`NATIVEPHP_PHP_BINARY_VERSION`**. `vendor/nativephp/electron` `ExecuteCommand` sets it to the **host** PHP minor (`PHP_MAJOR_VERSION.PHP_MINOR_VERSION`) when spawning Electron. `php.js` then opens:
 
 ```
-vendor/nativephp/php-bin/bin/linux/x64/php-{major.minor}.zip
+{NATIVEPHP_PHP_BINARY_PATH}/linux/x64/php-{NATIVEPHP_PHP_BINARY_VERSION}.zip
 ```
 
-**Verified** (do not assume):
+Exporting that env in the shell does **not** work unless ExecuteCommand honors it — stock 1.3.0 overwrites it. This branch patches serve so Linux x64 **requests 8.4** when `php-8.5.zip` is absent.
+
+**Verified** what php-bin actually ships:
 
 | php-bin | Published | `bin/linux/x64/` |
 |---|---|---|
-| **1.1.1** (what electron 1.3.0 locked) | 2025-09-02 | `php-8.3.zip`, `php-8.4.zip` only — **no `php-8.5.zip`** |
-| **1.2.0** | 2026-05-21 | `php-8.3.zip`, `php-8.4.zip`, **`php-8.5.zip`** |
+| **1.1.1** (ourai still has this) | 2025-09-02 | `php-8.3.zip`, `php-8.4.zip` only — **no `php-8.5.zip`** |
+| **1.2.0** | 2026-05-21 | those two **plus `php-8.5.zip`** |
 
-Ubuntu Resolute `php-cli` is **8.5**. With php-bin **1.1.1** that produces:
+Resolute `php` is **8.5.4**. Stock native:serve therefore opens `php-8.5.zip` → ENOENT.
 
-```
-Binary Source: .../vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip
-[Error: ENOENT: no such file or directory, open '.../php-8.5.zip']
-```
+**Lasting fix (this branch):** `native:serve` on Linux x64 selects `NATIVEPHP_PHP_BINARY_VERSION=8.4` when `php-8.5.zip` is missing and `php-8.4.zip` exists. Electron unzips the real 8.4 php-bin. `php.js` does the same fallback if artisan still sent 8.5. System PHP (`NATIVEPHP_PHP_EXECUTABLE`) is only the last resort when **no** linux/x64 zip exists. Windows ARM is unchanged (no `win/arm64` zip; still system ARM `php.exe`).
 
-This branch **pins `nativephp/php-bin` ^1.2** so `composer install` gets `php-8.5.zip`. There is no separate NativePHP “download the zip” artisan command — the zip is the Composer package contents.
-
-One-time on a clone that still has 1.1.1 vendor:
+A `ln -sfn php-8.4.zip php-8.5.zip` is an **emergency** only. Do not leave it. After pulling this branch:
 
 ```bash
 cd lorefire/lorefire-desktop
-composer update nativephp/php-bin --with-all-dependencies
-ls vendor/nativephp/php-bin/bin/linux/x64/
-# expect: php-8.3.zip  php-8.4.zip  php-8.5.zip
+# remove the temp symlink if you created one (do not delete a real 1.2.0 zip)
+zip=vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip
+if [ -L "$zip" ]; then rm -f "$zip"; fi
+unset NATIVEPHP_PHP_EXECUTABLE NATIVEPHP_PHP_BINARY_VERSION
+composer install
 php artisan native:serve
+# log: Linux x64 serve: php-8.5.zip missing; using php-8.4.zip
 ```
 
-If the zip is still missing (stale vendor, incomplete install), this repo’s NativePHP patch **skips the unzip** and launches **system PHP 8.5** (`PHP_BINARY` / `NATIVEPHP_PHP_EXECUTABLE` / `php` on PATH). Same idea as Windows ARM, without changing the ARM path. You can also force it:
-
-```bash
-export NATIVEPHP_PHP_EXECUTABLE="$(php -r 'echo PHP_BINARY;')"
-php artisan native:serve
-# log: Linux x64 serve: php-bin zip missing; using system PHP
-```
+Optional: upgrade php-bin so a real 8.5 zip exists (`composer update nativephp/php-bin` — this repo pins `^1.2`). Not required for serve; 8.4 is enough.
 
 Windows ARM is unchanged: it still uses system ARM `php.exe` because php-bin has **no** `win/arm64` zip (including 1.2.0).
 

@@ -136,27 +136,33 @@ fi
 echo "==> composer install"
 composer install --no-interaction
 
-# NativePHP electron picks php-{major.minor}.zip from php-bin for the running PHP.
-# php-bin 1.1.1 linux/x64 has 8.3+8.4 only. Resolute is 8.5 → ENOENT unless 1.2.0+.
+# NativePHP electron ExecuteCommand sets NATIVEPHP_PHP_BINARY_VERSION from the
+# host PHP minor (no Laravel config key). php-bin 1.1.1 linux/x64 has 8.3+8.4
+# only. Resolute is 8.5 → stock serve looks for php-8.5.zip (ENOENT).
+# This repo requests 8.4 when 8.5 is missing. Drop a temp php-8.5.zip symlink.
 PHP_BIN_DIR="vendor/nativephp/php-bin/bin/linux/x64"
 PHP_BIN_ZIP="$PHP_BIN_DIR/php-${php_ver}.zip"
 echo "==> NativePHP php-bin (linux/x64)"
+if [ -L "$PHP_BIN_ZIP" ]; then
+  echo "    Removing temp symlink $PHP_BIN_ZIP (real fix: request php-8.4.zip)"
+  rm -f "$PHP_BIN_ZIP"
+fi
 if [ -d "$PHP_BIN_DIR" ]; then
   ls -1 "$PHP_BIN_DIR"
 else
   echo "    (directory missing — composer install did not unpack php-bin)"
 fi
 if [ -f "$PHP_BIN_ZIP" ]; then
-  echo "    Using php-bin zip: $PHP_BIN_ZIP"
+  echo "    Host PHP $php_ver zip present: $PHP_BIN_ZIP"
+elif [ -f "$PHP_BIN_DIR/php-8.4.zip" ]; then
+  echo "    Host PHP $php_ver zip missing (php-bin 1.1.1 has 8.3+8.4 only, verified)."
+  echo "    native:serve will set NATIVEPHP_PHP_BINARY_VERSION=8.4 and unzip php-8.4.zip."
+  echo "    Do not ln -s php-8.4.zip php-8.5.zip — that is an emergency fallback only."
+elif [ -f "$PHP_BIN_DIR/php-8.3.zip" ]; then
+  echo "    Falling back to php-8.3.zip (no 8.4/8.5 zip)."
 else
-  echo "WARNING: $PHP_BIN_ZIP is missing."
-  echo "  php-bin 1.1.1 ships php-8.3.zip and php-8.4.zip only (verified)."
-  echo "  php-bin 1.2.0 ships php-8.5.zip. This repo pins nativephp/php-bin ^1.2."
-  echo "  One-time: composer update nativephp/php-bin --with-all-dependencies"
-  echo "  native:serve will use system PHP ($(php -r 'echo PHP_BINARY;')) until the zip exists."
-  if ! php -r 'exit(PHP_VERSION_ID >= 80500 ? 0 : 1);'; then
-    echo "  (This PHP is $php_ver — the matching zip may already be in 1.1.1.)"
-  fi
+  echo "WARNING: no linux/x64 php-bin zip. native:serve will use system PHP ($(php -r 'echo PHP_BINARY;'))."
+  echo "  composer update nativephp/php-bin --with-all-dependencies"
 fi
 
 if [ ! -f .env ]; then
@@ -224,12 +230,10 @@ echo "==> linux-5090 setup complete."
 echo ""
 echo "    Start Lorefire 2E:"
 echo "      cd $DESKTOP"
-echo "      ls vendor/nativephp/php-bin/bin/linux/x64/"
+echo "      zip=$DESKTOP/vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip"
+echo "      if [ -L \"\$zip\" ]; then rm -f \"\$zip\"; fi"
 echo "      php artisan native:serve"
-echo "    If native:serve errors ENOENT on php-${php_ver}.zip:"
-echo "      composer update nativephp/php-bin --with-all-dependencies"
-echo "      # or: export NATIVEPHP_PHP_EXECUTABLE=\$(php -r 'echo PHP_BINARY;')"
-echo "      php artisan native:serve"
+echo "    PHP $php_ver with php-bin 1.1.1: serve requests php-8.4.zip (not a symlink)."
 echo ""
 echo "    In Settings (or onboarding):"
 echo "      LLM provider     : Ollama"

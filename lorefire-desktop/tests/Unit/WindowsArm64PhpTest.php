@@ -99,6 +99,7 @@ class WindowsArm64PhpTest extends TestCase
         $traitSrc = file_get_contents($trait);
         $this->assertStringContainsString('windowsArm64SystemPhp', $traitSrc);
         $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $traitSrc);
+        $this->assertStringContainsString('nativephpPhpBinaryVersion', $traitSrc);
         $this->assertStringContainsString('winArmServe', file_get_contents($phpJs));
         $this->assertStringContainsString('linuxX64Serve', file_get_contents($phpJs));
         $this->assertStringContainsString('Linux: launching system PHP', file_get_contents($indexJs));

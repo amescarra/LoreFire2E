@@ -167,11 +167,12 @@ return [
     ],
 
     /**
-     * Custom PHP binary path (php-bin package directory, not php.exe).
-     * Unused on Windows ARM64 serve — php-bin has no win/arm64 zip.
-     * Unused on Linux x64 serve when php-{major.minor}.zip is missing (php-bin
-     * 1.1.1 has linux/x64 8.3+8.4 only; 1.2.0 adds 8.5). native:serve then
-     * passes NATIVEPHP_PHP_EXECUTABLE (system PHP).
+     * Custom PHP binary *directory* (php-bin package), not php.exe and not a
+     * version. NativePHP has no Laravel config for the zip version. The real
+     * knob is env NATIVEPHP_PHP_BINARY_VERSION, set by electron ExecuteCommand
+     * from the host PHP minor. On Linux x64 we override that to 8.4 when
+     * php-8.5.zip is missing. Windows ARM64 serve ignores php-bin (no win/arm64
+     * zip) and uses NATIVEPHP_PHP_EXECUTABLE.
      */
     'binary_path' => env('NATIVEPHP_PHP_BINARY_PATH', null),
 ];

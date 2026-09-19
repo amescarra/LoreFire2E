@@ -292,34 +292,75 @@ class Linux5090
     }
 
     /**
-     * Use system PHP for native:serve when the php-bin zip for this PHP version
-     * is missing. Never true on Windows ARM (that path is WindowsArm64Php).
+     * Value for NativePHP's real version knob: env NATIVEPHP_PHP_BINARY_VERSION.
+     * There is no Laravel config key for this. ExecuteCommand hardcodes
+     * PHP_MAJOR_VERSION.PHP_MINOR_VERSION unless we override it.
+     *
+     * On Linux x64, if php-{running}.zip is missing (php-bin 1.1.1 has 8.3+8.4
+     * only), request the newest shipped zip (8.4, then 8.3) instead of ENOENT.
+     * Windows ARM never uses this selector.
+     *
+     * @param  list<string>|null  $fallbackMinors
+     */
+    public static function phpBinServeVersion(
+        ?string $phpBinDir = null,
+        ?string $running = null,
+        ?string $osFamily = null,
+        ?string $machine = null,
+        ?array $fallbackMinors = null
+    ): string {
+        $running ??= PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;
+        if (! self::isLinuxX86($osFamily, $machine) || self::isWindowsArmPath()) {
+            return $running;
+        }
+
+        $configured = getenv('NATIVEPHP_PHP_BINARY_VERSION') ?: ($_ENV['NATIVEPHP_PHP_BINARY_VERSION'] ?? '');
+        if (is_string($configured) && $configured !== '' && self::phpBinHasLinuxX64Zip($phpBinDir, $configured)) {
+            return $configured;
+        }
+
+        if (self::phpBinHasLinuxX64Zip($phpBinDir, $running)) {
+            return $running;
+        }
+
+        foreach ($fallbackMinors ?? ['8.4', '8.3'] as $fallback) {
+            if (self::phpBinHasLinuxX64Zip($phpBinDir, $fallback)) {
+                return $fallback;
+            }
+        }
+
+        return $running;
+    }
+
+    /**
+     * System PHP only when no linux/x64 php-bin zip can be selected.
+     * Prefer php-8.4.zip over /usr/bin/php. Never true on Windows ARM.
      */
     public static function shouldUseSystemPhpForServe(
         ?string $osFamily = null,
         ?string $machine = null,
-        ?bool $zipExists = null
+        ?string $phpBinDir = null
     ): bool {
         if (! self::isLinuxX86($osFamily, $machine) || self::isWindowsArmPath()) {
             return false;
         }
 
-        $zipExists ??= self::phpBinHasLinuxX64Zip();
+        $version = self::phpBinServeVersion($phpBinDir, null, $osFamily, $machine);
 
-        return $zipExists === false;
+        return ! self::phpBinHasLinuxX64Zip($phpBinDir, $version);
     }
 
     public static function servePhpExecutable(
         ?string $osFamily = null,
         ?string $machine = null,
-        ?bool $zipExists = null
+        ?string $phpBinDir = null
     ): ?string {
         $configured = getenv('NATIVEPHP_PHP_EXECUTABLE') ?: ($_ENV['NATIVEPHP_PHP_EXECUTABLE'] ?? null);
         if (is_string($configured) && $configured !== '' && is_file($configured)) {
             return $configured;
         }
 
-        if (! self::shouldUseSystemPhpForServe($osFamily, $machine, $zipExists)) {
+        if (! self::shouldUseSystemPhpForServe($osFamily, $machine, $phpBinDir)) {
             return null;
         }
 

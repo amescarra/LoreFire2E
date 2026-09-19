@@ -205,6 +205,12 @@ class PythonSetupService
             return;
         }
 
+        if (\App\Support\Linux5090::whisperxNeedsCpython312() && ! \App\Support\Linux5090::hasWhisperxCpython312()) {
+            $this->failSetup(\App\Support\Linux5090::missingPython312Message());
+
+            return;
+        }
+
         if (PHP_OS_FAMILY === 'Windows') {
             $args = ['powershell', '-ExecutionPolicy', 'Bypass', '-File', $setupScript];
             if ($gpu) {

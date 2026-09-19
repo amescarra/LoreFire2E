@@ -103,6 +103,20 @@ class Linux5090Test extends TestCase
         $this->assertSame($payload, Linux5090::withOllamaOptions($payload));
     }
 
+    public function test_whisperx_requires_cpython_312_on_linux_x86(): void
+    {
+        $this->assertStringContainsString('deadsnakes', Linux5090::missingPython312Message());
+        $this->assertStringContainsString('python3.12-venv', Linux5090::DEADSNAKES_INSTALL);
+
+        if (Linux5090::isLinuxX86()) {
+            $this->assertTrue(Linux5090::whisperxNeedsCpython312());
+            Linux5090::$python312Probe = fn () => false;
+            $this->assertFalse(Linux5090::hasWhisperxCpython312());
+        } else {
+            $this->assertFalse(Linux5090::whisperxNeedsCpython312());
+        }
+    }
+
     public function test_windows_arm_scripts_are_untouched(): void
     {
         $root = dirname(__DIR__, 2);
@@ -139,9 +153,9 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('CUDA 11.8, optional GPU path', $sh);
         $this->assertStringContainsString('torch==2.5.1', $sh);
         $this->assertStringContainsString('pip==24.0', $sh);
-        $this->assertStringContainsString('python3.12 python3.11', $sh);
-        $this->assertStringContainsString('Resolute has no archive python3.12', $sh);
-        $this->assertStringNotContainsString('sudo apt install -y python3.12', $sh);
+        $this->assertStringContainsString('python3.12', $sh);
+        $this->assertStringContainsString('Do not fall back to python3 / 3.14', $sh);
+        $this->assertStringContainsString('ppa:deadsnakes/ppa', $sh);
         $req5090 = file_get_contents(dirname(__DIR__, 2).'/resources/python/requirements-linux-5090.txt');
         $this->assertIsString($req5090);
         $this->assertDoesNotMatchRegularExpression('/^ctranslate2>=/m', $req5090);
@@ -164,11 +178,13 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('Do **not** add `ppa:ondrej/php`', $md);
         $this->assertStringContainsString('ondrej-ubuntu-php-*.list', $md);
         $this->assertStringContainsString('Noble (24.04) and Jammy (22.04) only', $md);
-        $this->assertStringContainsString('no** `python3.12` package', $md);
         $this->assertStringContainsString('3.14', $md);
         $this->assertStringContainsString('deadsnakes', $md);
-        $this->assertStringNotContainsString('apt install python3.12 python3.12-venv python3.12-dev', $md);
+        $this->assertStringContainsString('Python 3.12 is required for WhisperX', $md);
+        $this->assertStringContainsString('ppa:deadsnakes/ppa', $md);
+        $this->assertStringContainsString('python3.12 python3.12-venv python3.12-dev', $md);
 
+        $this->assertStringContainsString('ppa:deadsnakes/ppa', $sh);
         $this->assertStringContainsString('ubuntu_codename', $sh);
         $this->assertStringContainsString('print_php_install_help', $sh);
         $this->assertStringContainsString('jammy|noble', $sh);

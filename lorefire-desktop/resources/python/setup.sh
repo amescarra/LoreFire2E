@@ -93,23 +93,41 @@ if [ -x "$BUNDLED_RUNTIME" ]; then
 else
   echo "    Bundled runtime not found at $BUNDLED_RUNTIME"
   echo "    Falling back to system Python..."
-  # Prefer 3.12/3.11 when present. Ubuntu Resolute archives have no python3.12 —
-  # only python3 (3.14). Do not skip 3.14; that is the first-smoke interpreter.
-  for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
-    if command -v "$candidate" &>/dev/null; then
-      PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
-      echo "    Found system Python: $candidate ($PYTHON_VERSION)"
-      if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
-        PY_MINOR=$("$candidate" -c "import sys; print(sys.version_info[1])")
-        if [ "$PY_MINOR" -ge 13 ]; then
-          echo "    linux-5090: using system $candidate (Resolute has no archive python3.12)."
-          echo "    First smoke is OK on 3.14 with requirements-linux-5090.txt (whisperx pins ctranslate2)."
-        fi
+  LINUX_5090=false
+  if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+    LINUX_5090=true
+  fi
+  if [ "$LINUX_5090" = true ]; then
+    # whisperx 3.2 pins ctranslate2==4.4.0 — no cp314 wheel. Never use 3.13+.
+    for candidate in python3.12; do
+      if command -v "$candidate" &>/dev/null; then
+        PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
+        echo "    Found system Python: $candidate ($PYTHON_VERSION)"
+        PYTHON_BIN="$candidate"
+        break
       fi
-      PYTHON_BIN="$candidate"
-      break
+    done
+    if [ -z "$PYTHON_BIN" ]; then
+      echo "ERROR: WhisperX on linux-5090 requires Python 3.12."
+      echo "  System python3.14 cannot install ctranslate2==4.4.0 (from whisperx 3.2)."
+      echo "  Ubuntu Resolute archives have no python3.12. Install deadsnakes:"
+      echo "    sudo add-apt-repository -y ppa:deadsnakes/ppa"
+      echo "    sudo apt update"
+      echo "    sudo apt install -y python3.12 python3.12-venv python3.12-dev"
+      echo "  Then: rm -rf $VENV_DIR && php artisan python:setup --gpu"
+      echo "  Do not fall back to python3 / 3.14 for this venv."
+      exit 1
     fi
-  done
+  else
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
+      if command -v "$candidate" &>/dev/null; then
+        PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
+        echo "    Found system Python: $candidate ($PYTHON_VERSION)"
+        PYTHON_BIN="$candidate"
+        break
+      fi
+    done
+  fi
 fi
 
 if [ -z "$PYTHON_BIN" ]; then
@@ -118,6 +136,15 @@ if [ -z "$PYTHON_BIN" ]; then
   echo "  To download it, run: bash $SCRIPT_DIR/download_runtime.sh  (or download_runtime.ps1 on Windows)"
   echo "  Or install Python 3.9+ system-wide and re-run this script."
   exit 1
+fi
+
+if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+  PY_MINOR=$("$PYTHON_BIN" -c "import sys; print(sys.version_info[1])")
+  if [ "$PY_MINOR" -ge 13 ]; then
+    echo "ERROR: Refusing Python 3.$PY_MINOR for WhisperX (ctranslate2==4.4.0 has no 3.14 wheel)."
+    echo "  Install python3.12 via deadsnakes (see lorefire-desktop/LINUX-5090.md)."
+    exit 1
+  fi
 fi
 
 # -- Check ffmpeg --------------------------------------------------------
@@ -141,7 +168,12 @@ else
   if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] && [ -x "$VENV_BIN_DIR/python" ]; then
     VENV_MINOR=$("$VENV_BIN_DIR/python" -c "import sys; print(sys.version_info[1])" 2>/dev/null || echo 0)
     if [ "$VENV_MINOR" -ge 13 ]; then
-      echo "    Existing venv is Python 3.$VENV_MINOR (Resolute default). Continuing — do not apt-install python3.12 from Ubuntu archives (package does not exist)."
+      echo "ERROR: existing venv is Python 3.$VENV_MINOR. WhisperX needs 3.12 (ctranslate2==4.4.0)."
+      echo "  rm -rf $VENV_DIR"
+      echo "  sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update"
+      echo "  sudo apt install -y python3.12 python3.12-venv python3.12-dev"
+      echo "  php artisan python:setup --gpu"
+      exit 1
     fi
   fi
 fi

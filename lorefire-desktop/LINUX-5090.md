@@ -71,20 +71,31 @@ Confirm:
 ```bash
 php -v          # 8.4+ (8.5 is fine on Resolute)
 node -v         # 20+
-python3 --version      # Resolute archives ship 3.14 only — that is fine for first smoke
+python3 --version      # Resolute archives ship 3.14 — not usable for WhisperX
+python3.12 --version   # required for WhisperX (deadsnakes, see below)
 composer -V
 ```
 
-Resolute’s Ubuntu archives have **`python3` = 3.14** and **no** `python3.12` package. Do **not** `apt install python3.12` from the distro — apt will fail with “Unable to locate package”.
+### Python 3.12 is required for WhisperX on Resolute
 
-`setup.sh` uses `python3.12` or `python3.11` **only if they are already on PATH**. Otherwise it uses system `python3` (3.14) with the linux-5090 requirements (whisperx chooses `ctranslate2==4.4.0`). That is the first-smoke path.
+Resolute’s Ubuntu archives have **`python3` = 3.14** and **no** `python3.12` package. Do **not** `apt install python3.12` from the distro alone — that fails with “Unable to locate package”.
 
-Optional (not required) if you later want 3.12: [deadsnakes](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) **does** publish Resolute, including `python3.12` (`3.12.14-1+resolute1` as of 2026-08). Or use pyenv / uv. Do not add deadsnakes unless you want that extra interpreter.
+whisperx 3.2 pins `ctranslate2==4.4.0`. That wheel **does not exist** for Python 3.14 (`pip` only lists 4.6+). Setup **must not** create the WhisperX venv with system `python3`. Use **Python 3.12** via [deadsnakes](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) (publishes Resolute, including `python3.12`):
 
-If a previous WhisperX install failed mid-pip, delete the half-built venv and re-run (still OK on 3.14):
+```bash
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.12 python3.12-venv python3.12-dev
+python3.12 --version
+```
+
+`setup.sh` / `php artisan python:setup` fail with this same command if `python3.12` is missing. They will not silently fall back to 3.14.
+
+If a previous 3.14 venv exists (failed pip), delete it after installing 3.12:
 
 ```bash
 rm -rf lorefire-desktop/resources/python/venv
+php artisan python:setup --gpu
 ```
 
 If `composer` is missing from apt:

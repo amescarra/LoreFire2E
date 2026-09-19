@@ -108,6 +108,11 @@ if [ -n "$ondrej_lists" ]; then
 fi
 echo "    Node    : $(node -v)"
 echo "    Python  : $(python3 --version)"
+if command -v python3.12 >/dev/null 2>&1; then
+  echo "    Python312: $(python3.12 --version)"
+else
+  echo "    Python312: missing (required for WhisperX — deadsnakes on Resolute)"
+fi
 echo ""
 
 GPU=false
@@ -155,9 +160,21 @@ npm install
 echo "==> frontend build"
 npm run build
 
-echo "==> bundled Python runtime (optional; else python3.12/3.11 if present, else Resolute python3 3.14)"
+echo "==> bundled Python runtime (python-build-standalone 3.12, optional)"
 if [ -x resources/python/download_runtime.sh ]; then
-  bash resources/python/download_runtime.sh || echo "WARNING: runtime download skipped; using system Python."
+  bash resources/python/download_runtime.sh || echo "WARNING: runtime download skipped; will require system python3.12."
+fi
+
+BUNDLED_PY="resources/python/runtime/bin/python3"
+if [ ! -x "$BUNDLED_PY" ] && ! command -v python3.12 >/dev/null 2>&1; then
+  echo "ERROR: WhisperX needs Python 3.12. Resolute python3 is 3.14 — no ctranslate2==4.4.0 wheel."
+  echo "  Do not use system python3 for this venv."
+  echo "  sudo add-apt-repository -y ppa:deadsnakes/ppa"
+  echo "  sudo apt update"
+  echo "  sudo apt install -y python3.12 python3.12-venv python3.12-dev"
+  echo "  rm -rf resources/python/venv"
+  echo "  php artisan python:setup --gpu"
+  exit 1
 fi
 
 echo "==> WhisperX venv"

@@ -30,6 +30,11 @@ class Linux5090
     /** @var callable|null Override for tests: fn(): ?int VRAM in MiB */
     public static $vramProbe = null;
 
+    /** @var callable|null Override for tests: fn(): bool python3.12 / bundled 3.12 present */
+    public static $python312Probe = null;
+
+    public const DEADSNAKES_INSTALL = 'sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update && sudo apt install -y python3.12 python3.12-venv python3.12-dev';
+
     public static function isLinuxX86(?string $osFamily = null, ?string $machine = null): bool
     {
         $osFamily ??= PHP_OS_FAMILY;
@@ -235,10 +240,46 @@ class Linux5090
         }
     }
 
+    /**
+     * whisperx 3.2 pins ctranslate2==4.4.0, which has no Python 3.14 wheel.
+     * Linux 3.13+ hosts must use python3.12 (deadsnakes on Resolute).
+     */
+    public static function whisperxNeedsCpython312(): bool
+    {
+        return self::isLinuxX86() && ! self::isWindowsArmPath();
+    }
+
+    public static function hasWhisperxCpython312(): bool
+    {
+        if (is_callable(self::$python312Probe)) {
+            return (bool) (self::$python312Probe)();
+        }
+
+        $bundled = base_path(implode(DIRECTORY_SEPARATOR, ['resources', 'python', 'runtime', 'bin', 'python3']));
+        if (is_file($bundled) && is_executable($bundled)) {
+            $out = [];
+            $code = 1;
+            exec(escapeshellarg($bundled).' -c "import sys; print(sys.version_info[:2])" 2>/dev/null', $out, $code);
+            if ($code === 0 && isset($out[0]) && preg_match('/\(3,\s*12\)/', $out[0])) {
+                return true;
+            }
+        }
+
+        $smi = trim((string) shell_exec('command -v python3.12 2>/dev/null'));
+
+        return $smi !== '';
+    }
+
+    public static function missingPython312Message(): string
+    {
+        return 'WhisperX on Linux needs Python 3.12. System python3.14 cannot install ctranslate2==4.4.0 (whisperx 3.2). Ubuntu Resolute archives have no python3.12 — install via deadsnakes: '.self::DEADSNAKES_INSTALL.'. Then: rm -rf resources/python/venv && php artisan python:setup --gpu';
+    }
+
     public static function resetProbes(): void
     {
         self::$cudaProbe = null;
         self::$vramProbe = null;
+        self::$python312Probe = null;
     }
 
     private static function missing(string $key): bool

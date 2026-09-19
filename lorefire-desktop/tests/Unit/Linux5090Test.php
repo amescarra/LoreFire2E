@@ -144,4 +144,31 @@ class Linux5090Test extends TestCase
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-setup.sh');
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-detect.sh');
     }
+
+    public function test_setup_docs_prefer_archive_php_and_skip_ondrej_on_resolute(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $md = file_get_contents($root.'/LINUX-5090.md');
+        $sh = file_get_contents($root.'/scripts/linux-5090-setup.sh');
+        $this->assertIsString($md);
+        $this->assertIsString($sh);
+
+        $this->assertStringContainsString('resolute', $md);
+        $this->assertStringContainsString('php-cli php-xml php-mbstring', $md);
+        $this->assertStringContainsString('Do **not** add `ppa:ondrej/php`', $md);
+        $this->assertStringContainsString('ondrej-ubuntu-php-*.list', $md);
+        $this->assertStringContainsString('Noble (24.04) and Jammy (22.04) only', $md);
+
+        $this->assertStringContainsString('ubuntu_codename', $sh);
+        $this->assertStringContainsString('print_php_install_help', $sh);
+        $this->assertStringContainsString('jammy|noble', $sh);
+        $this->assertStringContainsString('Do NOT add ppa:ondrej/php', $sh);
+        $this->assertStringContainsString('ondrej-ubuntu-php-*.sources', $sh);
+        $this->assertStringContainsString('php-cli php-xml php-mbstring php-sqlite3', $sh);
+        $this->assertDoesNotMatchRegularExpression(
+            '/composer\.lock needs PHP 8\.4\+[\s\S]{0,120}add-apt-repository -y ppa:ondrej\/php/',
+            $sh,
+            'PHP 8.4 help must not unconditionally tell every Ubuntu (including resolute) to add ondrej/php.'
+        );
+    }
 }

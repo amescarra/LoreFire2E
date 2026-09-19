@@ -25,6 +25,48 @@ if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then
   exit 1
 fi
 
+ubuntu_codename() {
+  if [ -r /etc/os-release ]; then
+    # Isolate os-release vars from the rest of the script.
+    # shellcheck disable=SC1091
+    ( . /etc/os-release && printf '%s' "${VERSION_CODENAME:-}" )
+  fi
+}
+
+ondrej_php_sources() {
+  shopt -s nullglob
+  local files=(/etc/apt/sources.list.d/*ondrej*php*)
+  shopt -u nullglob
+  if [ "${#files[@]}" -gt 0 ]; then
+    printf '%s\n' "${files[@]}"
+  fi
+}
+
+print_php_install_help() {
+  local codename="$1"
+  echo "  This repo's composer.lock needs PHP 8.4+."
+  echo "  Prefer Ubuntu archive packages (Resolute ships php-cli 8.5):"
+  echo "    sudo apt install -y php-cli php-xml php-mbstring php-sqlite3 php-curl php-zip php-bcmath"
+  case "$codename" in
+    jammy|noble)
+      echo "  On $codename the archive PHP is older than 8.4. ondrej/php still publishes $codename:"
+      echo "    sudo add-apt-repository -y ppa:ondrej/php && sudo apt update"
+      echo "    sudo apt install -y php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath"
+      echo "    sudo update-alternatives --set php /usr/bin/php8.4"
+      ;;
+    *)
+      echo "  Do NOT add ppa:ondrej/php on ${codename:-this release} — no Release file (apt 404)."
+      echo "  If a broken ondrej list is already present:"
+      echo "    sudo add-apt-repository --remove ppa:ondrej/php"
+      echo "    sudo rm -f /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources"
+      echo "    sudo apt update"
+      ;;
+  esac
+}
+
+CODE="$(ubuntu_codename)"
+echo "    Ubuntu  : ${CODE:-unknown}"
+
 missing=()
 for bin in git php composer node npm python3 curl; do
   if ! command -v "$bin" >/dev/null 2>&1; then
@@ -35,20 +77,34 @@ done
 if [ "${#missing[@]}" -gt 0 ]; then
   echo "ERROR: missing commands: ${missing[*]}"
   echo "  Install the Ubuntu packages listed in lorefire-desktop/LINUX-5090.md"
-  echo "  then re-run this script."
+  if printf '%s' "${missing[*]}" | grep -q 'php'; then
+    print_php_install_help "$CODE"
+  fi
   exit 1
 fi
 
 php_ver="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
 echo "    PHP     : $(php -v | head -1) ($php_ver)"
-if php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'; then
-  :
-else
-  echo "ERROR: this repo's composer.lock needs PHP 8.4+ (Ubuntu 24.04 default is 8.3)."
-  echo "  sudo add-apt-repository -y ppa:ondrej/php && sudo apt update"
-  echo "  sudo apt install -y php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath"
-  echo "  sudo update-alternatives --set php /usr/bin/php8.4"
+if ! php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);'; then
+  echo "ERROR: this repo's composer.lock needs PHP 8.4+."
+  print_php_install_help "$CODE"
   exit 1
+fi
+
+ondrej_lists="$(ondrej_php_sources || true)"
+if [ -n "$ondrej_lists" ]; then
+  case "$CODE" in
+    jammy|noble) ;;
+    *)
+      echo "WARNING: ondrej/php apt source present, but that PPA has no Release for ${CODE:-this release}."
+      echo "  apt update will 404 until you remove it:"
+      echo "    sudo add-apt-repository --remove ppa:ondrej/php"
+      echo "    sudo rm -f /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources"
+      echo "    sudo apt update"
+      echo "  Leftover files:"
+      echo "$ondrej_lists" | sed 's/^/    /'
+      ;;
+  esac
 fi
 echo "    Node    : $(node -v)"
 echo "    Python  : $(python3 --version)"

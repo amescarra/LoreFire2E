@@ -17,11 +17,22 @@ Lorefire stays **local**. Transcription is WhisperX in a Python venv. The LLM is
 
 ## 1. Apt packages (do this first)
 
+Prefer **Ubuntu archive** PHP (`php-cli` and the `php-*` extension metapackages). This repo’s Composer lock needs **PHP 8.4+**. Check the codename first:
+
+```bash
+. /etc/os-release
+echo "$VERSION_CODENAME"    # resolute, noble, jammy, …
+```
+
+### Resolute (26.04) and any release whose archive PHP is 8.4+
+
+Ubuntu Resolute’s `php-cli` is **8.5**. Do **not** add `ppa:ondrej/php` — that PPA has **no Release file** for `resolute` (`404` on `apt update`).
+
 ```bash
 sudo apt update
 sudo apt install -y \
   git curl wget ca-certificates build-essential pkg-config \
-  php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-curl php8.4-zip php8.4-bcmath \
+  php-cli php-xml php-mbstring php-sqlite3 php-curl php-zip php-bcmath \
   composer \
   nodejs npm \
   python3 python3-venv python3-pip python3-dev \
@@ -30,7 +41,21 @@ sudo apt install -y \
   ubuntu-drivers-common
 ```
 
-This repo’s Composer lock needs **PHP 8.4**. Ubuntu 24.04’s default `php-cli` is 8.3 — add [ondrej/php](https://launchpad.net/~ondrej/+archive/ubuntu/php) first:
+### If you already added ondrej on Resolute (broken list)
+
+`apt update` will 404 on `ppa.launchpadcontent.net/ondrej/php/.../resolute/Release`. Remove the source, then use archive PHP as above:
+
+```bash
+sudo add-apt-repository --remove ppa:ondrej/php
+# Leftover files if the remove did not clear them:
+sudo rm -f /etc/apt/sources.list.d/ondrej-ubuntu-php-*.list \
+           /etc/apt/sources.list.d/ondrej-ubuntu-php-*.sources
+sudo apt update
+```
+
+### Noble (24.04) and Jammy (22.04) only
+
+Archive `php-cli` is older than 8.4 (8.3 on noble, 8.1 on jammy). [ondrej/php](https://launchpad.net/~ondrej/+archive/ubuntu/php) still publishes those series:
 
 ```bash
 sudo add-apt-repository -y ppa:ondrej/php
@@ -39,10 +64,12 @@ sudo apt install -y php8.4-cli php8.4-xml php8.4-mbstring php8.4-sqlite3 php8.4-
 sudo update-alternatives --set php /usr/bin/php8.4
 ```
 
+Do not use that PPA on Resolute or any other series that has no Release file.
+
 Confirm:
 
 ```bash
-php -v          # 8.4+
+php -v          # 8.4+ (8.5 is fine on Resolute)
 node -v         # 20+
 python3 --version
 composer -V

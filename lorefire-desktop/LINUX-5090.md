@@ -302,7 +302,91 @@ All audio stays on this machine.
 3. **File import:** **Import Audio File** (`webm`, `wav`, `mp3`, `m4a`, `flac`, `ogg`, `mp4`). Same WhisperX job.
 4. After the transcript is done, bardic summary / Oracle / sheet extraction use Ollama.
 
-CLI check (optional):
+On linux-5090, live capture is **Electron `getUserMedia`** (MediaRecorder chunks → PHP). There is no Python `sounddevice` / raw `arecord` path. Settings → **Session Audio** lists Chromium devices and persists the choice in `app_settings`. Automatic preference is **Anker PowerConf S500** / `bluez_input` when that device is connected (manual override wins). Windows ARM still uses `{ audio: true }` unless the user saved a mic.
+
+Capture hints on this path (conference speakerphone): mono, 16 kHz (WhisperX `load_audio` rate; HFP wideband SCO is also 16 kHz), echo cancellation / noise suppression / AGC. Constraints use `ideal` so a device that cannot do 16 kHz / mono still opens.
+
+## 6b. Anker PowerConf S500 (PipeWire + BlueZ)
+
+ourai hardware (do not invent other paths):
+
+| Fact | Value |
+|---|---|
+| Device | Anker PowerConf S500 |
+| BT MAC | `84:D3:52:EE:10:E3` |
+| Pulse card | `bluez_card.84_D3_52_EE_10_E3` |
+| Capture node | `bluez_input.84_D3_52_EE_10_E3.*` (headset-head-unit) |
+| Playback node | `bluez_output.84_D3_52_EE_10_E3.*` |
+| ALSA `arecord -l` | onboard **ALC897 only** — the BT mic will **not** appear as `hw:` |
+
+No Anker proprietary driver. The stack is **BlueZ + PipeWire** (`pipewire-pulse` so Electron sees Pulse devices). For a speakerphone **microphone**, A2DP alone is insufficient — switch the card to **Handsfree / `headset-head-unit`** (HSP/HFP). A2DP is high-quality playback without a mic.
+
+### Packages (install only if missing)
+
+```bash
+# status + missing apt names
+bash lorefire-desktop/scripts/linux-5090-audio.sh --packages
+
+sudo apt update
+sudo apt install -y pipewire pipewire-pulse wireplumber pulseaudio-utils bluez libspa-0.2-bluetooth
+```
+
+`libspa-0.2-bluetooth` ships `libspa-bluez5`. Confirm:
+
+```bash
+ls /usr/lib/x86_64-linux-gnu/spa-0.2/bluez5/libspa-bluez5.so
+```
+
+### Keep the S500 connected and use Handsfree
+
+Paste-ready on ourai:
+
+```bash
+# Power, trust, connect (already paired on ourai)
+bluetoothctl power on
+bluetoothctl info 84:D3:52:EE:10:E3
+bluetoothctl connect 84:D3:52:EE:10:E3
+bluetoothctl trust 84:D3:52:EE:10:E3
+
+# Handsfree profile (mic). A2DP = a2dp-sink = no capture.
+pactl list cards short
+pactl set-card-profile bluez_card.84_D3_52_EE_10_E3 headset-head-unit
+# optional wideband 16 kHz if the card exposes it:
+# pactl set-card-profile bluez_card.84_D3_52_EE_10_E3 headset-head-unit-msbc
+
+# PipeWire defaults for LoreFire + system playback
+pactl list sources short   # expect bluez_input.84_D3_52_EE_10_E3.headset-head-unit
+pactl list sinks short     # expect bluez_output.84_D3_52_EE_10_E3…
+pactl set-default-source "$(pactl list sources short | awk '/bluez_input\.84_D3_52_EE_10_E3/{print $2; exit}')"
+pactl set-default-sink "$(pactl list sinks short | awk '/bluez_output\.84_D3_52_EE_10_E3/{print $2; exit}')"
+```
+
+One-shot helper (same MAC / card names):
+
+```bash
+bash lorefire-desktop/scripts/linux-5090-audio.sh --apply
+```
+
+### Verify with wpctl / pactl
+
+```bash
+wpctl status
+# Audio → Sources / Sinks: star (*) on Anker PowerConf S500
+# Devices: Anker PowerConf S500 [bluez5]
+
+pactl get-default-source
+pactl get-default-sink
+pactl info | grep -E 'Default Source|Default Sink|Server Name'
+# Server Name should mention PulseAudio (on PipeWire) / PipeWire
+
+# Negative check: BT mic is not an ALSA card
+arecord -l
+# only ALC897 (or similar onboard) — expected
+```
+
+If Settings → Session Audio does not list the S500: the card is still on A2DP, or Electron has no mic permission. Run `--apply`, then **Refresh devices**. Manual override is stored in `app_settings` (`audio_input_device` / `audio_input_label` / `audio_auto_prefer`).
+
+CLI check (optional, file import — not live getUserMedia):
 
 ```bash
 cd lorefire/lorefire-desktop

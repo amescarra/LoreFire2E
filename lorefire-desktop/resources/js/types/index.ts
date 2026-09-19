@@ -279,6 +279,13 @@ export interface AppSettings {
   image_gen_model: string | null
   image_gen_zai_api_key: string | null
   comfyui_base_url: string | null
+  audio_input_device: string | null
+  audio_input_label: string | null
+  audio_input_pulse_name: string | null
+  audio_output_device: string | null
+  audio_output_label: string | null
+  audio_output_pulse_name: string | null
+  audio_auto_prefer: string | null
 }
 
 // Inertia shared props

@@ -632,7 +632,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
 // ── Session panel ─────────────────────────────────────────────────────────────
 
 function SessionPanel({ campaign, session }: { campaign: Campaign; session: GameSession }) {
-  const { isRecording, recordingSeconds, isUploading, uploadProgress, stopRecording, activeSessionId } = useRecording()
+  const { isRecording, recordingSeconds, isUploading, uploadProgress, stopRecording, activeSessionId, activeInputLabel } = useRecording()
   const isThisSession = activeSessionId === session.id
 
   const sessionUrl = `/campaigns/${campaign.id}/sessions/${session.id}`
@@ -669,6 +669,11 @@ function SessionPanel({ campaign, session }: { campaign: Campaign; session: Game
               Stop Recording
             </Button>
           </div>
+        )}
+        {isThisSession && isRecording && activeInputLabel && (
+          <p className="text-[10px] font-mono truncate" style={{ color: 'var(--color-text-dim)' }}>
+            {activeInputLabel}
+          </p>
         )}
         {isThisSession && isUploading && (
           <div className="flex items-center gap-2">

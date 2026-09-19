@@ -163,6 +163,7 @@ class Linux5090Test extends TestCase
         $this->assertFileExists(dirname(__DIR__, 2).'/LINUX-5090.md');
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-setup.sh');
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-detect.sh');
+        $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-audio.sh');
     }
 
     public function test_setup_docs_prefer_archive_php_and_skip_ondrej_on_resolute(): void

@@ -171,4 +171,32 @@ class Linux5090Test extends TestCase
             'PHP 8.4 help must not unconditionally tell every Ubuntu (including resolute) to add ondrej/php.'
         );
     }
+
+    public function test_linux_setup_creates_sqlite_and_migrates_before_whisperx(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $sh = file_get_contents($root.'/scripts/linux-5090-setup.sh');
+        $md = file_get_contents($root.'/LINUX-5090.md');
+        $ps1 = file_get_contents($root.'/resources/python/setup.ps1');
+        $this->assertIsString($sh);
+        $this->assertIsString($md);
+        $this->assertIsString($ps1);
+
+        $touchPos = strpos($sh, 'touch database/database.sqlite');
+        $migratePos = strpos($sh, 'php artisan migrate --force');
+        $venvPos = strpos($sh, 'WhisperX venv');
+        $this->assertNotFalse($touchPos);
+        $this->assertNotFalse($migratePos);
+        $this->assertNotFalse($venvPos);
+        $this->assertLessThan($migratePos, $touchPos);
+        $this->assertLessThan($venvPos, $migratePos);
+        $this->assertStringContainsString('touch database/nativephp.sqlite', $sh);
+        $this->assertStringContainsString('Do not set DB_DATABASE to nativephp.sqlite', $sh);
+
+        $this->assertStringContainsString('database/database.sqlite', $md);
+        $this->assertStringContainsString('database/nativephp.sqlite', $md);
+
+        $this->assertStringNotContainsString('touch database/database.sqlite', $ps1);
+        $this->assertStringNotContainsString('linux-5090', $ps1);
+    }
 }

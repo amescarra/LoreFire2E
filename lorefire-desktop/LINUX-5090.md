@@ -153,22 +153,28 @@ git checkout linux-5090
 bash lorefire-desktop/scripts/linux-5090-setup.sh
 ```
 
-The script runs `composer install`, `.env`, `npm install`, migrations, `npm run build`, the WhisperX venv (`python:setup --gpu` when CUDA is present), and `ollama pull` when Ollama is installed.
+The script runs `composer install`, `.env`, **creates the SQLite files and migrates**, then `npm install` / `npm run build`, the WhisperX venv (`python:setup --gpu` when CUDA is present), and `ollama pull` when Ollama is installed. Migrations run **before** WhisperX so `AppSetting` writes do not hit a missing `database.sqlite`.
 
 Manual equivalent:
 
 ```bash
 cd lorefire/lorefire-desktop
 composer install
-npm install
 cp .env.example .env
 php artisan key:generate
+mkdir -p database
+touch database/database.sqlite          # CLI artisan / python:setup (Linux default)
+touch database/nativephp.sqlite         # NativePHP window (same as Windows ARM)
+php artisan migrate --force
 php artisan native:migrate --force
+npm install
 npm run build
 bash resources/python/download_runtime.sh   # optional
 php artisan python:setup --gpu              # or --cpu if nvidia-smi is missing
 php artisan native:serve
 ```
+
+Leave `DB_DATABASE` unset in `.env` on this path. Laravel then uses `database/database.sqlite` for CLI. Do not point `.env` at `nativephp.sqlite` here — that is the NativePHP / Windows ARM serve file.
 
 `python:setup` on Linux x86_64 auto-enables `--gpu` when `nvidia-smi` works. `--cpu` forces the old CPU wheels.
 
@@ -229,4 +235,10 @@ Windows ARM remains `powershell -File scripts/native-serve.ps1` and `setup.ps1` 
 
 ## Storage
 
-SQLite on Linux lives under `~/.config/lorefire/` (production) or `~/.config/lorefire-dev/` (dev), not the macOS `~/Library/Application Support` path in the main README.
+| When | Linux default | Windows ARM / NativePHP serve |
+|---|---|---|
+| `php artisan python:setup`, `migrate`, other CLI | `lorefire-desktop/database/database.sqlite` | still that file if you run artisan outside Electron |
+| `php artisan native:serve` (dev window) | `lorefire-desktop/database/nativephp.sqlite` | same (`nativephp.sqlite`) |
+| Packaged app | `~/.config/lorefire/` (prod) or `~/.config/lorefire-dev/` (dev) | OS app-data dir |
+
+`linux-5090-setup.sh` `touch`es both repo sqlite files and migrates them **before** WhisperX setup. A missing `database.sqlite` makes `AppSetting::set()` fail during `python:setup`. The packaged-app path is not the macOS `~/Library/Application Support` location in the main README.

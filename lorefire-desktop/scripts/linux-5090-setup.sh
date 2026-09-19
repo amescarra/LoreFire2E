@@ -137,11 +137,20 @@ if [ ! -f .env ]; then
   php artisan key:generate --ansi
 fi
 
+# CLI artisan (python:setup / AppSetting) uses database/database.sqlite.
+# Laravel will not create that file. NativePHP's window uses nativephp.sqlite.
+# Create and migrate both here so WhisperX setup can write app_settings.
+# Do not set DB_DATABASE to nativephp.sqlite in .env — that is the Windows /
+# NativePHP serve path and must stay separate from this Linux CLI default.
+echo "==> sqlite + migrations (before WhisperX writes app_settings)"
+mkdir -p database
+touch database/database.sqlite
+touch database/nativephp.sqlite
+php artisan migrate --force
+php artisan native:migrate --force || true
+
 echo "==> npm install"
 npm install
-
-echo "==> migrations"
-php artisan native:migrate --force || php artisan migrate --force
 
 echo "==> frontend build"
 npm run build

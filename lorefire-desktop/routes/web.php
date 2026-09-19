@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\WindowChromeController;
 use App\Http\Controllers\OracleController;
 use App\Http\Controllers\CampaignController;
 use App\Http\Controllers\CampaignPartyImageController;
@@ -47,6 +48,12 @@ Route::prefix('onboarding')->name('onboarding.')->group(function () {
     Route::post('settings',      [OnboardingController::class, 'saveSettings'])->name('settings');
     Route::post('complete',      [OnboardingController::class, 'complete'])->name('complete');
     Route::post('retry-python',  [OnboardingController::class, 'retryPython'])->name('retry-python');
+});
+
+Route::prefix('window')->name('window.')->group(function () {
+    Route::post('minimize', [WindowChromeController::class, 'minimize'])->name('minimize');
+    Route::post('maximize', [WindowChromeController::class, 'maximize'])->name('maximize');
+    Route::post('close', [WindowChromeController::class, 'close'])->name('close');
 });
 
 Route::get('python-setup-status', function () {

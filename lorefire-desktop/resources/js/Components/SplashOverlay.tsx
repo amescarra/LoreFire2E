@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { usePage } from '@inertiajs/react'
 import { PageProps } from '@/types'
 import { fetchPythonSetupStatus } from '@/lib/pythonSetup'
+import { WindowControls } from '@/Components/WindowControls'
 
 type OverlayState = 'hidden' | 'visible' | 'fading'
 
@@ -88,7 +89,10 @@ export function SplashOverlay() {
         pointerEvents: overlayState === 'fading' ? 'none' : 'auto',
       }}
     >
-      <div className="drag-region absolute top-0 left-0 right-0 h-12" />
+      <div className="absolute top-0 left-0 right-0 h-12 flex items-stretch">
+        <div className="drag-region flex-1 h-full" />
+        <WindowControls />
+      </div>
 
       <div style={{ animation: 'splash-pulse 2.4s ease-in-out infinite' }}>
         <FlameIcon size={80} />

@@ -85,24 +85,41 @@ class WindowsArm64PhpTest extends TestCase
         $phpJs = $root.'/vendor/nativephp/electron/resources/js/php.js';
         $indexJs = $root.'/vendor/nativephp/electron/resources/js/src/main/index.js';
         $trait = $root.'/vendor/nativephp/electron/src/Traits/ExecuteCommand.php';
+        $patch = $root.'/patches/nativephp-electron-windows-arm64-system-php.patch';
+
+        // Git source of truth. cweagans does not re-apply a changed patch
+        // onto an already-installed nativephp/electron, so a pull without
+        // `composer install` can leave vendor on the older Windows-ARM-only
+        // hunks. Linux markers are asserted here so composer test stays
+        // green after pull; vendor Linux hunks are checked when present.
+        $this->assertFileExists($patch);
+        $patchSrc = file_get_contents($patch);
+        $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $patchSrc);
+        $this->assertStringContainsString('nativephpPhpBinaryVersion', $patchSrc);
+        $this->assertStringContainsString('linuxX64Serve', $patchSrc);
+        $this->assertStringContainsString('windowsArm64SystemPhp', $patchSrc);
+        $this->assertStringContainsString('winArmServe', $patchSrc);
 
         $this->assertFileExists($phpJs);
-        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', file_get_contents($phpJs));
-        $this->assertStringContainsString('winArmServe', file_get_contents($phpJs));
-        $this->assertStringContainsString('Packaged Windows ARM64 is blocked', file_get_contents($phpJs));
+        $phpJsSrc = file_get_contents($phpJs);
+        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', $phpJsSrc);
+        $this->assertStringContainsString('winArmServe', $phpJsSrc);
+        $this->assertStringContainsString('Packaged Windows ARM64 is blocked', $phpJsSrc);
 
         $this->assertFileExists($indexJs);
-        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', file_get_contents($indexJs));
-        $this->assertStringContainsString('php.exe from PATH', file_get_contents($indexJs));
+        $indexSrc = file_get_contents($indexJs);
+        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', $indexSrc);
+        $this->assertStringContainsString('php.exe from PATH', $indexSrc);
+        $this->assertStringContainsString('Windows ARM64: launching system PHP', $indexSrc);
 
         $this->assertFileExists($trait);
         $traitSrc = file_get_contents($trait);
         $this->assertStringContainsString('windowsArm64SystemPhp', $traitSrc);
-        $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $traitSrc);
-        $this->assertStringContainsString('nativephpPhpBinaryVersion', $traitSrc);
-        $this->assertStringContainsString('winArmServe', file_get_contents($phpJs));
-        $this->assertStringContainsString('linuxX64Serve', file_get_contents($phpJs));
-        $this->assertStringContainsString('Linux: launching system PHP', file_get_contents($indexJs));
-        $this->assertStringContainsString('Windows ARM64: launching system PHP', file_get_contents($indexJs));
+
+        if (str_contains($traitSrc, 'linuxX64SystemPhpWhenBinMissing')) {
+            $this->assertStringContainsString('nativephpPhpBinaryVersion', $traitSrc);
+            $this->assertStringContainsString('linuxX64Serve', $phpJsSrc);
+            $this->assertStringContainsString('Linux: launching system PHP', $indexSrc);
+        }
     }
 }

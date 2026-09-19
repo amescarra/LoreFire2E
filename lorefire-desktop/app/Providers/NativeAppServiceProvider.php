@@ -15,6 +15,8 @@ class NativeAppServiceProvider implements ProvidesPhpIni
      */
     public function boot(): void
     {
+        // Hidden title bar: macOS keeps traffic lights; Linux/Windows do not.
+        // Custom controls in AppLayout call Window::minimize/maximize/close.
         Window::open()
             ->width(1280)
             ->height(800)
@@ -23,6 +25,10 @@ class NativeAppServiceProvider implements ProvidesPhpIni
             ->title('Lorefire')
             ->titleBarHidden()
             ->trafficLightPosition(6, 17)
+            ->hideMenu()
+            ->minimizable()
+            ->maximizable()
+            ->closable()
             ->rememberState();
 
         try {

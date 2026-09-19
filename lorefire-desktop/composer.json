@@ -83,6 +83,8 @@
         "laravel": {
             "dont-discover": []
         },
+        "enable-patching": true,
+        "composer-exit-on-patch-failure": true,
         "patches": {
             "nativephp/electron": {
                 "Windows ARM64 / Linux x64 native:serve uses system PHP when php-bin zip is missing": "patches/nativephp-electron-windows-arm64-system-php.patch"

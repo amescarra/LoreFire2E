@@ -4,6 +4,7 @@ import { Toast } from '@/Components/Toast'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { SplashOverlay } from '@/Components/SplashOverlay'
 import { goBack } from '@/lib/navigation'
+import { WindowControls } from '@/Components/WindowControls'
 
 // Module-level: tracks which session IDs have already triggered the recording modal.
 // Lives outside React so it survives AppLayout re-mounts on Inertia navigation.
@@ -234,6 +235,7 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
                 </div>
               )}
               <div className="drag-region flex-1 h-full min-w-[64px]" title="Drag window" />
+              <WindowControls className="-mr-6" />
             </div>
           </header>
 

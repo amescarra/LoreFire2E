@@ -75,6 +75,9 @@ class Adnd2eOracleBriefing
             '### Magic',
             '- Vancian memorization (counts by spell level). A 1st-level generalist Mage memorizes '.$mageL1.' first-level spell. A specialist (school recorded as kit) memorizes '.$specL1.' at that level (one extra per school level they can already memorize). Priests may gain extra first- and second-level capacity from high Wisdom.',
             '- Cleric sphere tags major: '.implode(', ', $clericSpheres['major']).'; minor: '.implode(', ', $clericSpheres['minor']).'. Names only.',
+            '- Spell headers (name/class/level/tag/components/time/range/duration; optional M names) are Adnd2eSpellCatalog. Example: Fireball Mage L3 invocation. No effect prose.',
+            '- Gear weight and magical bonus are Adnd2eEquipmentCatalog (plate mail +1 AC 2; long sword +2 bonus +2). Artifacts are name + tags only.',
+            '- Creature stubs are AC/HD/THAC0/dmg labels for math only. Prefer campaign NPC hooks over monster-manual dumps.',
             '- Classes in this app: '.$classes.'. Races: '.$races.'.',
             '- Psionicist is a class (aliases: Psion, Psionic, Psionics). Combat figures use the rogue group. PSP totals and typed power names are sheet fields the player fills; they are not simulated. Do not invent 5th Edition psionics. Do not treat Psionicist as a kit.',
             '',
@@ -144,6 +147,17 @@ class Adnd2eOracleBriefing
                             $lines[] = '  **Backstory:**';
                             $lines[] = '  '.str_replace("\n", "\n  ", $backstory);
                         }
+                    }
+                }
+
+                if (! empty($campaign['npcs']) && is_array($campaign['npcs'])) {
+                    $lines[] = '';
+                    $lines[] = '**NPCs:**';
+                    foreach ($campaign['npcs'] as $npc) {
+                        if (! is_array($npc)) {
+                            continue;
+                        }
+                        $lines[] = self::formatNpcLine($npc);
                     }
                 }
 
@@ -223,6 +237,56 @@ class Adnd2eOracleBriefing
         }
         if ($abilityBits !== []) {
             $line .= ' | '.implode(' ', $abilityBits);
+        }
+
+        return $line;
+    }
+
+    /**
+     * Campaign NPC hooks + optional stat-block labels. No description/notes prose.
+     *
+     * @param  array<string, mixed>  $npc
+     */
+    public static function formatNpcLine(array $npc): string
+    {
+        $line = '- '.($npc['name'] ?? 'Unknown');
+        if (! empty($npc['race'])) {
+            $line .= ', '.$npc['race'];
+        }
+        if (! empty($npc['role'])) {
+            $line .= ', '.$npc['role'];
+        }
+        if (! empty($npc['location'])) {
+            $line .= ' @ '.$npc['location'];
+        }
+        if (! empty($npc['attitude'])) {
+            $line .= ', '.$npc['attitude'];
+        }
+        if (! empty($npc['last_seen'])) {
+            $line .= ', last seen '.$npc['last_seen'];
+        }
+        if (! empty($npc['tags']) && is_array($npc['tags'])) {
+            $line .= ', tags '.implode('/', $npc['tags']);
+        }
+        if (array_key_exists('is_alive', $npc) && $npc['is_alive'] === false) {
+            $line .= ' [dead]';
+        }
+
+        $block = $npc['stat_block'] ?? null;
+        if (is_array($block)) {
+            $bits = [];
+            foreach (['ac' => 'AC', 'hd' => 'HD', 'thac0' => 'THAC0', 'dmg' => 'dmg', 'damage' => 'dmg'] as $key => $label) {
+                if (! isset($block[$key]) || $block[$key] === '' || $block[$key] === null) {
+                    continue;
+                }
+                if ($key === 'damage' && isset($block['dmg'])) {
+                    continue;
+                }
+                $bits[] = $label.' '.$block[$key];
+            }
+            if ($bits !== []) {
+                $line .= ' | '.implode(', ', $bits);
+            }
         }
 
         return $line;

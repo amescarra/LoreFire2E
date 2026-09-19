@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Link } from '@inertiajs/react'
 import ReactMarkdown from 'react-markdown'
 import AppLayout from '@/Layouts/AppLayout'
-import { Campaign, Character, GameSession } from '@/types'
+import { Campaign, Character, GameSession, Npc } from '@/types'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -62,6 +62,17 @@ export function oracleCampaignContext(campaigns: Campaign[]) {
       title: s.title,
       played_at: s.played_at,
       session_notes: s.session_notes,
+    })),
+    npcs: (campaign.npcs ?? []).map((npc: Npc) => ({
+      name: npc.name,
+      race: npc.race,
+      role: npc.role,
+      location: npc.location,
+      last_seen: npc.last_seen,
+      tags: npc.tags,
+      attitude: npc.attitude,
+      stat_block: npc.stat_block,
+      is_alive: npc.is_alive,
     })),
   }))
 }

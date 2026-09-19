@@ -85,5 +85,11 @@ class OraclePromptTest extends TestCase
 
         $armor = app(OracleController::class)->buildSystemPrompt([], 'What is the AC of chain mail?');
         $this->assertStringContainsString('Chain mail base AC: 5', $armor);
+
+        $spell = app(OracleController::class)->buildSystemPrompt([], 'What level is Fireball for a mage?');
+        $this->assertStringContainsString('Fireball: Mage L3 invocation', $spell);
+
+        $magicPlate = app(OracleController::class)->buildSystemPrompt([], 'What is the AC of plate mail +1?');
+        $this->assertStringContainsString('Plate mail +1: armor AC 2', $magicPlate);
     }
 }

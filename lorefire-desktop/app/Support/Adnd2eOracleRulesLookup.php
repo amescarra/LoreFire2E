@@ -35,6 +35,10 @@ class Adnd2eOracleRulesLookup
         self::collectToHitFacts($question, $facts);
         self::collectArmorFacts($question, $facts);
         self::collectWeaponFacts($question, $facts);
+        self::collectEquipmentFacts($question, $facts);
+        self::collectSpellCatalogFacts($question, $facts);
+        self::collectCreatureFacts($question, $facts);
+        self::collectNpcFacts($question, $context, $facts);
         self::collectSaveFacts($question, $context, $facts);
         self::collectMemorizationFacts($question, $context, $facts);
         self::collectSphereFacts($question, $context, $facts);
@@ -73,8 +77,12 @@ class Adnd2eOracleRulesLookup
             return false;
         }
 
+        if (self::looksLikeCatalogRulesQuery($question)) {
+            return true;
+        }
+
         return (bool) preg_match(
-            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|spell slots?|memorization slots?|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|weapon damage|damage dice|speed factor|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|move rate|encumbrance|weight allow|max press|carried|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|loyalty|priest spheres?|major sphere|minor sphere|specialist|saving-throw|descending|unarmored|leather|studded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|padded|brigandine|splint|banded|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic)/i',
+            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|spell slots?|memorization slots?|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|weapon damage|damage dice|speed factor|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|move rate|encumbrance|weight allow|max press|carried|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|loyalty|priest spheres?|major sphere|minor sphere|specialist|saving-throw|descending|unarmored|leather|studded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|padded|brigandine|splint|banded|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic)|\bspells\b|casting time|spell level|what level is|\+\s*[1-5]\b|artifact|stat stub/i',
             $question
         );
     }
@@ -90,9 +98,26 @@ class Adnd2eOracleRulesLookup
         }
 
         return ! (bool) preg_match(
-            '/thac0|thaco|\bac\b|saving throw|memoriz|dual-?class|missile|open doors?|bend bars?|\b18\s*\/|ability|dexterity|strength|vancian|material component/i',
+            '/thac0|thaco|\bac\b|saving throw|memoriz|dual-?class|missile|open doors?|bend bars?|\b18\s*\/|ability|dexterity|strength|vancian|material component|hit dice|\bhd\b|\bdmg\b|stat.block/i',
             $q
         );
+    }
+
+    private static function looksLikeCatalogRulesQuery(string $question): bool
+    {
+        if (Adnd2eEquipmentCatalog::searchArtifactInText($question) !== null) {
+            return true;
+        }
+        if (Adnd2eEquipmentCatalog::searchInText($question) !== null
+            && self::mentions($question, 'weight|weigh|\+ *[1-5]|magical|magic (armor|weapon|sword|plate)|ac|damage|speed')) {
+            return true;
+        }
+        if (Adnd2eCreatureStubs::searchInText($question) !== null
+            && self::mentions($question, 'thac0|thaco|\bac\b|hit dice|\bhd\b|\bdmg\b|damage')) {
+            return true;
+        }
+
+        return self::wantsSpellCatalog($question);
     }
 
     private static function asksForOfficialBookText(string $question): bool
@@ -370,7 +395,8 @@ class Adnd2eOracleRulesLookup
                 }
                 $facts[] = $class.' THAC0 1–20: '.implode(', ', $parts).' (Adnd2e::thac0Progression)';
             }
-        } else {
+        } elseif (Adnd2eCreatureStubs::searchInText($question) === null
+            && ! self::npcNameMentioned($question, $context)) {
             foreach ([
                 'Fighter' => [1, 5, 10],
                 'Paladin' => [1, 5],
@@ -579,6 +605,10 @@ class Adnd2eOracleRulesLookup
             return;
         }
 
+        if (self::parseMagicBonus($question) !== null) {
+            return;
+        }
+
         $wantsArmor = self::mentions($question, 'unarmored|unarmoured|base ac|leather|studded|padded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|splint|banded|brigandine|hide armor|shield only|armor (ac|class)|ac of');
         $armor = self::parseArmor($question);
         if (! $wantsArmor && $armor === null) {
@@ -611,6 +641,10 @@ class Adnd2eOracleRulesLookup
      */
     private static function collectWeaponFacts(string $question, array &$facts): void
     {
+        if (self::parseMagicBonus($question) !== null) {
+            return;
+        }
+
         $wantsWeapon = self::mentions($question, 'weapon speed|weapon damage|damage dice|speed factor');
         $weapon = self::parseWeapon($question);
         $namedCombat = $weapon !== null && self::mentions($question, 'damage|speed|dice|\bweapon\b');
@@ -634,6 +668,111 @@ class Adnd2eOracleRulesLookup
             $parts[] = $row['name'].' '.$row['sm'].'/'.$row['l'].' sf'.$row['speed'];
         }
         $facts[] = 'Weapon sample (SM/L/speed): '.implode('; ', $parts).' (Adnd2e::weaponCatalog)';
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectEquipmentFacts(string $question, array &$facts): void
+    {
+        if (self::asksForOfficialBookText($question)) {
+            return;
+        }
+
+        $artifact = Adnd2eEquipmentCatalog::searchArtifactInText($question);
+        if ($artifact !== null) {
+            $facts[] = Adnd2eEquipmentCatalog::formatArtifact($artifact);
+
+            return;
+        }
+
+        $row = Adnd2eEquipmentCatalog::searchInText($question);
+        if ($row === null) {
+            return;
+        }
+
+        $wantsGear = ($row['bonus'] ?? 0) !== 0
+            || self::mentions($question, 'weight|weigh|\+ *[1-5]|magical|magic (armor|weapon|sword|plate)');
+        if (! $wantsGear) {
+            return;
+        }
+
+        $facts[] = Adnd2eEquipmentCatalog::formatRow($row);
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectSpellCatalogFacts(string $question, array &$facts): void
+    {
+        if (! self::wantsSpellCatalog($question)) {
+            return;
+        }
+
+        $hits = self::spellRowsForQuestion($question);
+        if ($hits !== []) {
+            foreach ($hits as $row) {
+                $facts[] = Adnd2eSpellCatalog::formatRow($row);
+            }
+
+            return;
+        }
+
+        $class = self::parseClass($question);
+        if ($class === null || ! self::mentions($question, 'spells')) {
+            return;
+        }
+
+        $spellLevel = self::parseSpellLevel($question);
+        $rows = Adnd2eSpellCatalog::forClass($class, $spellLevel);
+        if ($rows === []) {
+            $facts[] = $class.' has no header rows in Adnd2eSpellCatalog'
+                .($spellLevel !== null ? ' at L'.$spellLevel : '').'.';
+
+            return;
+        }
+
+        $names = array_map(fn (array $row) => $row['name'], $rows);
+        $label = $class.($spellLevel !== null ? ' L'.$spellLevel : '').' names: '.implode(', ', $names);
+        $facts[] = $label.' (Adnd2eSpellCatalog::forClass)';
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectCreatureFacts(string $question, array &$facts): void
+    {
+        if (self::asksForOfficialBookText($question)) {
+            return;
+        }
+        if (! self::mentions($question, 'thac0|thaco|\bac\b|hit dice|\bhd\b|\bdmg\b|damage|stat stub')) {
+            return;
+        }
+
+        $row = Adnd2eCreatureStubs::searchInText($question);
+        if ($row === null) {
+            return;
+        }
+
+        $facts[] = Adnd2eCreatureStubs::formatRow($row);
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectNpcFacts(string $question, array $context, array &$facts): void
+    {
+        if (! self::mentions($question, 'thac0|thaco|\bac\b|hit dice|\bhd\b|\bdmg\b|damage|stat.block|stat stub')) {
+            return;
+        }
+
+        foreach (self::npcsFromContext($context) as $npc) {
+            $name = (string) ($npc['name'] ?? '');
+            if ($name === '' || ! self::mentionsName($question, $name)) {
+                continue;
+            }
+            $facts[] = self::formatNpcEngineLine($npc);
+        }
     }
 
     /**
@@ -802,6 +941,7 @@ class Adnd2eOracleRulesLookup
 
         $spellName = self::parseSpellName($question);
         $characterName = self::parseMentionedCharacterName($question, $context);
+        $catalogRow = Adnd2eSpellCatalog::searchInText($question);
 
         if ($spellName === null) {
             $facts[] = 'Material/focus availability is SpellMaterialComponents::inspect on a sheet spell record. This engine does not contain PHB component lists. Name a character and a spell stored on their sheet.';
@@ -816,6 +956,9 @@ class Adnd2eOracleRulesLookup
             return;
         }
         if ($character === null) {
+            if ($catalogRow !== null && ! self::asksForOfficialBookText($question)) {
+                return;
+            }
             $facts[] = 'SpellMaterialComponents::inspect needs a sheet character. No matching character was named. The engine does not invent PHB components for '.$spellName.'.';
 
             return;
@@ -991,17 +1134,150 @@ class Adnd2eOracleRulesLookup
 
     private static function parseSpellName(string $question): ?string
     {
+        $row = Adnd2eSpellCatalog::searchInText($question);
+        if ($row !== null) {
+            return $row['name'];
+        }
         if (preg_match('/["“\']([A-Za-z][A-Za-z \'-]{1,40})["”\']/', $question, $match)) {
             return trim($match[1]);
         }
         if (preg_match('/(?:spell|components? for|materials? for|cast(?:ing)?)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})/', $question, $match)) {
             return trim($match[1]);
         }
-        if (preg_match('/\b(Fireball|Magic Missile|Sleep|Web|Fly|Lightning Bolt|Cure Light Wounds|Bless|Charm Person)\b/i', $question, $match)) {
-            return $match[1];
+
+        return null;
+    }
+
+    private static function wantsSpellCatalog(string $question): bool
+    {
+        if (self::asksForOfficialBookText($question)) {
+            return false;
+        }
+
+        $hits = Adnd2eSpellCatalog::searchAllInText($question);
+        if ($hits !== []) {
+            $longest = 0;
+            foreach ($hits as $row) {
+                $longest = max($longest, strlen($row['name']));
+            }
+            $distinctive = $longest >= 8 || self::spellHitIsMultiWord($hits);
+            if ($distinctive || self::mentions($question, 'spell|cast|components|casting time|school|sphere|duration|\brange\b|what level|spell level|level is')) {
+                return true;
+            }
+        }
+
+        return self::mentions($question, 'spells') && self::parseClass($question) !== null
+            && ! self::mentions($question, 'memoriz|vancian|spell capacity|spell slots?|how many');
+    }
+
+    /**
+     * @param  list<array{name: string, classes: list<string>, level: int, tag: string, components: string, casting_time: string, range: string, duration: string, materials: list<string>}>  $hits
+     */
+    private static function spellHitIsMultiWord(array $hits): bool
+    {
+        foreach ($hits as $row) {
+            if (str_contains($row['name'], ' ') || str_contains($row['name'], ',')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<array{name: string, classes: list<string>, level: int, tag: string, components: string, casting_time: string, range: string, duration: string, materials: list<string>}>
+     */
+    private static function spellRowsForQuestion(string $question): array
+    {
+        $hits = Adnd2eSpellCatalog::searchAllInText($question);
+        if ($hits === []) {
+            return [];
+        }
+
+        $bestLen = 0;
+        foreach ($hits as $row) {
+            $bestLen = max($bestLen, strlen($row['name']));
+        }
+        $hits = array_values(array_filter($hits, fn (array $row) => strlen($row['name']) === $bestLen));
+
+        $class = self::parseClass($question);
+        if ($class === null) {
+            return $hits;
+        }
+
+        $forClass = array_values(array_filter(
+            $hits,
+            fn (array $row) => in_array($class, $row['classes'], true)
+        ));
+
+        return $forClass !== [] ? $forClass : $hits;
+    }
+
+    private static function parseSpellLevel(string $question): ?int
+    {
+        if (preg_match('/(\d{1,2})(?:st|nd|rd|th)?[-\s]+level(?:\s+\w+)?\s+spells/i', $question, $match)) {
+            return (int) $match[1];
+        }
+        if (preg_match('/spells?.{0,24}level\s+(\d{1,2})/i', $question, $match)) {
+            return (int) $match[1];
+        }
+        if (preg_match('/level\s+(\d{1,2})\s+spells/i', $question, $match)) {
+            return (int) $match[1];
         }
 
         return null;
+    }
+
+    private static function parseMagicBonus(string $question): ?int
+    {
+        if (preg_match('/\+\s*([1-5])\b/', $question, $match)) {
+            return (int) $match[1];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     */
+    private static function npcNameMentioned(string $question, array $context): bool
+    {
+        foreach (self::npcsFromContext($context) as $npc) {
+            if (self::mentionsName($question, (string) ($npc['name'] ?? ''))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @return list<array<string, mixed>>
+     */
+    private static function npcsFromContext(array $context): array
+    {
+        $npcs = [];
+        foreach ($context['campaigns'] ?? [] as $campaign) {
+            if (! is_array($campaign)) {
+                continue;
+            }
+            foreach ($campaign['npcs'] ?? [] as $npc) {
+                if (is_array($npc)) {
+                    $npcs[] = $npc;
+                }
+            }
+        }
+
+        return $npcs;
+    }
+
+    /**
+     * @param  array<string, mixed>  $npc
+     */
+    private static function formatNpcEngineLine(array $npc): string
+    {
+        return Adnd2eOracleBriefing::formatNpcLine($npc).' (campaign NPC)';
     }
 
     /**

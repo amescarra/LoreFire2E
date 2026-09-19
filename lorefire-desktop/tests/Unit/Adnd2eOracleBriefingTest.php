@@ -215,4 +215,33 @@ class Adnd2eOracleBriefingTest extends TestCase
         $this->assertStringContainsString('Fighter 5 THAC0: 16', $prompt);
         $this->assertStringContainsString('MUST use Engine lookup', $prompt);
     }
+
+    public function test_campaign_npcs_are_compact_hooks_without_prose(): void
+    {
+        $prompt = Adnd2eOracleBriefing::systemPrompt([
+            'campaigns' => [[
+                'name' => 'Moonshae Run',
+                'npcs' => [[
+                    'name' => 'Grumble',
+                    'race' => 'Dwarf',
+                    'role' => 'innkeep',
+                    'location' => 'Crossroads Inn',
+                    'attitude' => 'friendly',
+                    'tags' => ['quest'],
+                    'stat_block' => ['ac' => 8, 'thac0' => 18],
+                    'description' => 'A long tavern monologue.',
+                    'notes' => 'Secret plot hook.',
+                ]],
+            ]],
+        ]);
+
+        $this->assertStringContainsString('**NPCs:**', $prompt);
+        $this->assertStringContainsString('Grumble', $prompt);
+        $this->assertStringContainsString('innkeep', $prompt);
+        $this->assertStringContainsString('@ Crossroads Inn', $prompt);
+        $this->assertStringContainsString('AC 8', $prompt);
+        $this->assertStringContainsString('THAC0 18', $prompt);
+        $this->assertStringNotContainsString('A long tavern monologue.', $prompt);
+        $this->assertStringNotContainsString('Secret plot hook.', $prompt);
+    }
 }

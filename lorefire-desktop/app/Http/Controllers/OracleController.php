@@ -19,7 +19,7 @@ class OracleController extends Controller
 {
     public function index(): Response
     {
-        $campaigns = Campaign::with(['characters', 'gameSessions' => fn ($q) => $q->latest()->limit(5)])->get();
+        $campaigns = Campaign::with(['characters', 'npcs', 'gameSessions' => fn ($q) => $q->latest()->limit(5)])->get();
         $provider  = AppSetting::get('llm_provider', 'none');
 
         return Inertia::render('Oracle/Index', [

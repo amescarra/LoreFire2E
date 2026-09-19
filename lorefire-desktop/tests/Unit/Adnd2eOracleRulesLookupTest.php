@@ -213,4 +213,102 @@ class Adnd2eOracleRulesLookupTest extends TestCase
         $this->assertStringContainsString('Adnd2e::encumbranceThresholds', $enc['markdown']);
         $this->assertStringContainsString('Adnd2e::movementAtLoad', $enc['markdown']);
     }
+
+    public function test_spell_catalog_headers_are_queryable_without_effect_prose(): void
+    {
+        $fireball = Adnd2eOracleRulesLookup::lookup('What level is Fireball for a mage?');
+        $this->assertTrue($fireball['resolved']);
+        $this->assertStringContainsString('Fireball: Mage L3 invocation', $fireball['markdown']);
+        $this->assertStringContainsString('V, S, M', $fireball['markdown']);
+        $this->assertStringContainsString('bat guano', $fireball['markdown']);
+        $this->assertStringContainsString('Adnd2eSpellCatalog', $fireball['markdown']);
+        $this->assertStringNotContainsStringIgnoringCase('explosive', $fireball['markdown']);
+
+        $cure = Adnd2eOracleRulesLookup::lookup('Cure Light Wounds cleric spell level?');
+        $this->assertTrue($cure['resolved']);
+        $this->assertStringContainsString('Cure Light Wounds: Cleric/Paladin L1 Healing', $cure['markdown']);
+
+        $list = Adnd2eOracleRulesLookup::lookup('List 1st-level mage spells');
+        $this->assertTrue($list['resolved']);
+        $this->assertStringContainsString('Mage L1 names:', $list['markdown']);
+        $this->assertStringContainsString('Magic Missile', $list['markdown']);
+        $this->assertStringNotContainsString('Fireball', $list['markdown']);
+    }
+
+    public function test_official_fireball_text_stays_unresolved_after_catalog(): void
+    {
+        $result = Adnd2eOracleRulesLookup::lookup('Quote the official Fireball spell text from the PHB page 145.');
+
+        $this->assertSame('rules', $result['intent']);
+        $this->assertFalse($result['resolved']);
+        $this->assertStringContainsString('could not resolve', $result['markdown']);
+        $this->assertStringContainsString('does not ingest PHB', $result['markdown']);
+        $this->assertStringNotContainsString('Fireball: Mage L3', $result['markdown']);
+        $this->assertStringNotContainsString('A fireball is an explosive burst of flame', $result['markdown']);
+    }
+
+    public function test_magical_equipment_and_artifact_lookups(): void
+    {
+        $plate = Adnd2eOracleRulesLookup::lookup('What is the AC of plate mail +1?');
+        $this->assertTrue($plate['resolved']);
+        $this->assertStringContainsString('Plate mail +1: armor AC 2', $plate['markdown']);
+        $this->assertStringContainsString('bonus +1', $plate['markdown']);
+        $this->assertStringContainsString('Adnd2eEquipmentCatalog', $plate['markdown']);
+        $this->assertStringNotContainsString('Plate mail base AC: 3', $plate['markdown']);
+
+        $sword = Adnd2eOracleRulesLookup::lookup('Long sword +2 damage?');
+        $this->assertTrue($sword['resolved']);
+        $this->assertStringContainsString('Long sword +2: weapon SM 1d8 / L 1d12 / speed 5', $sword['markdown']);
+        $this->assertStringContainsString('bonus +2', $sword['markdown']);
+
+        $artifact = Adnd2eOracleRulesLookup::lookup('Sword of Kas mechanical tags?');
+        $this->assertTrue($artifact['resolved']);
+        $this->assertStringContainsString('Sword of Kas:', $artifact['markdown']);
+        $this->assertStringContainsString('+6 hit/dmg', $artifact['markdown']);
+        $this->assertStringContainsString('Adnd2eEquipmentCatalog::artifact', $artifact['markdown']);
+        $this->assertStringNotContainsStringIgnoringCase('betrayed', $artifact['markdown']);
+    }
+
+    public function test_creature_stub_and_campaign_npc_lookups(): void
+    {
+        $orc = Adnd2eOracleRulesLookup::lookup('Orc THAC0 and AC?');
+        $this->assertTrue($orc['resolved']);
+        $this->assertStringContainsString('Orc stub: AC 6, HD 1, THAC0 19, dmg 1d8', $orc['markdown']);
+        $this->assertStringContainsString('Adnd2eCreatureStubs', $orc['markdown']);
+        $this->assertStringNotContainsString('Fighter 1 THAC0', $orc['markdown']);
+        $this->assertStringNotContainsStringIgnoringCase('ecology', $orc['markdown']);
+
+        $npc = Adnd2eOracleRulesLookup::lookup('What is Grumble THAC0 and AC?', [
+            'campaigns' => [[
+                'name' => 'Moonshae Run',
+                'npcs' => [[
+                    'name' => 'Grumble',
+                    'race' => 'Dwarf',
+                    'role' => 'innkeep',
+                    'location' => 'Crossroads Inn',
+                    'attitude' => 'friendly',
+                    'tags' => ['quest'],
+                    'stat_block' => ['ac' => 8, 'hd' => '3', 'thac0' => 18, 'dmg' => '1d6'],
+                    'description' => 'A long tavern monologue that must not appear in engine facts.',
+                    'notes' => 'Secret plot hook prose.',
+                ]],
+            ]],
+        ]);
+        $this->assertTrue($npc['resolved']);
+        $this->assertStringContainsString('Grumble', $npc['markdown']);
+        $this->assertStringContainsString('innkeep', $npc['markdown']);
+        $this->assertStringContainsString('AC 8', $npc['markdown']);
+        $this->assertStringContainsString('THAC0 18', $npc['markdown']);
+        $this->assertStringContainsString('campaign NPC', $npc['markdown']);
+        $this->assertStringNotContainsString('tavern monologue', $npc['markdown']);
+        $this->assertStringNotContainsString('Secret plot hook', $npc['markdown']);
+    }
+
+    public function test_who_is_npc_stays_narrative(): void
+    {
+        $this->assertFalse(Adnd2eOracleRulesLookup::looksLikeRulesQuery('Who is Grumble in the campaign notes?'));
+        $result = Adnd2eOracleRulesLookup::lookup('Who is Grumble in the campaign notes?');
+        $this->assertSame('narrative', $result['intent']);
+        $this->assertSame('', $result['markdown']);
+    }
 }

@@ -510,14 +510,14 @@ PROMPT;
         $model   = AppSetting::get('ollama_model', 'llama3');
 
         $response = Http::timeout(300)
-            ->post("{$baseUrl}/api/chat", [
+            ->post("{$baseUrl}/api/chat", \App\Support\Linux5090::withOllamaOptions([
                 'model'  => $model,
                 'stream' => false,
                 'messages' => [
                     ['role' => 'system', 'content' => $this->systemPrompt()],
                     ['role' => 'user',   'content' => $this->userPrompt($context, $transcript)],
                 ],
-            ]);
+            ]));
 
         if (! $response->successful()) {
             Log::warning('ExtractSessionDetails: Ollama error', ['status' => $response->status()]);

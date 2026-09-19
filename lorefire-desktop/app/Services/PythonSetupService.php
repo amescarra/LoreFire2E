@@ -110,6 +110,8 @@ class PythonSetupService
      *
      * Slow-path (async setup kicked off):
      *   - venv binary missing, or status is not_started / failed
+     *   - Linux x86_64 + nvidia-smi (linux-5090) uses CUDA wheels; other
+     *     platforms including Windows ARM stay on CPU unless --gpu is passed
      */
     public function bootCheck(): void
     {
@@ -125,7 +127,7 @@ class PythonSetupService
             return;
         }
 
-        $this->runSetupAsync();
+        $this->runSetupAsync(gpu: \App\Support\Linux5090::shouldUseCudaStack());
     }
 
     /**
@@ -199,6 +201,12 @@ class PythonSetupService
 
         if (! file_exists($setupScript)) {
             $this->failSetup("Setup script not found at: {$setupScript}");
+
+            return;
+        }
+
+        if (\App\Support\Linux5090::whisperxNeedsCpython312() && ! \App\Support\Linux5090::hasWhisperxCpython312()) {
+            $this->failSetup(\App\Support\Linux5090::missingPython312Message());
 
             return;
         }

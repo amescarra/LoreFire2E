@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AppSetting;
 use App\Services\PythonSetupService;
+use App\Support\Linux5090;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -42,6 +43,7 @@ class PythonSetupServiceTest extends TestCase
         if (file_exists($console)) {
             unlink($console);
         }
+        Linux5090::resetProbes();
         parent::tearDown();
     }
 
@@ -183,6 +185,30 @@ class PythonSetupServiceTest extends TestCase
         $cmd = $this->service->windowsAsyncCommand('php.exe', 'artisan', 'setup.log', true);
 
         $this->assertStringContainsString('--gpu', $cmd);
+    }
+
+    public function test_linux_run_setup_fails_without_python312(): void
+    {
+        if (! Linux5090::isLinuxX86()) {
+            $this->markTestSkipped('linux-5090 Python 3.12 gate is Linux x86_64 only.');
+        }
+
+        Linux5090::$python312Probe = fn () => false;
+        $this->service->runSetup();
+
+        $this->assertSame(PythonSetupService::STATUS_FAILED, AppSetting::get(PythonSetupService::SETTING_STATUS));
+        $this->assertStringContainsString('deadsnakes', (string) $this->service->getLastError());
+        $this->assertStringContainsString('python3.12', (string) $this->service->getLastError());
+    }
+
+    public function test_linux_async_gpu_flag_is_appended_without_changing_windows_cpu_default(): void
+    {
+        $linux = $this->service->buildAsyncCommand(true, 'Linux');
+        $windowsCpu = $this->service->buildAsyncCommand(false, 'Windows');
+
+        $this->assertStringContainsString('--gpu', $linux);
+        $this->assertStringNotContainsString('--gpu', $windowsCpu);
+        $this->assertStringContainsString('cmd /c start /b', $windowsCpu);
     }
 
     public function test_shared_payload_includes_log_and_reaps_stale_status(): void

@@ -144,14 +144,14 @@ class AskOracle implements ShouldQueue
         $model   = AppSetting::get('ollama_model', 'llama3');
 
         $response = Http::timeout(240)
-            ->post("{$baseUrl}/api/chat", [
+            ->post("{$baseUrl}/api/chat", \App\Support\Linux5090::withOllamaOptions([
                 'model'    => $model,
                 'stream'   => false,
                 'messages' => array_merge(
                     [['role' => 'system', 'content' => $this->systemPrompt]],
                     $this->messages
                 ),
-            ]);
+            ]));
 
         if (! $response->successful()) {
             Log::warning('AskOracle: Ollama error', ['status' => $response->status()]);

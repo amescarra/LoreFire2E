@@ -96,6 +96,13 @@ class WindowsArm64PhpTest extends TestCase
         $this->assertStringContainsString('php.exe from PATH', file_get_contents($indexJs));
 
         $this->assertFileExists($trait);
-        $this->assertStringContainsString('windowsArm64SystemPhp', file_get_contents($trait));
+        $traitSrc = file_get_contents($trait);
+        $this->assertStringContainsString('windowsArm64SystemPhp', $traitSrc);
+        $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $traitSrc);
+        $this->assertStringContainsString('nativephpPhpBinaryVersion', $traitSrc);
+        $this->assertStringContainsString('winArmServe', file_get_contents($phpJs));
+        $this->assertStringContainsString('linuxX64Serve', file_get_contents($phpJs));
+        $this->assertStringContainsString('Linux: launching system PHP', file_get_contents($indexJs));
+        $this->assertStringContainsString('Windows ARM64: launching system PHP', file_get_contents($indexJs));
     }
 }

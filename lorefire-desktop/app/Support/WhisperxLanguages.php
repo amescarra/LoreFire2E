@@ -125,6 +125,10 @@ class WhisperxLanguages
             $cmd[] = $hfToken;
         }
 
+        foreach (Linux5090::whisperxCliArgs() as $arg) {
+            $cmd[] = $arg;
+        }
+
         return $cmd;
     }
 }

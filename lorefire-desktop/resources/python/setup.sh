@@ -2,9 +2,14 @@
 # setup.sh -- Create a Python venv and install WhisperX for Lorefire.
 #
 # Usage:
-#   bash resources/python/setup.sh [--gpu]
+#   bash resources/python/setup.sh [--gpu] [--cpu]
 #
 #   --gpu  Install GPU (CUDA) versions of torch/torchaudio instead of CPU.
+#   --cpu  Force CPU wheels (overrides auto-detect and --gpu).
+#
+# Linux x86_64 (linux-5090): if neither flag is passed and nvidia-smi works,
+# CUDA 12.8 (cu128) wheels are installed automatically. Other platforms stay
+# CPU unless --gpu is passed. Windows ARM uses setup.ps1, not this file.
 #
 # Supported platforms (auto-detected):
 #   macOS arm64  (Apple Silicon)
@@ -32,6 +37,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/venv"
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
 GPU=false
+FORCE_CPU=false
 
 # Platform-specific paths inside the bundled python-build-standalone runtime
 # and inside the venv.  Windows (Git Bash / MSYS2) uses Scripts/ and .exe.
@@ -50,9 +56,23 @@ esac
 for arg in "$@"; do
   case "$arg" in
     --gpu) GPU=true ;;
+    --cpu) FORCE_CPU=true ;;
     *) echo "Unknown argument: $arg" && exit 1 ;;
   esac
 done
+
+if [ "$FORCE_CPU" = true ]; then
+  GPU=false
+  echo "==> --cpu: forcing CPU wheels"
+elif [ "$GPU" = false ] && [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+  # linux-5090 CUDA-first. macOS / Windows / ARM stay CPU unless --gpu.
+  if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    echo "==> linux-5090: NVIDIA driver detected — CUDA-first install"
+    GPU=true
+  else
+    echo "==> linux-5090: no NVIDIA driver — CPU fallback"
+  fi
+fi
 
 echo "==> Lorefire -- WhisperX Setup"
 echo "    Script dir : $SCRIPT_DIR"
@@ -73,14 +93,41 @@ if [ -x "$BUNDLED_RUNTIME" ]; then
 else
   echo "    Bundled runtime not found at $BUNDLED_RUNTIME"
   echo "    Falling back to system Python..."
-  for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
-    if command -v "$candidate" &>/dev/null; then
-      PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
-      echo "    Found system Python: $candidate ($PYTHON_VERSION)"
-      PYTHON_BIN="$candidate"
-      break
+  LINUX_5090=false
+  if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+    LINUX_5090=true
+  fi
+  if [ "$LINUX_5090" = true ]; then
+    # whisperx 3.2 pins ctranslate2==4.4.0 — no cp314 wheel. Never use 3.13+.
+    for candidate in python3.12; do
+      if command -v "$candidate" &>/dev/null; then
+        PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
+        echo "    Found system Python: $candidate ($PYTHON_VERSION)"
+        PYTHON_BIN="$candidate"
+        break
+      fi
+    done
+    if [ -z "$PYTHON_BIN" ]; then
+      echo "ERROR: WhisperX on linux-5090 requires Python 3.12."
+      echo "  System python3.14 cannot install ctranslate2==4.4.0 (from whisperx 3.2)."
+      echo "  Ubuntu Resolute archives have no python3.12. Install deadsnakes:"
+      echo "    sudo add-apt-repository -y ppa:deadsnakes/ppa"
+      echo "    sudo apt update"
+      echo "    sudo apt install -y python3.12 python3.12-venv python3.12-dev"
+      echo "  Then: rm -rf $VENV_DIR && php artisan python:setup --gpu"
+      echo "  Do not fall back to python3 / 3.14 for this venv."
+      exit 1
     fi
-  done
+  else
+    for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
+      if command -v "$candidate" &>/dev/null; then
+        PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
+        echo "    Found system Python: $candidate ($PYTHON_VERSION)"
+        PYTHON_BIN="$candidate"
+        break
+      fi
+    done
+  fi
 fi
 
 if [ -z "$PYTHON_BIN" ]; then
@@ -89,6 +136,15 @@ if [ -z "$PYTHON_BIN" ]; then
   echo "  To download it, run: bash $SCRIPT_DIR/download_runtime.sh  (or download_runtime.ps1 on Windows)"
   echo "  Or install Python 3.9+ system-wide and re-run this script."
   exit 1
+fi
+
+if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+  PY_MINOR=$("$PYTHON_BIN" -c "import sys; print(sys.version_info[1])")
+  if [ "$PY_MINOR" -ge 13 ]; then
+    echo "ERROR: Refusing Python 3.$PY_MINOR for WhisperX (ctranslate2==4.4.0 has no 3.14 wheel)."
+    echo "  Install python3.12 via deadsnakes (see lorefire-desktop/LINUX-5090.md)."
+    exit 1
+  fi
 fi
 
 # -- Check ffmpeg --------------------------------------------------------
@@ -109,6 +165,17 @@ if [ ! -d "$VENV_DIR" ]; then
   "$PYTHON_BIN" -m venv --copies "$VENV_DIR"
 else
   echo "==> Virtual environment already exists at $VENV_DIR"
+  if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] && [ -x "$VENV_BIN_DIR/python" ]; then
+    VENV_MINOR=$("$VENV_BIN_DIR/python" -c "import sys; print(sys.version_info[1])" 2>/dev/null || echo 0)
+    if [ "$VENV_MINOR" -ge 13 ]; then
+      echo "ERROR: existing venv is Python 3.$VENV_MINOR. WhisperX needs 3.12 (ctranslate2==4.4.0)."
+      echo "  rm -rf $VENV_DIR"
+      echo "  sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update"
+      echo "  sudo apt install -y python3.12 python3.12-venv python3.12-dev"
+      echo "  php artisan python:setup --gpu"
+      exit 1
+    fi
+  fi
 fi
 
 VENV_PYTHON="$VENV_BIN_DIR/python"
@@ -141,8 +208,22 @@ pip_install() {
 pip_install "Pinning pip to 24.0" 300 --upgrade pip==24.0 setuptools wheel
 
 # -- Install torch (CPU or CUDA) -----------------------------------------
-# GPU is optional. CPU wheels are the supported first-run path.
-if [ "$GPU" = true ]; then
+# GPU is optional on macOS / Windows. On Linux x86_64, CUDA 12.8 is first
+# when nvidia-smi works (Blackwell / RTX 5090 cannot use cu118).
+LINUX_5090_GPU=false
+if [ "$GPU" = true ] && [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+  LINUX_5090_GPU=true
+fi
+
+if [ "$LINUX_5090_GPU" = true ]; then
+  # Do not pin torch==2.5.1 — that build has no sm_120 / CUDA 12.8 support.
+  # TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD lets pyannote 3.x / WhisperX VAD load
+  # on torch 2.6+ (weights_only default changed).
+  export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
+  pip_install "Installing torch (CUDA 12.8, linux-5090 GPU path)" 900 \
+    torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+  REQ_FILE="$SCRIPT_DIR/requirements-linux-5090.txt"
+elif [ "$GPU" = true ]; then
   pip_install "Installing torch (CUDA 11.8, optional GPU path)" 900 \
     torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu118
 else
@@ -153,18 +234,30 @@ fi
 # -- Install WhisperX and remaining deps ---------------------------------
 pip_install "Installing WhisperX and dependencies" 1200 -r "$REQ_FILE"
 
+if [ "$LINUX_5090_GPU" = true ]; then
+  # whisperx / pyannote may pull a CPU torch from PyPI. Re-assert cu128.
+  pip_install "Re-asserting torch (CUDA 12.8, linux-5090)" 900 \
+    torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+fi
+
 # -- Pre-download WhisperX models (fail-soft) ----------------------------
 # Must not hang first-run setup. Models download on first transcription if this
 # step is skipped. Audio stays local either way.
 echo "==> Pre-downloading WhisperX base model (optional, 3 min cap)..."
+if [ "$LINUX_5090_GPU" = true ]; then
+  export LOREFIRE_PRELOAD_CUDA=1
+fi
 if command -v timeout >/dev/null 2>&1; then
   if ! timeout --foreground 180 "$VENV_PYTHON" -c "
 import os
+os.environ.setdefault('TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD', '1')
 cache = os.path.join(os.path.expanduser('~'), '.cache')
 os.environ['HF_HOME']    = os.path.join(cache, 'huggingface')
 os.environ['TORCH_HOME'] = os.path.join(cache, 'torch')
 import whisperx
-whisperx.load_model('base', device='cpu', compute_type='int8')
+device = 'cuda' if os.environ.get('LOREFIRE_PRELOAD_CUDA') == '1' else 'cpu'
+compute = 'float16' if device == 'cuda' else 'int8'
+whisperx.load_model('base', device=device, compute_type=compute)
 print('  base model OK')
 "; then
     echo "WARNING: model preload skipped. Models download on first local transcription."
@@ -177,6 +270,13 @@ fi
 echo "==> Verifying installation..."
 "$VENV_PYTHON" -c "import whisperx; print('  whisperx OK:', whisperx.__version__ if hasattr(whisperx,'__version__') else 'installed')"
 "$VENV_PYTHON" -c "import torch; print('  torch OK:', torch.__version__)"
+if [ "$LINUX_5090_GPU" = true ]; then
+  if ! "$VENV_PYTHON" -c "import torch; assert torch.cuda.is_available(), 'torch.cuda.is_available() is False'; print('  cuda OK:', torch.cuda.get_device_name(0))"; then
+    echo "ERROR: linux-5090 GPU install finished but torch cannot see CUDA."
+    echo "  Check nvidia-smi and the NVIDIA driver (570+ for RTX 5090)."
+    exit 1
+  fi
+fi
 
 echo ""
 echo "==> Setup complete."

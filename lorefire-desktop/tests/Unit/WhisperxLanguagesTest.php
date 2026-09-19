@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\AppSetting;
+use App\Support\Linux5090;
 use App\Support\WhisperxLanguages;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Symfony\Component\Process\Process;
@@ -11,6 +12,21 @@ use Tests\TestCase;
 class WhisperxLanguagesTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        putenv('LOREFIRE_LINUX5090_CUDA=0');
+        Linux5090::resetProbes();
+    }
+
+    protected function tearDown(): void
+    {
+        Linux5090::resetProbes();
+        putenv('LOREFIRE_LINUX5090_CUDA');
+        putenv('LOREFIRE_LINUX5090_VRAM_MB');
+        parent::tearDown();
+    }
 
     public function test_default_allowlist_is_english_and_spanish(): void
     {
@@ -63,6 +79,26 @@ class WhisperxLanguagesTest extends TestCase
         $this->assertContains('--languages', $cmd);
         $this->assertContains('en,es', $cmd);
         $this->assertNotContains('--language', $cmd);
+        $this->assertNotContains('cuda', $cmd);
+    }
+
+    public function test_cli_adds_cuda_flags_only_on_linux_5090_stack(): void
+    {
+        if (! Linux5090::isLinuxX86()) {
+            $this->markTestSkipped('linux-5090 CLI flags apply on Linux x86_64.');
+        }
+
+        putenv('LOREFIRE_LINUX5090_CUDA=1');
+        putenv('LOREFIRE_LINUX5090_VRAM_MB=32607');
+
+        $cmd = WhisperxLanguages::command('python', 'run_whisperx.py', 'a.webm', 'out.json');
+
+        $this->assertContains('--device', $cmd);
+        $this->assertContains('cuda', $cmd);
+        $this->assertContains('--compute-type', $cmd);
+        $this->assertContains('float16', $cmd);
+        $this->assertContains('--batch-size', $cmd);
+        $this->assertContains('32', $cmd);
     }
 
     public function test_python_clamp_rejects_french_and_coerces_en_models(): void

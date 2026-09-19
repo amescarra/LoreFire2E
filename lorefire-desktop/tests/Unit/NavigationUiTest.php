@@ -37,7 +37,7 @@ class NavigationUiTest extends TestCase
         $this->assertStringContainsString('data-testid="nav-back"', $layout);
         $this->assertStringContainsString('goBack()', $layout);
         $this->assertStringContainsString('drag-region flex-1 h-full min-w-[64px]', $layout);
-        $this->assertStringContainsString('<WindowControls />', $layout);
+        $this->assertStringContainsString('<WindowControls className="-mr-6" />', $layout);
         $this->assertStringNotContainsString('className="drag-region shrink-0 flex items-center gap-3 px-6 h-12 border-b"', $layout);
 
         $this->assertStringContainsString('installHistoryGuard', $app);

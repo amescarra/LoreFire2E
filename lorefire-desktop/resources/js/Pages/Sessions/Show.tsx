@@ -222,6 +222,7 @@ export default function Show({ campaign, session, characters, transcriptSegments
     startRecording,
     stopRecording,
     registerOnFinalized,
+    activeInputLabel,
   } = useRecording()
 
   const [transcriptOpen, setTranscriptOpen] = useState(false)
@@ -660,6 +661,11 @@ export default function Show({ campaign, session, characters, transcriptSegments
                     ))}
                   </div>
                   <span className="text-xs text-[var(--color-danger)] font-mono">{fmtTime(recordingSeconds)}</span>
+                  {activeInputLabel && (
+                    <span className="text-[10px] text-[var(--color-text-dim)] font-mono truncate max-w-[20rem]">
+                      {activeInputLabel}
+                    </span>
+                  )}
                 </div>
               )}
 

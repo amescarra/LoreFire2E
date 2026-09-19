@@ -209,6 +209,7 @@ Route::get('oracle/replies/{reply}', [OracleController::class, 'replyStatus'])->
 // Settings
 Route::get('settings', [AppSettingController::class, 'index'])->name('settings.index');
 Route::post('settings', [AppSettingController::class, 'update'])->name('settings.update');
+Route::get('settings/audio-capture', [AppSettingController::class, 'audioCapture'])->name('settings.audio-capture');
 
 // Serve files stored on the local disk (portraits, party photos, etc.)
 Route::get('storage-file/{path}', [StorageFileController::class, 'serve'])

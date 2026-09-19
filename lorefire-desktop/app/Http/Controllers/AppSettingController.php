@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
+use App\Support\LinuxAudioDevices;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Inertia\Inertia;
@@ -29,6 +31,13 @@ class AppSettingController extends Controller
         'image_gen_model',        // e.g. cogview-4-flash, dall-e-3 (not used for comfyui)
         'image_gen_zai_api_key',  // separate standard-plan key for z.ai image generation
         'comfyui_base_url',       // e.g. http://localhost:8188
+        'audio_input_device',     // Chromium/Electron deviceId (empty = auto)
+        'audio_input_label',      // Human label used to rematch after deviceId churn
+        'audio_input_pulse_name', // PipeWire/Pulse source name (Linux only)
+        'audio_output_device',
+        'audio_output_label',
+        'audio_output_pulse_name',
+        'audio_auto_prefer',      // 1 = prefer Anker PowerConf S500 / bluez_input on Linux
     ];
 
     public function index(): Response
@@ -41,7 +50,13 @@ class AppSettingController extends Controller
         return Inertia::render('Settings/Index', [
             'settings' => $settings,
             'whisperx_languages' => \App\Support\WhisperxLanguages::csv(),
+            'audio_capture' => LinuxAudioDevices::captureConfig(),
         ]);
+    }
+
+    public function audioCapture(): JsonResponse
+    {
+        return response()->json(LinuxAudioDevices::captureConfig());
     }
 
     public function update(Request $request): RedirectResponse
@@ -64,6 +79,13 @@ class AppSettingController extends Controller
             'image_gen_model'     => 'nullable|string|max:100',
             'image_gen_zai_api_key' => 'nullable|string|max:255',
             'comfyui_base_url'    => 'nullable|url|max:255',
+            'audio_input_device'  => 'nullable|string|max:255',
+            'audio_input_label'   => 'nullable|string|max:255',
+            'audio_input_pulse_name' => 'nullable|string|max:255',
+            'audio_output_device' => 'nullable|string|max:255',
+            'audio_output_label'  => 'nullable|string|max:255',
+            'audio_output_pulse_name' => 'nullable|string|max:255',
+            'audio_auto_prefer'   => 'nullable|in:0,1,true,false',
         ]);
 
         // Derive zai_base_url from the plan selection — never store a user-supplied raw URL.
@@ -79,6 +101,9 @@ class AppSettingController extends Controller
             $data['whisperx_languages'] = \App\Support\WhisperxLanguages::csv(
                 \App\Support\WhisperxLanguages::parse($data['whisperx_languages'] ?? '')
             );
+        }
+        if (array_key_exists('audio_auto_prefer', $data) && $data['audio_auto_prefer'] !== null) {
+            $data['audio_auto_prefer'] = filter_var($data['audio_auto_prefer'], FILTER_VALIDATE_BOOLEAN) ? '1' : '0';
         }
 
         foreach ($data as $key => $value) {

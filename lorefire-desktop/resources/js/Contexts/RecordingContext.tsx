@@ -10,6 +10,7 @@
  */
 
 import React, { createContext, useContext, useRef, useState, useCallback } from 'react'
+import { fetchAudioCaptureConfig, openCaptureStream } from '@/lib/audioCapture'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ export interface RecordingContextValue {
   activeCampaignId: number | null
   /** URL to the live session overview page for the active session. */
   activeLiveUrl: string | null
+  /** Label of the mic actually opened (S500 / override / default). */
+  activeInputLabel: string | null
 
   startRecording: (sessionId: number, campaignId: number, onFinalized: (audioPath: string | null) => void) => Promise<void>
   stopRecording: () => void
@@ -67,6 +70,7 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
   const [activeCampaignId, setActiveCampaignId] = useState<number | null>(null)
+  const [activeInputLabel, setActiveInputLabel] = useState<string | null>(null)
 
   // ── Stable refs (never cause re-renders, survive navigation) ─────────────
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -127,7 +131,10 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
     if (isRecording) return // already recording
 
     try {
-      const stream   = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const config = await fetchAudioCaptureConfig()
+      const opened = await openCaptureStream(config)
+      const stream = opened.stream
+      setActiveInputLabel(opened.label)
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
       mimeTypeRef.current = mimeType
 
@@ -182,6 +189,7 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
 
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
     setIsRecording(false)
+    setActiveInputLabel(null)
 
     mr.onstop = async () => {
       // Stop mic tracks immediately so the OS recording indicator goes away
@@ -265,6 +273,7 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
     activeLiveUrl: activeSessionId && activeCampaignId
       ? `/campaigns/${activeCampaignId}/sessions/${activeSessionId}/live`
       : null,
+    activeInputLabel,
     startRecording,
     stopRecording,
     registerOnFinalized,

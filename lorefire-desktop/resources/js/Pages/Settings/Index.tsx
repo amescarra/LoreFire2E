@@ -7,15 +7,41 @@ import { Input, Select } from '@/Components/Input'
 import { RuneDivider } from '@/Components/RuneDivider'
 import { SetupLog } from '@/Components/SetupLog'
 import { AppSettings, PageProps } from '@/types'
+import { fetchAudioCaptureConfig, type AudioCaptureConfig } from '@/lib/audioCapture'
+
+interface LinuxAudioDevice {
+  name?: string
+  description?: string
+  label?: string
+  preferred?: boolean
+  sample_spec?: string
+  rate?: number | null
+  channels?: number | null
+  active_profile?: string
+  profiles?: string[]
+}
 
 interface Props {
   settings: AppSettings
   whisperx_languages?: string
+  audio_capture?: AudioCaptureConfig & {
+    pipewire?: {
+      linux?: boolean
+      sources?: LinuxAudioDevice[]
+      sinks?: LinuxAudioDevice[]
+      cards?: LinuxAudioDevice[]
+      warnings?: string[]
+      missing_packages?: string[]
+      preferred_source?: LinuxAudioDevice | null
+      preferred_sink?: LinuxAudioDevice | null
+      preferred_card?: LinuxAudioDevice | null
+    }
+  }
 }
 
 type PythonStatus = 'not_started' | 'running' | 'ready' | 'failed'
 
-export default function Index({ settings, whisperx_languages }: Props) {
+export default function Index({ settings, whisperx_languages, audio_capture }: Props) {
   const { python_setup } = usePage<PageProps>().props
   const [pythonStatus, setPythonStatus] = useState<PythonStatus>(python_setup?.status ?? 'not_started')
   const [pythonError, setPythonError] = useState<string | null>(python_setup?.error ?? null)
@@ -39,7 +65,47 @@ export default function Index({ settings, whisperx_languages }: Props) {
     image_gen_model:      settings.image_gen_model ?? '',
     image_gen_zai_api_key: settings.image_gen_zai_api_key ?? '',
     comfyui_base_url:     settings.comfyui_base_url ?? 'http://localhost:8188',
+    audio_input_device:   settings.audio_input_device ?? '',
+    audio_input_label:    settings.audio_input_label ?? '',
+    audio_input_pulse_name: settings.audio_input_pulse_name ?? '',
+    audio_output_device:  settings.audio_output_device ?? '',
+    audio_output_label:   settings.audio_output_label ?? '',
+    audio_output_pulse_name: settings.audio_output_pulse_name ?? '',
+    audio_auto_prefer:    (settings.audio_auto_prefer ?? '1') === '0' ? '0' : '1',
   })
+
+  const [browserInputs, setBrowserInputs] = useState<MediaDeviceInfo[]>([])
+  const [browserOutputs, setBrowserOutputs] = useState<MediaDeviceInfo[]>([])
+  const [audioStatus, setAudioStatus] = useState<string | null>(null)
+  const [liveCapture, setLiveCapture] = useState(audio_capture ?? null)
+
+  const refreshBrowserDevices = async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setAudioStatus('This window cannot list microphones.')
+      return
+    }
+    try {
+      const probe = await navigator.mediaDevices.getUserMedia({ audio: true })
+      probe.getTracks().forEach(t => t.stop())
+    } catch {
+      setAudioStatus('Grant microphone permission to list devices. On Linux the S500 must be headset-head-unit, not A2DP.')
+    }
+    try {
+      const listed = await navigator.mediaDevices.enumerateDevices()
+      setBrowserInputs(listed.filter(d => d.kind === 'audioinput'))
+      setBrowserOutputs(listed.filter(d => d.kind === 'audiooutput'))
+      const cfg = await fetchAudioCaptureConfig()
+      if (cfg) setLiveCapture(cfg)
+      setAudioStatus(null)
+    } catch {
+      setAudioStatus('Could not enumerate audio devices.')
+    }
+  }
+
+  useEffect(() => {
+    refreshBrowserDevices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Poll when running via JSON so Inertia visits are not cancelled.
   useEffect(() => {
@@ -167,6 +233,102 @@ export default function Index({ settings, whisperx_languages }: Props) {
               })}
             </div>
           </div>
+
+          {/* ── Session audio (Linux prefers Anker PowerConf S500) ── */}
+          <RuneDivider label="Session Audio" />
+
+          <p className="text-xs text-[var(--color-text-dim)] -mt-2 leading-relaxed">
+            Live capture is Electron <code className="text-[var(--color-arcane)] text-[10px]">getUserMedia</code>
+            {' '}via PipeWire/Pulse — not a raw ALSA <code className="text-[var(--color-arcane)] text-[10px]">hw:</code> card.
+            Bluetooth speakerphones need the BlueZ <strong>headset-head-unit</strong> (Handsfree) profile for a mic; A2DP is playback-only. No Anker driver package.
+          </p>
+
+          <Select
+            label="Microphone"
+            value={data.audio_input_device === '' && data.audio_input_label === '' ? '' : `${data.audio_input_device}||${data.audio_input_label}`}
+            onChange={e => {
+              const raw = e.target.value
+              if (raw === '') {
+                setData('audio_input_device', '')
+                setData('audio_input_label', '')
+                setData('audio_input_pulse_name', '')
+                return
+              }
+              const [id, ...rest] = raw.split('||')
+              const label = rest.join('||')
+              const pulse = (liveCapture?.pipewire?.sources ?? []).find(s =>
+                (s.label || s.description || '').toLowerCase().includes(label.toLowerCase())
+                || label.toLowerCase().includes((s.label || s.description || '').toLowerCase())
+              )
+              setData('audio_input_device', id)
+              setData('audio_input_label', label)
+              setData('audio_input_pulse_name', pulse?.name ?? '')
+            }}
+            hint="Empty = auto. On linux-5090 auto prefers Anker PowerConf S500 / bluez_input when that device is connected."
+          >
+            <option value="">Auto {liveCapture?.linux ? '(prefer Anker PowerConf S500)' : '(system default)'}</option>
+            {browserInputs.map(d => (
+              <option key={d.deviceId} value={`${d.deviceId}||${d.label || d.deviceId}`}>
+                {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+              </option>
+            ))}
+          </Select>
+
+          <Select
+            label="Playback"
+            value={data.audio_output_device === '' && data.audio_output_label === '' ? '' : `${data.audio_output_device}||${data.audio_output_label}`}
+            onChange={e => {
+              const raw = e.target.value
+              if (raw === '') {
+                setData('audio_output_device', '')
+                setData('audio_output_label', '')
+                setData('audio_output_pulse_name', '')
+                return
+              }
+              const [id, ...rest] = raw.split('||')
+              const label = rest.join('||')
+              const pulse = (liveCapture?.pipewire?.sinks ?? []).find(s =>
+                (s.label || s.description || '').toLowerCase().includes(label.toLowerCase())
+                || label.toLowerCase().includes((s.label || s.description || '').toLowerCase())
+              )
+              setData('audio_output_device', id)
+              setData('audio_output_label', label)
+              setData('audio_output_pulse_name', pulse?.name ?? '')
+            }}
+            hint="Sets the remembered speaker. On Linux also run scripts/linux-5090-audio.sh --apply so PipeWire default sink/source follow the S500."
+          >
+            <option value="">Auto {liveCapture?.linux ? '(prefer Anker PowerConf S500)' : '(system default)'}</option>
+            {browserOutputs.map(d => (
+              <option key={d.deviceId} value={`${d.deviceId}||${d.label || d.deviceId}`}>
+                {d.label || `Speaker ${d.deviceId.slice(0, 8)}`}
+              </option>
+            ))}
+          </Select>
+
+          <label className="flex items-start gap-2 text-xs text-[var(--color-text-dim)] cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={data.audio_auto_prefer === '1'}
+              onChange={e => setData('audio_auto_prefer', e.target.checked ? '1' : '0')}
+            />
+            <span>
+              Auto-prefer <strong>Anker PowerConf S500</strong> / <code className="text-[var(--color-arcane)]">bluez_input</code> on Linux when no manual mic is saved.
+            </span>
+          </label>
+
+          <div className="flex gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={refreshBrowserDevices}>
+              Refresh devices
+            </Button>
+          </div>
+          {audioStatus && (
+            <p className="text-xs text-[var(--color-warning)]">{audioStatus}</p>
+          )}
+
+          {liveCapture?.linux && (
+            <LinuxAudioStatus capture={liveCapture} inputs={browserInputs} />
+          )}
 
           <Input
             label="HuggingFace Token"
@@ -462,6 +624,67 @@ export default function Index({ settings, whisperx_languages }: Props) {
 
       </div>
     </AppLayout>
+  )
+}
+
+function LinuxAudioStatus({
+  capture,
+  inputs,
+}: {
+  capture: NonNullable<Props['audio_capture']>
+  inputs: MediaDeviceInfo[]
+}) {
+  const pw = capture.pipewire
+  const missing = pw?.missing_packages ?? []
+  const warnings = pw?.warnings ?? []
+  const card = pw?.preferred_card
+  const source = pw?.preferred_source
+  const sink = pw?.preferred_sink
+  const electronSeesS500 = inputs.some(d =>
+    (d.label || '').toLowerCase().includes('powerconf s500')
+    || (d.label || '').toLowerCase().includes('anker powerconf')
+  )
+
+  return (
+    <div
+      className="rounded border p-3 flex flex-col gap-2"
+      style={{ background: 'var(--color-deep)', borderColor: 'var(--color-border)' }}
+    >
+      <p className="text-[10px] uppercase tracking-widest font-heading" style={{ color: 'var(--color-text-dim)' }}>
+        linux-5090 PipeWire / BlueZ
+      </p>
+      <ul className="text-xs text-[var(--color-text-dim)] flex flex-col gap-1">
+        <li>Preferred: Anker PowerConf S500 (84:D3:52:EE:10:E3)</li>
+        <li>
+          PipeWire source:{' '}
+          {source ? `${source.description || source.label} (${source.name}${source.sample_spec ? `, ${source.sample_spec}` : ''})` : 'not visible — check Handsfree profile'}
+        </li>
+        <li>
+          PipeWire sink:{' '}
+          {sink ? `${sink.description || sink.label} (${sink.name})` : 'not visible'}
+        </li>
+        <li>
+          BlueZ profile:{' '}
+          {card?.active_profile || 'unknown'}
+          {card?.profiles?.length ? ` (available: ${card.profiles.join(', ')})` : ''}
+        </li>
+        <li>Electron sees S500 mic: {electronSeesS500 ? 'yes' : 'no — grant permission or switch off A2DP'}</li>
+      </ul>
+      {warnings.map(w => (
+        <p key={w} className="text-xs text-[var(--color-warning)]">{w}</p>
+      ))}
+      {missing.length > 0 && (
+        <p className="text-xs text-[var(--color-warning)]">
+          Missing packages: <code className="text-[var(--color-arcane)]">{missing.join(' ')}</code>
+          . Install with <code className="text-[var(--color-arcane)]">sudo apt install -y {missing.join(' ')}</code>
+        </p>
+      )}
+      <p className="text-[10px] text-[var(--color-text-dim)] leading-relaxed">
+        Helper: <code className="text-[var(--color-arcane)]">bash lorefire-desktop/scripts/linux-5090-audio.sh --apply</code>
+        {' '}then verify with <code className="text-[var(--color-arcane)]">wpctl status</code> / <code className="text-[var(--color-arcane)]">pactl list sources short</code>.
+        See LINUX-5090.md § Anker PowerConf S500.
+      </p>
+    </div>
   )
 }
 

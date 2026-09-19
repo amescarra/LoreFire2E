@@ -36,7 +36,6 @@ sudo apt install -y \
   composer \
   nodejs npm \
   python3 python3-venv python3-pip python3-dev \
-  python3.12 python3.12-venv python3.12-dev \
   ffmpeg \
   sqlite3 \
   ubuntu-drivers-common
@@ -72,11 +71,17 @@ Confirm:
 ```bash
 php -v          # 8.4+ (8.5 is fine on Resolute)
 node -v         # 20+
-python3.12 --version   # preferred for WhisperX (Resolute's python3 is 3.14)
+python3 --version      # Resolute archives ship 3.14 only — that is fine for first smoke
 composer -V
 ```
 
-Resolute’s default `python3` is **3.14**. WhisperX / ctranslate2 wheels are unreliable there. `setup.sh` prefers `python3.12` or `python3.11` when they are on PATH. Install `python3.12` / `python3.12-venv` as above. If a 3.14 venv already exists, delete it before re-running setup:
+Resolute’s Ubuntu archives have **`python3` = 3.14** and **no** `python3.12` package. Do **not** `apt install python3.12` from the distro — apt will fail with “Unable to locate package”.
+
+`setup.sh` uses `python3.12` or `python3.11` **only if they are already on PATH**. Otherwise it uses system `python3` (3.14) with the linux-5090 requirements (whisperx chooses `ctranslate2==4.4.0`). That is the first-smoke path.
+
+Optional (not required) if you later want 3.12: [deadsnakes](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) **does** publish Resolute, including `python3.12` (`3.12.14-1+resolute1` as of 2026-08). Or use pyenv / uv. Do not add deadsnakes unless you want that extra interpreter.
+
+If a previous WhisperX install failed mid-pip, delete the half-built venv and re-run (still OK on 3.14):
 
 ```bash
 rm -rf lorefire-desktop/resources/python/venv

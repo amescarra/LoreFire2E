@@ -93,35 +93,23 @@ if [ -x "$BUNDLED_RUNTIME" ]; then
 else
   echo "    Bundled runtime not found at $BUNDLED_RUNTIME"
   echo "    Falling back to system Python..."
-  LINUX_5090=false
-  if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
-    LINUX_5090=true
-  fi
+  # Prefer 3.12/3.11 when present. Ubuntu Resolute archives have no python3.12 —
+  # only python3 (3.14). Do not skip 3.14; that is the first-smoke interpreter.
   for candidate in python3.12 python3.11 python3.10 python3.9 python3 python; do
     if command -v "$candidate" &>/dev/null; then
       PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
-      if [ "$LINUX_5090" = true ]; then
+      echo "    Found system Python: $candidate ($PYTHON_VERSION)"
+      if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ]; then
         PY_MINOR=$("$candidate" -c "import sys; print(sys.version_info[1])")
         if [ "$PY_MINOR" -ge 13 ]; then
-          echo "    Skipping $candidate ($PYTHON_VERSION) — linux-5090 prefers 3.12/3.11 (WhisperX wheels; Resolute python3 is 3.14)"
-          continue
+          echo "    linux-5090: using system $candidate (Resolute has no archive python3.12)."
+          echo "    First smoke is OK on 3.14 with requirements-linux-5090.txt (whisperx pins ctranslate2)."
         fi
       fi
-      echo "    Found system Python: $candidate ($PYTHON_VERSION)"
       PYTHON_BIN="$candidate"
       break
     fi
   done
-  if [ -z "$PYTHON_BIN" ] && [ "$LINUX_5090" = true ]; then
-    for candidate in python3 python; do
-      if command -v "$candidate" &>/dev/null; then
-        PYTHON_VERSION=$("$candidate" -c "import sys; print(sys.version_info[:2])")
-        echo "    WARNING: using $candidate ($PYTHON_VERSION). Install python3.12 python3.12-venv for reliable WhisperX wheels."
-        PYTHON_BIN="$candidate"
-        break
-      fi
-    done
-  fi
 fi
 
 if [ -z "$PYTHON_BIN" ]; then
@@ -153,10 +141,7 @@ else
   if [ "$(uname -s)" = "Linux" ] && [ "$(uname -m)" = "x86_64" ] && [ -x "$VENV_BIN_DIR/python" ]; then
     VENV_MINOR=$("$VENV_BIN_DIR/python" -c "import sys; print(sys.version_info[1])" 2>/dev/null || echo 0)
     if [ "$VENV_MINOR" -ge 13 ]; then
-      echo "WARNING: existing venv is Python 3.$VENV_MINOR. WhisperX/ctranslate2 wheels are flaky on 3.14."
-      echo "  sudo apt install -y python3.12 python3.12-venv"
-      echo "  rm -rf $VENV_DIR"
-      echo "  then re-run php artisan python:setup --gpu"
+      echo "    Existing venv is Python 3.$VENV_MINOR (Resolute default). Continuing — do not apt-install python3.12 from Ubuntu archives (package does not exist)."
     fi
   fi
 fi

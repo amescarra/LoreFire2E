@@ -139,8 +139,9 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('CUDA 11.8, optional GPU path', $sh);
         $this->assertStringContainsString('torch==2.5.1', $sh);
         $this->assertStringContainsString('pip==24.0', $sh);
-        $this->assertStringContainsString('python3.12', $sh);
-        $this->assertStringContainsString('Skipping', $sh);
+        $this->assertStringContainsString('python3.12 python3.11', $sh);
+        $this->assertStringContainsString('Resolute has no archive python3.12', $sh);
+        $this->assertStringNotContainsString('sudo apt install -y python3.12', $sh);
         $req5090 = file_get_contents(dirname(__DIR__, 2).'/resources/python/requirements-linux-5090.txt');
         $this->assertIsString($req5090);
         $this->assertDoesNotMatchRegularExpression('/^ctranslate2>=/m', $req5090);
@@ -163,8 +164,10 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('Do **not** add `ppa:ondrej/php`', $md);
         $this->assertStringContainsString('ondrej-ubuntu-php-*.list', $md);
         $this->assertStringContainsString('Noble (24.04) and Jammy (22.04) only', $md);
-        $this->assertStringContainsString('python3.12 python3.12-venv', $md);
+        $this->assertStringContainsString('no** `python3.12` package', $md);
         $this->assertStringContainsString('3.14', $md);
+        $this->assertStringContainsString('deadsnakes', $md);
+        $this->assertStringNotContainsString('apt install python3.12 python3.12-venv python3.12-dev', $md);
 
         $this->assertStringContainsString('ubuntu_codename', $sh);
         $this->assertStringContainsString('print_php_install_help', $sh);

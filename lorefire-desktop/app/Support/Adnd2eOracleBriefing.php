@@ -46,6 +46,12 @@ class Adnd2eOracleBriefing
         $specMem = Adnd2e::memorizationCapacity('Mage', 1, 10, 'Illusionist');
         $mageL1 = $mageMem[1] ?? 0;
         $specL1 = $specMem[1] ?? 0;
+        $leatherAc = Adnd2e::armorBaseAc('leather');
+        $chainAc = Adnd2e::armorBaseAc('chain mail');
+        $plateAc = Adnd2e::armorBaseAc('plate mail');
+        $longSword = Adnd2e::weaponStats('long sword');
+        $clericSpheres = Adnd2e::priestSpheres('Cleric');
+        $str10enc = Adnd2e::encumbranceThresholds(10);
 
         $lines = [
             '## Lorefire 2E procedures (app engine)',
@@ -55,8 +61,10 @@ class Adnd2eOracleBriefing
             '### Combat',
             '- Lower THAC0 is better. Warrior (Fighter, Paladin, Ranger) THAC0 at 1/5/10: '.$w1.'/'.$w5.'/'.$w10.'. Priest (Cleric, Druid) at 1/4: '.$p1.'/'.$p4.'. Rogue (Thief, Bard, and Psionicist) at 1/5: '.$r1.'/'.$r5.'. Wizard (Mage) at 1/6: '.$m1.'/'.$m6.'.',
             '- Armor Class is descending (10 unarmored; lower is better). Number needed on d20 = THAC0 minus descending AC. Example: THAC0 20 vs AC 10 needs '.$needUnarmored.'; vs AC 0 needs '.$needAc0.'. This app treats 1 as a miss and 20 as a hit.',
+            '- Armor base AC: leather '.$leatherAc.', chain mail '.$chainAc.', plate mail '.$plateAc.'. Shield '.Adnd2e::SHIELD_AC_BONUS.'.',
             '- Hit dice by group: warrior '.$warriorHd.', priest '.$priestHd.', rogue '.$rogueHd.', wizard '.$wizardHd.'.',
-            '- Initiative: d10, lower acts first. Dexterity reaction is subtracted. Weapon speed is a thin name lookup on the sheet (not a full weapon-vs-AC table).',
+            '- Initiative: d10, lower acts first. Dexterity reaction is subtracted. Long sword SM/L/speed: '.($longSword['sm'] ?? '?').'/'.($longSword['l'] ?? '?').'/'.($longSword['speed'] ?? '?').'.',
+            '- STR 10 encumbrance none/severe lb: '.$str10enc['none'].'/'.$str10enc['severe'].'. Movement drops by category (none / light / moderate / heavy / severe).',
             '',
             '### Saves, rest, vitality',
             '- Five save categories (roll d20 >= target): '.$saves.'.',
@@ -66,6 +74,7 @@ class Adnd2eOracleBriefing
             '',
             '### Magic',
             '- Vancian memorization (counts by spell level). A 1st-level generalist Mage memorizes '.$mageL1.' first-level spell. A specialist (school recorded as kit) memorizes '.$specL1.' at that level (one extra per school level they can already memorize). Priests may gain extra first- and second-level capacity from high Wisdom.',
+            '- Cleric sphere tags major: '.implode(', ', $clericSpheres['major']).'; minor: '.implode(', ', $clericSpheres['minor']).'. Names only.',
             '- Classes in this app: '.$classes.'. Races: '.$races.'.',
             '- Psionicist is a class (aliases: Psion, Psionic, Psionics). Combat figures use the rogue group. PSP totals and typed power names are sheet fields the player fills; they are not simulated. Do not invent 5th Edition psionics. Do not treat Psionicist as a kit.',
             '',

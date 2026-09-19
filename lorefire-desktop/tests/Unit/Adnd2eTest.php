@@ -246,6 +246,103 @@ class Adnd2eTest extends TestCase
         $this->assertNull(Adnd2e::weaponSpeed('Mysterious orb'));
     }
 
+    public function test_weapon_stats_include_dice_and_speed(): void
+    {
+        $long = Adnd2e::weaponStats('long sword');
+        $this->assertNotNull($long);
+        $this->assertSame('1d8', $long['sm']);
+        $this->assertSame('1d12', $long['l']);
+        $this->assertSame(5, $long['speed']);
+        $this->assertSame(Adnd2e::weaponSpeed('Dagger'), Adnd2e::weaponStats('Dagger')['speed'] ?? null);
+        $this->assertNotEmpty(Adnd2e::weaponCatalog());
+    }
+
+    public function test_armor_base_ac_and_shield_bonus(): void
+    {
+        $this->assertSame(10, Adnd2e::armorBaseAc('none'));
+        $this->assertSame(8, Adnd2e::armorBaseAc('leather'));
+        $this->assertSame(5, Adnd2e::armorBaseAc('chain mail'));
+        $this->assertSame(3, Adnd2e::armorBaseAc('plate mail'));
+        $this->assertSame(1, Adnd2e::armorBaseAc('full plate'));
+        $this->assertSame(4, Adnd2e::descendingArmorClass('chain mail', true));
+        $this->assertSame(-1, Adnd2e::SHIELD_AC_BONUS);
+        $this->assertNull(Adnd2e::armorBaseAc('Mysterious robe'));
+    }
+
+    public function test_thac0_progression_covers_all_groups_to_20(): void
+    {
+        $fighter = Adnd2e::thac0Progression('Fighter');
+        $this->assertCount(20, $fighter);
+        $this->assertSame(20, $fighter[1]);
+        $this->assertSame(16, $fighter[5]);
+        $this->assertSame(11, $fighter[10]);
+        $this->assertSame(Adnd2e::thac0('Paladin', 7), Adnd2e::thac0('Fighter', 7));
+        $this->assertSame(Adnd2e::thac0('Ranger', 3), Adnd2e::thac0('Fighter', 3));
+        $this->assertSame(Adnd2e::thac0('Druid', 4), Adnd2e::thac0('Cleric', 4));
+        $this->assertSame(Adnd2e::thac0('Bard', 5), Adnd2e::thac0('Thief', 5));
+        $this->assertSame(Adnd2e::thac0('Psionicist', 9), Adnd2e::thac0('Thief', 9));
+        $this->assertSame(19, Adnd2e::thac0('Mage', 6));
+    }
+
+    public function test_saving_throw_bands_and_category_lookup(): void
+    {
+        $this->assertSame(14, Adnd2e::savingThrow('Fighter', 1, 'paralyzation'));
+        $bands = Adnd2e::savingThrowBands('Fighter');
+        $this->assertSame(1, $bands[0]['from']);
+        $this->assertSame(2, $bands[0]['to']);
+        $this->assertSame(14, $bands[0]['saves']['paralyzation']);
+        $this->assertSame(Adnd2e::savingThrows('Cleric', 1), Adnd2e::savingThrows('Druid', 1));
+        $this->assertSame(Adnd2e::savingThrows('Thief', 8), Adnd2e::savingThrows('Bard', 8));
+    }
+
+    public function test_priest_spheres_are_tag_lists(): void
+    {
+        $cleric = Adnd2e::priestSpheres('Cleric');
+        $this->assertContains('Healing', $cleric['major']);
+        $this->assertContains('Elemental', $cleric['minor']);
+        $this->assertNotContains('Animal', $cleric['major']);
+        $druid = Adnd2e::priestSpheres('Druid');
+        $this->assertContains('Weather', $druid['major']);
+        $this->assertContains('Divination', $druid['minor']);
+        $this->assertSame(['Combat', 'Divination', 'Healing', 'Protection'], Adnd2e::priestSpheres('Paladin')['minor']);
+        $this->assertSame(['major' => [], 'minor' => []], Adnd2e::priestSpheres('Mage'));
+        $this->assertSame($cleric, Adnd2e::defaultsFor('Cleric', 1, 'Human')['priest_spheres']);
+    }
+
+    public function test_wizard_and_priest_memorization_progression(): void
+    {
+        $wizard = Adnd2e::memorizationProgression('Mage', 10);
+        $this->assertSame([1 => 1], $wizard[1]);
+        $this->assertSame([1 => 4, 2 => 2, 3 => 1], $wizard[5]);
+        $priest = Adnd2e::memorizationCapacity('Cleric', 5, 10);
+        $this->assertSame(3, $priest[1]);
+        $this->assertSame(1, $priest[3]);
+        $this->assertArrayNotHasKey(4, $priest);
+    }
+
+    public function test_encumbrance_uses_strength_weight_allowance(): void
+    {
+        $t = Adnd2e::encumbranceThresholds(10);
+        $this->assertSame(40, $t['none']);
+        $this->assertSame(40, $t['weight_allow']);
+        $this->assertSame(115, $t['max_press']);
+        $this->assertSame(115, $t['severe']);
+        $this->assertSame('none', Adnd2e::encumbranceCategory(40, 10));
+        $this->assertSame('light', Adnd2e::encumbranceCategory(41, 10));
+        $this->assertSame(12, Adnd2e::movementAtEncumbrance('Human', 'none'));
+        $this->assertSame(9, Adnd2e::movementAtEncumbrance('Human', 'light'));
+        $this->assertSame(6, Adnd2e::movementAtEncumbrance('Human', 'moderate'));
+        $this->assertSame(4, Adnd2e::movementAtEncumbrance('Human', 'heavy'));
+        $this->assertSame(1, Adnd2e::movementAtEncumbrance('Human', 'severe'));
+        $this->assertSame(6, Adnd2e::movementAtEncumbrance('Dwarf', 'none'));
+        $this->assertSame(4, Adnd2e::movementAtEncumbrance('Dwarf', 'light'));
+        $exc = Adnd2e::encumbranceThresholds(18, '01');
+        $this->assertSame(135, $exc['weight_allow']);
+        $load = Adnd2e::movementAtLoad('Human', 40, 10);
+        $this->assertSame('none', $load['category']);
+        $this->assertSame(12, $load['movement']);
+    }
+
     public function test_elf_fighter_mage_sees_bladesinger_human_mage_does_not(): void
     {
         $elfFm = Adnd2e::suggestedRacialKits('Elf', [
@@ -436,5 +533,14 @@ class Adnd2eTest extends TestCase
         $this->assertSame(8, $cha['max_henchmen']);
         $this->assertSame(4, $cha['loyalty']);
         $this->assertSame(5, $cha['reaction']);
+
+        $this->assertSame(3, Adnd2e::wisdomBonusSpells(19)[1]);
+        $this->assertSame(8, Adnd2e::intelligenceLimits(19)['languages']);
+        $this->assertSame('all', Adnd2e::abilityAdjustmentLines('intelligence', 19)[3]['value']);
+        $this->assertSame(10, Adnd2e::charismaAdjustments(19)['loyalty']);
+        $this->assertSame(4, Adnd2e::strengthAdjustments(21)['hit']);
+        $this->assertSame(70, Adnd2e::strengthAdjustments(21)['bend_bars']);
+        $this->assertSame(80, Adnd2e::strengthAdjustments(22)['bend_bars']);
+        $this->assertSame(2, Adnd2e::wisdomAdjustments(16)['magical_defense']);
     }
 }

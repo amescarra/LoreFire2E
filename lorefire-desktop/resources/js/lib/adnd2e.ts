@@ -274,6 +274,50 @@ export function movementRate(race: string): number {
   return race === 'Dwarf' || race === 'Gnome' || race === 'Halfling' ? 6 : 12
 }
 
+export function encumbranceThresholds(strength: number, exceptional?: string | null): {
+  none: number
+  light: number
+  moderate: number
+  heavy: number
+  severe: number
+  weight_allow: number
+  max_press: number
+} {
+  const row = strengthAdjustments(strength, exceptional)
+  const allow = row.weight_allow
+  const press = row.max_press
+  const step = Math.floor(Math.max(0, press - allow) / 4)
+  return {
+    none: allow,
+    light: allow + step,
+    moderate: allow + 2 * step,
+    heavy: allow + 3 * step,
+    severe: press,
+    weight_allow: allow,
+    max_press: press,
+  }
+}
+
+export function encumbranceCategory(carriedLbs: number, strength: number, exceptional?: string | null): string {
+  const t = encumbranceThresholds(strength, exceptional)
+  if (carriedLbs <= t.none) return 'none'
+  if (carriedLbs <= t.light) return 'light'
+  if (carriedLbs <= t.moderate) return 'moderate'
+  if (carriedLbs <= t.heavy) return 'heavy'
+  if (carriedLbs <= t.severe) return 'severe'
+  return 'immobile'
+}
+
+export function movementAtEncumbrance(race: string, category: string): number {
+  const base = movementRate(race)
+  if (category === 'none') return base
+  if (category === 'light') return Math.max(1, Math.floor((base * 3) / 4))
+  if (category === 'moderate') return Math.max(1, Math.floor(base / 2))
+  if (category === 'heavy') return Math.max(1, Math.floor(base / 3))
+  if (category === 'severe') return 1
+  return 0
+}
+
 export function thac0(characterClass: string, level: number): number {
   const lv = Math.max(1, Math.min(20, level))
   switch (classGroup(characterClass)) {
@@ -370,7 +414,11 @@ export function strengthAdjustments(score: number, exceptional?: string | null):
   }
   if (score === 19) return { hit: 3, damage: 7, weight_allow: 485, max_press: 640, open_doors: '16 (8)', bend_bars: 50 }
   if (score === 20) return { hit: 3, damage: 8, weight_allow: 535, max_press: 700, open_doors: '17 (10)', bend_bars: 60 }
-  return { hit: 4, damage: 9, weight_allow: 635, max_press: 810, open_doors: '17 (12)', bend_bars: 70 }
+  if (score === 21) return { hit: 4, damage: 9, weight_allow: 635, max_press: 810, open_doors: '17 (12)', bend_bars: 70 }
+  if (score === 22) return { hit: 4, damage: 10, weight_allow: 785, max_press: 960, open_doors: '18 (14)', bend_bars: 80 }
+  if (score === 23) return { hit: 5, damage: 11, weight_allow: 935, max_press: 1130, open_doors: '18 (16)', bend_bars: 90 }
+  if (score === 24) return { hit: 6, damage: 12, weight_allow: 1235, max_press: 1440, open_doors: '19 (17)', bend_bars: 95 }
+  return { hit: 7, damage: 14, weight_allow: 1535, max_press: 1750, open_doors: '19 (19)', bend_bars: 99 }
 }
 
 export function dexterityAdjustments(score: number): { reaction: number; missile: number; defensive: number } {
@@ -467,7 +515,14 @@ export function wisdomBonusSpells(score: number): Record<number, number> {
   if (score === 15) return { 1: 2, 2: 1 }
   if (score === 16) return { 1: 2, 2: 2 }
   if (score === 17) return { 1: 2, 2: 2, 3: 1 }
-  return { 1: 2, 2: 2, 3: 1, 4: 1 }
+  if (score === 18) return { 1: 2, 2: 2, 3: 1, 4: 1 }
+  if (score === 19) return { 1: 3, 2: 2, 3: 1, 4: 1 }
+  if (score === 20) return { 1: 3, 2: 3, 3: 1, 4: 2 }
+  if (score === 21) return { 1: 3, 2: 3, 3: 2, 4: 2 }
+  if (score === 22) return { 1: 3, 2: 3, 3: 2, 4: 3 }
+  if (score === 23) return { 1: 4, 2: 3, 3: 2, 4: 3 }
+  if (score === 24) return { 1: 4, 2: 3, 3: 3, 4: 3 }
+  return { 1: 4, 2: 4, 3: 3, 4: 3 }
 }
 
 export function wisdomSpellFailure(score: number): number {
@@ -498,7 +553,14 @@ export function charismaAdjustments(score: number): { max_henchmen: number; loya
   if (score === 15) return { max_henchmen: 7, loyalty: 3, reaction: 3 }
   if (score === 16) return { max_henchmen: 8, loyalty: 4, reaction: 5 }
   if (score === 17) return { max_henchmen: 10, loyalty: 6, reaction: 6 }
-  return { max_henchmen: 15, loyalty: 8, reaction: 7 }
+  if (score === 18) return { max_henchmen: 15, loyalty: 8, reaction: 7 }
+  if (score === 19) return { max_henchmen: 15, loyalty: 10, reaction: 8 }
+  if (score === 20) return { max_henchmen: 20, loyalty: 12, reaction: 9 }
+  if (score === 21) return { max_henchmen: 25, loyalty: 14, reaction: 10 }
+  if (score === 22) return { max_henchmen: 30, loyalty: 16, reaction: 11 }
+  if (score === 23) return { max_henchmen: 35, loyalty: 18, reaction: 12 }
+  if (score === 24) return { max_henchmen: 40, loyalty: 20, reaction: 13 }
+  return { max_henchmen: 50, loyalty: 20, reaction: 15 }
 }
 
 export function intelligenceLimits(score: number): {
@@ -517,7 +579,14 @@ export function intelligenceLimits(score: number): {
   if (score === 15) return { languages: 4, max_spell_level: 7, chance_to_learn: 65, max_spells_per_level: 11 }
   if (score === 16) return { languages: 5, max_spell_level: 8, chance_to_learn: 70, max_spells_per_level: 11 }
   if (score === 17) return { languages: 5, max_spell_level: 8, chance_to_learn: 75, max_spells_per_level: 14 }
-  return { languages: 7, max_spell_level: 9, chance_to_learn: 85, max_spells_per_level: 18 }
+  if (score === 18) return { languages: 7, max_spell_level: 9, chance_to_learn: 85, max_spells_per_level: 18 }
+  if (score === 19) return { languages: 8, max_spell_level: 9, chance_to_learn: 95, max_spells_per_level: null }
+  if (score === 20) return { languages: 9, max_spell_level: 9, chance_to_learn: 96, max_spells_per_level: null }
+  if (score === 21) return { languages: 10, max_spell_level: 9, chance_to_learn: 97, max_spells_per_level: null }
+  if (score === 22) return { languages: 11, max_spell_level: 9, chance_to_learn: 98, max_spells_per_level: null }
+  if (score === 23) return { languages: 12, max_spell_level: 9, chance_to_learn: 99, max_spells_per_level: null }
+  if (score === 24) return { languages: 15, max_spell_level: 9, chance_to_learn: 100, max_spells_per_level: null }
+  return { languages: 20, max_spell_level: 9, chance_to_learn: 100, max_spells_per_level: null }
 }
 
 export function primaryAdjustment(ability: string, score: number, exceptional?: string | null, characterClass = 'Fighter'): number {
@@ -615,6 +684,7 @@ export function abilityAdjustmentLines(
     if (row.max_spell_level !== null) lines.push({ label: 'spell lvl', value: String(row.max_spell_level) })
     if (row.chance_to_learn !== null) lines.push({ label: 'learn', value: `${row.chance_to_learn}%` })
     if (row.max_spells_per_level !== null) lines.push({ label: 'max/lvl', value: String(row.max_spells_per_level) })
+    else if (row.max_spell_level !== null) lines.push({ label: 'max/lvl', value: 'all' })
     return lines
   }
   if (ability === 'wisdom') {
@@ -859,19 +929,110 @@ export function anyCaster(entries: ClassEntry[]): boolean {
   return entries.some(e => isCaster(e.class, e.level))
 }
 
-export function weaponSpeed(weapon?: string | null): number | null {
+export type WeaponStats = { name: string; sm: string; l: string; speed: number }
+export type ArmorStats = { name: string; ac: number }
+
+const WEAPON_ROWS: Array<{ aliases: string[] } & WeaponStats> = [
+  { aliases: ['dagger'], name: 'Dagger', sm: '1d4', l: '1d3', speed: 2 },
+  { aliases: ['dart'], name: 'Dart', sm: '1d3', l: '1d2', speed: 2 },
+  { aliases: ['short sword'], name: 'Short sword', sm: '1d6', l: '1d8', speed: 3 },
+  { aliases: ['hand axe'], name: 'Hand axe', sm: '1d6', l: '1d4', speed: 4 },
+  { aliases: ['warhammer'], name: 'Warhammer', sm: '1d4+1', l: '1d4', speed: 4 },
+  { aliases: ['javelin'], name: 'Javelin', sm: '1d6', l: '1d6', speed: 4 },
+  { aliases: ['quarterstaff', 'staff'], name: 'Quarterstaff', sm: '1d6', l: '1d6', speed: 4 },
+  { aliases: ['club'], name: 'Club', sm: '1d6', l: '1d3', speed: 4 },
+  { aliases: ['long sword'], name: 'Long sword', sm: '1d8', l: '1d12', speed: 5 },
+  { aliases: ['spear'], name: 'Spear', sm: '1d6', l: '1d8', speed: 5 },
+  { aliases: ['mace'], name: 'Mace', sm: '1d6+1', l: '1d6', speed: 5 },
+  { aliases: ['sling'], name: 'Sling', sm: '1d4', l: '1d4', speed: 5 },
+  { aliases: ['bastard'], name: 'Bastard sword', sm: '1d8', l: '1d12', speed: 6 },
+  { aliases: ['flail'], name: 'Flail', sm: '1d6+1', l: '2d4', speed: 6 },
+  { aliases: ['morning'], name: 'Morning star', sm: '2d4', l: '1d6+1', speed: 6 },
+  { aliases: ['battle axe'], name: 'Battle axe', sm: '1d8', l: '1d8', speed: 7 },
+  { aliases: ['short bow'], name: 'Short bow', sm: '1d6', l: '1d6', speed: 7 },
+  { aliases: ['light crossbow', 'crossbow, light'], name: 'Crossbow, light', sm: '1d4', l: '1d4', speed: 7 },
+  { aliases: ['long bow'], name: 'Long bow', sm: '1d6', l: '1d6', speed: 8 },
+  { aliases: ['lance'], name: 'Lance', sm: '1d6+1', l: '2d6', speed: 8 },
+  { aliases: ['halberd'], name: 'Halberd', sm: '1d10', l: '2d6', speed: 9 },
+  { aliases: ['two-handed', 'two handed'], name: 'Two-handed sword', sm: '1d10', l: '3d6', speed: 10 },
+  { aliases: ['heavy crossbow', 'crossbow, heavy'], name: 'Crossbow, heavy', sm: '1d4+1', l: '1d6+1', speed: 10 },
+]
+
+export function weaponStats(weapon?: string | null): WeaponStats | null {
   if (!weapon) return null
   const key = weapon.toLowerCase().replace(/^(a|an|the)\s+/, '')
-  if (key.includes('dagger') || key.includes('dart')) return 2
-  if (key.includes('short sword')) return 3
-  if (key.includes('hand axe') || key.includes('club') || key.includes('staff') || key.includes('warhammer') || key.includes('javelin')) return 4
-  if (key.includes('long sword') || key.includes('spear') || key.includes('mace') || key.includes('sling')) return 5
-  if (key.includes('bastard') || key.includes('flail') || key.includes('morning')) return 6
-  if (key.includes('battle axe') || key.includes('short bow') || key.includes('light crossbow')) return 7
-  if (key.includes('long bow') || key.includes('lance')) return 8
-  if (key.includes('halberd')) return 9
-  if (key.includes('two-handed') || key.includes('two handed') || key.includes('heavy crossbow')) return 10
+  for (const row of WEAPON_ROWS) {
+    if (row.aliases.some(alias => key.includes(alias))) {
+      return { name: row.name, sm: row.sm, l: row.l, speed: row.speed }
+    }
+  }
   return null
+}
+
+export function weaponSpeed(weapon?: string | null): number | null {
+  return weaponStats(weapon)?.speed ?? null
+}
+
+export const SHIELD_AC_BONUS = -1
+
+const ARMOR_ROWS: Array<{ aliases: string[] } & ArmorStats> = [
+  { aliases: ['shield only'], name: 'Shield only', ac: 9 },
+  { aliases: ['unarmored', 'unarmoured', 'no armor', 'none'], name: 'None', ac: 10 },
+  { aliases: ['padded'], name: 'Padded', ac: 8 },
+  { aliases: ['studded'], name: 'Studded leather', ac: 7 },
+  { aliases: ['leather'], name: 'Leather', ac: 8 },
+  { aliases: ['ring mail', 'ring'], name: 'Ring mail', ac: 7 },
+  { aliases: ['scale'], name: 'Scale mail', ac: 6 },
+  { aliases: ['hide'], name: 'Hide', ac: 6 },
+  { aliases: ['brigandine'], name: 'Brigandine', ac: 6 },
+  { aliases: ['chain'], name: 'Chain mail', ac: 5 },
+  { aliases: ['splint'], name: 'Splint mail', ac: 4 },
+  { aliases: ['banded'], name: 'Banded mail', ac: 4 },
+  { aliases: ['bronze plate'], name: 'Bronze plate', ac: 4 },
+  { aliases: ['full plate'], name: 'Full plate', ac: 1 },
+  { aliases: ['field plate'], name: 'Field plate', ac: 2 },
+  { aliases: ['plate mail', 'plate'], name: 'Plate mail', ac: 3 },
+]
+
+export function armorStats(armor?: string | null): ArmorStats | null {
+  if (!armor) return null
+  const key = armor.toLowerCase().replace(/^(a|an|the)\s+/, '')
+  for (const row of ARMOR_ROWS) {
+    if (row.aliases.some(alias => key.includes(alias))) {
+      return { name: row.name, ac: row.ac }
+    }
+  }
+  return null
+}
+
+export function armorBaseAc(armor?: string | null): number | null {
+  return armorStats(armor)?.ac ?? null
+}
+
+export function descendingArmorClass(armor: string | null | undefined = 'none', shield = false): number | null {
+  const row = armorStats(armor)
+  if (!row) return null
+  return shield && row.name !== 'Shield only' ? row.ac + SHIELD_AC_BONUS : row.ac
+}
+
+export function priestSpheres(characterClass: string): { major: string[]; minor: string[] } {
+  const c = normalizeClass(characterClass)
+  if (c === 'Cleric') {
+    return {
+      major: ['All', 'Astral', 'Charm', 'Combat', 'Creation', 'Divination', 'Guardian', 'Healing', 'Necromantic', 'Protection', 'Summoning', 'Sun'],
+      minor: ['Elemental'],
+    }
+  }
+  if (c === 'Druid') {
+    return { major: ['All', 'Animal', 'Elemental', 'Healing', 'Plant', 'Weather'], minor: ['Divination'] }
+  }
+  if (c === 'Paladin') {
+    return { major: [], minor: ['Combat', 'Divination', 'Healing', 'Protection'] }
+  }
+  if (c === 'Ranger') {
+    return { major: [], minor: ['Animal', 'Plant'] }
+  }
+  return { major: [], minor: [] }
 }
 
 export function isCaster(characterClass: string, level: number): boolean {

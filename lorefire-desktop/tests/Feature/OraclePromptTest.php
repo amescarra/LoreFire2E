@@ -82,5 +82,8 @@ class OraclePromptTest extends TestCase
 
         $open = app(OracleController::class)->buildSystemPrompt([], 'STR 18/01 open doors');
         $this->assertStringContainsString('open doors: 12', $open);
+
+        $armor = app(OracleController::class)->buildSystemPrompt([], 'What is the AC of chain mail?');
+        $this->assertStringContainsString('Chain mail base AC: 5', $armor);
     }
 }

@@ -33,8 +33,12 @@ class Adnd2eOracleRulesLookup
         self::collectAbilityFacts($question, $context, $facts);
         self::collectThac0Facts($question, $context, $facts);
         self::collectToHitFacts($question, $facts);
+        self::collectArmorFacts($question, $facts);
+        self::collectWeaponFacts($question, $facts);
         self::collectSaveFacts($question, $context, $facts);
         self::collectMemorizationFacts($question, $context, $facts);
+        self::collectSphereFacts($question, $context, $facts);
+        self::collectEncumbranceFacts($question, $context, $facts);
         self::collectDualClassFacts($question, $facts);
         self::collectCombatMiscFacts($question, $facts);
         self::collectMaterialFacts($question, $context, $facts);
@@ -70,7 +74,7 @@ class Adnd2eOracleRulesLookup
         }
 
         return (bool) preg_match(
-            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|specialist|saving-throw|descending|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic)/i',
+            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|spell slots?|memorization slots?|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|weapon damage|damage dice|speed factor|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|move rate|encumbrance|weight allow|max press|carried|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|loyalty|priest spheres?|major sphere|minor sphere|specialist|saving-throw|descending|unarmored|leather|studded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|padded|brigandine|splint|banded|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic)/i',
             $question
         );
     }
@@ -194,7 +198,7 @@ class Adnd2eOracleRulesLookup
                 $facts[] = $prefix.'STR '.$label.' bend bars/lift gates: '.$row['bend_bars'].'% (Adnd2e::strengthAdjustments)';
             }
 
-            if ($lines !== [] && ($wantColumn === null || ! self::mentions($question, 'missile|open door|bend bar'))) {
+            if ($lines !== [] && $wantColumn === null && ! self::mentions($question, 'missile|open door|bend bar')) {
                 $compact = implode(', ', array_map(fn (array $line) => $line['label'].' '.$line['value'], $lines));
                 $facts[] = $prefix.strtoupper(self::abilityAbbrev($ability)).' '.$label.' table: '.$compact.' (Adnd2e::abilityAdjustmentLines)';
             }
@@ -300,8 +304,23 @@ class Adnd2eOracleRulesLookup
             self::mentions($question, 'defensive|ac adj') => 'def',
             self::mentions($question, 'open door') => 'open',
             self::mentions($question, 'bend bar|lift gate') => 'bend',
+            self::mentions($question, 'weight allow|wt allow|\bwt\b') => 'wt',
+            self::mentions($question, 'max press|\bpress\b') => 'press',
+            self::mentions($question, 'system shock|\bshock\b') => 'shock',
+            self::mentions($question, 'resurrection|resurrect') => 'resurrect',
+            self::mentions($question, 'poison') => 'poison',
+            self::mentions($question, 'regen') => 'regen',
+            self::mentions($question, 'language|\blangs?\b') => 'langs',
+            self::mentions($question, 'chance to learn|\blearn\b') => 'learn',
+            self::mentions($question, 'max spell level|spell lvl') => 'spell lvl',
+            self::mentions($question, 'max spells|max/lvl') => 'max/lvl',
+            self::mentions($question, 'magical defense|\bmd\b') => 'MD',
+            self::mentions($question, 'bonus spells?') => 'bonus',
+            self::mentions($question, 'spell failure|\bfail\b') => 'fail',
+            self::mentions($question, 'hench') => 'hench',
+            self::mentions($question, 'loyalty') => 'loyalty',
             self::mentions($question, '\bhit\b') && self::mentions($question, 'str') => 'hit',
-            self::mentions($question, 'damage|\bdmg\b') => 'dmg',
+            self::mentions($question, 'damage|\bdmg\b') && ! self::mentions($question, 'weapon') => 'dmg',
             default => null,
         };
     }
@@ -316,7 +335,11 @@ class Adnd2eOracleRulesLookup
             || ($want === 'open' && str_contains($label, 'open'))
             || ($want === 'missile' && str_contains($label, 'missile'))
             || ($want === 'react' && str_contains($label, 'react'))
-            || ($want === 'def' && (str_contains($label, 'def') || $label === 'ac'));
+            || ($want === 'def' && (str_contains($label, 'def') || $label === 'ac'))
+            || ($want === 'wt' && ($label === 'wt' || str_contains($label, 'weight')))
+            || ($want === 'md' && $label === 'md')
+            || ($want === 'spell lvl' && str_contains($label, 'spell'))
+            || ($want === 'max/lvl' && str_contains($label, 'max'));
     }
 
     /**
@@ -339,8 +362,26 @@ class Adnd2eOracleRulesLookup
             foreach ($levels as $level) {
                 $facts[] = $class.' '.$level.' THAC0: '.Adnd2e::thac0($class, $level).' (Adnd2e::thac0)';
             }
+            if (self::mentions($question, 'progression|by level|1\s*[–-]\s*20|all levels') || $levels === []) {
+                $prog = Adnd2e::thac0Progression($class);
+                $parts = [];
+                foreach ($prog as $level => $value) {
+                    $parts[] = $level.'='.$value;
+                }
+                $facts[] = $class.' THAC0 1–20: '.implode(', ', $parts).' (Adnd2e::thac0Progression)';
+            }
         } else {
-            foreach (['Fighter' => [1, 5, 10], 'Cleric' => [1, 4], 'Thief' => [1, 5], 'Mage' => [1, 6]] as $sampleClass => $sampleLevels) {
+            foreach ([
+                'Fighter' => [1, 5, 10],
+                'Paladin' => [1, 5],
+                'Ranger' => [1, 5],
+                'Cleric' => [1, 4],
+                'Druid' => [1, 4],
+                'Thief' => [1, 5],
+                'Bard' => [1, 5],
+                'Psionicist' => [1, 5],
+                'Mage' => [1, 6],
+            ] as $sampleClass => $sampleLevels) {
                 $parts = [];
                 foreach ($sampleLevels as $level) {
                     $parts[] = $level.'='.Adnd2e::thac0($sampleClass, $level);
@@ -407,14 +448,42 @@ class Adnd2eOracleRulesLookup
 
         $class = self::parseClass($question);
         $levels = self::parseLevels($question, $class);
+        $category = self::parseSaveCategory($question);
         if ($class !== null) {
-            $level = $levels[0] ?? 1;
-            $row = Adnd2e::savingThrows($class, $level);
-            $parts = [];
-            foreach ($row as $key => $value) {
-                $parts[] = $key.' '.$value;
+            $useLevels = $levels === [] ? [1] : $levels;
+            foreach ($useLevels as $level) {
+                $row = Adnd2e::savingThrows($class, $level);
+                if ($category !== null && isset($row[$category])) {
+                    $facts[] = $class.' '.$level.' '.$category.': '.$row[$category].' (Adnd2e::savingThrows)';
+                } else {
+                    $parts = [];
+                    foreach ($row as $key => $value) {
+                        $parts[] = $key.' '.$value;
+                    }
+                    $facts[] = $class.' '.$level.' saves: '.implode(', ', $parts).' (Adnd2e::savingThrows)';
+                }
             }
-            $facts[] = $class.' '.$level.' saves: '.implode(', ', $parts).' (Adnd2e::savingThrows)';
+            if (self::mentions($question, 'matrix|progression|by level|bands?') || $levels === []) {
+                foreach (Adnd2e::savingThrowBands($class) as $band) {
+                    $parts = [];
+                    foreach ($band['saves'] as $key => $value) {
+                        if ($category !== null && $key !== $category) {
+                            continue;
+                        }
+                        $parts[] = $key.' '.$value;
+                    }
+                    $facts[] = $class.' '.$band['from'].'–'.$band['to'].': '.implode(', ', $parts).' (Adnd2e::savingThrowBands)';
+                }
+            }
+        } elseif (self::mentions($question, 'matrix|by (class )?group|warrior|priest|rogue|wizard')) {
+            foreach (['Fighter' => 'warrior', 'Cleric' => 'priest', 'Thief' => 'rogue', 'Mage' => 'wizard'] as $sampleClass => $group) {
+                $band = Adnd2e::savingThrowBands($sampleClass)[0];
+                $parts = [];
+                foreach ($band['saves'] as $key => $value) {
+                    $parts[] = $key.' '.$value;
+                }
+                $facts[] = $group.' '.$band['from'].'–'.$band['to'].': '.implode(', ', $parts).' (Adnd2e::savingThrowBands)';
+            }
         }
 
         foreach (self::charactersFromContext($context) as $character) {
@@ -435,7 +504,7 @@ class Adnd2eOracleRulesLookup
      */
     private static function collectMemorizationFacts(string $question, array $context, array &$facts): void
     {
-        if (! self::mentions($question, 'memoriz|vancian|spell capacity|how many .{0,40}spells|bonus spells')) {
+        if (! self::mentions($question, 'memoriz|vancian|spell capacity|spell slots?|memorization slots?|how many .{0,40}spells|bonus spells')) {
             return;
         }
 
@@ -463,6 +532,21 @@ class Adnd2eOracleRulesLookup
         $facts[] = trim($who).$level.' memorization: '.($parts === [] ? 'none' : implode(', ', $parts)).' (Adnd2e::memorizationCapacity)';
         $facts[] = 'Vancian copies: a known spell may be memorized up to '.Adnd2e::MAX_TIMES_MEMORIZED.' times; casting burns one copy (Adnd2e::burnMemorizedInstance).';
 
+        if (self::mentions($question, 'progression|by level') || count($levels) > 1) {
+            $sample = $levels !== [] ? $levels : [1, 5, 9, 12];
+            foreach ($sample as $sampleLevel) {
+                if ($sampleLevel === $level && count($levels) <= 1) {
+                    continue;
+                }
+                $row = Adnd2e::memorizationCapacity($class, $sampleLevel, $wisdom, $subclass);
+                $rowParts = [];
+                foreach ($row as $spellLevel => $count) {
+                    $rowParts[] = 'L'.$spellLevel.'='.$count;
+                }
+                $facts[] = trim($who).$sampleLevel.' memorization: '.($rowParts === [] ? 'none' : implode(', ', $rowParts)).' (Adnd2e::memorizationCapacity)';
+            }
+        }
+
         foreach (self::charactersFromContext($context) as $character) {
             if (! self::mentionsName($question, (string) ($character['name'] ?? ''))) {
                 continue;
@@ -478,6 +562,161 @@ class Adnd2eOracleRulesLookup
                 $sheetParts[] = 'L'.$spellLevel.'='.$count;
             }
             $facts[] = $character['name'].' engine memorization: '.($sheetParts === [] ? 'none' : implode(', ', $sheetParts)).' (Adnd2e::combinedMemorization)';
+        }
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectArmorFacts(string $question, array &$facts): void
+    {
+        if (preg_match('/thac0\s*(?:of\s*)?(\d{1,2})/i', $question) && preg_match('/(?:\bac\b|armor class)\s*(-?\d{1,2})/i', $question)) {
+            return;
+        }
+
+        $wantsArmor = self::mentions($question, 'unarmored|unarmoured|base ac|leather|studded|padded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|splint|banded|brigandine|hide armor|shield only|armor (ac|class)|ac of');
+        $armor = self::parseArmor($question);
+        if (! $wantsArmor && $armor === null) {
+            return;
+        }
+
+        $shield = self::mentions($question, '\bshield\b') && ! self::mentions($question, 'shield only');
+
+        if ($armor !== null) {
+            $row = Adnd2e::armorStats($armor);
+            if ($row !== null) {
+                $ac = Adnd2e::descendingArmorClass($armor, $shield);
+                $facts[] = $row['name'].' base AC: '.$row['ac'].' (Adnd2e::armorBaseAc)';
+                if ($shield && $ac !== null) {
+                    $facts[] = $row['name'].' + shield AC: '.$ac.' (Adnd2e::descendingArmorClass; shield '.Adnd2e::SHIELD_AC_BONUS.')';
+                }
+            }
+        } elseif (self::mentions($question, 'armor (ac|table|list)|base ac')) {
+            $parts = [];
+            foreach (Adnd2e::armorCatalog() as $row) {
+                $parts[] = $row['name'].' '.$row['ac'];
+            }
+            $facts[] = 'Armor base AC: '.implode(', ', $parts).' (Adnd2e::armorCatalog)';
+            $facts[] = 'Shield AC bonus: '.Adnd2e::SHIELD_AC_BONUS.' (Adnd2e::SHIELD_AC_BONUS)';
+        }
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectWeaponFacts(string $question, array &$facts): void
+    {
+        $wantsWeapon = self::mentions($question, 'weapon speed|weapon damage|damage dice|speed factor');
+        $weapon = self::parseWeapon($question);
+        $namedCombat = $weapon !== null && self::mentions($question, 'damage|speed|dice|\bweapon\b');
+        if (! $wantsWeapon && ! $namedCombat) {
+            return;
+        }
+
+        if ($weapon !== null) {
+            $row = Adnd2e::weaponStats($weapon);
+            if ($row !== null) {
+                $facts[] = $row['name'].' SM '.$row['sm'].' / L '.$row['l'].' / speed '.$row['speed'].' (Adnd2e::weaponStats)';
+            } else {
+                $facts[] = 'No weapon entry for "'.$weapon.'" in Adnd2e::weaponStats.';
+            }
+
+            return;
+        }
+
+        $parts = [];
+        foreach (array_slice(Adnd2e::weaponCatalog(), 0, 8) as $row) {
+            $parts[] = $row['name'].' '.$row['sm'].'/'.$row['l'].' sf'.$row['speed'];
+        }
+        $facts[] = 'Weapon sample (SM/L/speed): '.implode('; ', $parts).' (Adnd2e::weaponCatalog)';
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectSphereFacts(string $question, array $context, array &$facts): void
+    {
+        if (! self::mentions($question, 'sphere')) {
+            return;
+        }
+
+        $class = self::parseClass($question);
+        if ($class === null) {
+            $class = self::mentions($question, 'druid') ? 'Druid' : 'Cleric';
+        }
+        $access = Adnd2e::priestSpheres($class);
+        $facts[] = $class.' major: '.($access['major'] === [] ? 'none' : implode(', ', $access['major'])).' (Adnd2e::priestSpheres)';
+        $facts[] = $class.' minor: '.($access['minor'] === [] ? 'none' : implode(', ', $access['minor'])).' (Adnd2e::priestSpheres)';
+        $facts[] = 'Sphere tags only. No spell names or handbook text.';
+
+        foreach (self::charactersFromContext($context) as $character) {
+            if (! self::mentionsName($question, (string) ($character['name'] ?? ''))) {
+                continue;
+            }
+            $stored = $character['priest_spheres'] ?? null;
+            if (is_array($stored)) {
+                $major = implode(', ', $stored['major'] ?? []);
+                $minor = implode(', ', $stored['minor'] ?? []);
+                $facts[] = $character['name'].' sheet spheres major: '.($major !== '' ? $major : 'none').'; minor: '.($minor !== '' ? $minor : 'none');
+            }
+        }
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectEncumbranceFacts(string $question, array $context, array &$facts): void
+    {
+        if (! self::mentions($question, 'encumbrance|weight allow|max press|carried|movement rate|move rate|encumber')) {
+            return;
+        }
+
+        $race = self::parseRace($question) ?? 'Human';
+        $facts[] = $race.' movement rate: '.Adnd2e::movementRate($race).' (Adnd2e::movementRate)';
+
+        $strength = 10;
+        $exceptional = null;
+        foreach (self::parseAbilityScores($question) as $pair) {
+            if ($pair['ability'] === 'strength') {
+                $strength = $pair['score'];
+                $exceptional = $pair['exceptional'] ?? null;
+                break;
+            }
+        }
+        foreach (self::charactersFromContext($context) as $character) {
+            if (! self::mentionsName($question, (string) ($character['name'] ?? ''))) {
+                continue;
+            }
+            if (isset($character['strength'])) {
+                $strength = (int) $character['strength'];
+                $exceptional = isset($character['exceptional_strength']) ? (string) $character['exceptional_strength'] : $exceptional;
+            }
+            if (! empty($character['race'])) {
+                $race = (string) $character['race'];
+            }
+        }
+
+        $wantsLoad = self::mentions($question, 'encumbrance|weight allow|max press|carried|encumber');
+        if ($wantsLoad || self::parseAbilityScores($question) !== []) {
+            $t = Adnd2e::encumbranceThresholds($strength, $exceptional);
+            $label = Adnd2e::formatAbilityScore('strength', $strength, $exceptional);
+            $facts[] = 'STR '.$label.' encumbrance lb: none '.$t['none'].', light '.$t['light'].', moderate '.$t['moderate'].', heavy '.$t['heavy'].', severe '.$t['severe'].' (Adnd2e::encumbranceThresholds)';
+            $facts[] = 'STR '.$label.' weight allow '.$t['weight_allow'].', max press '.$t['max_press'].' (Adnd2e::strengthAdjustments)';
+
+            $carried = null;
+            if (preg_match('/(?:carried|carrying|load(?:ed)?|weighs?)\s+(\d{1,4})\s*(?:lb|lbs|pounds?)?/i', $question, $match)) {
+                $carried = (int) $match[1];
+            } elseif (preg_match('/(\d{1,4})\s*(?:lb|lbs|pounds)/i', $question, $match)) {
+                $carried = (int) $match[1];
+            }
+            if ($carried !== null) {
+                $load = Adnd2e::movementAtLoad($race, $carried, $strength, $exceptional);
+                $facts[] = $race.' carrying '.$carried.' lb: '.$load['category'].', MV '.$load['movement'].' (base '.$load['base'].') (Adnd2e::movementAtLoad)';
+            } else {
+                foreach (['none', 'light', 'moderate', 'heavy', 'severe'] as $category) {
+                    $facts[] = $race.' '.$category.' MV: '.Adnd2e::movementAtEncumbrance($race, $category).' (Adnd2e::movementAtEncumbrance)';
+                }
+            }
         }
     }
 
@@ -530,32 +769,12 @@ class Adnd2eOracleRulesLookup
             $facts[] = 'Initiative is d10 (lower first). DEX '.$dex.' reaction '.Adnd2e::formatSigned(Adnd2e::dexterityAdjustments($dex)['reaction']).'; example d10 '.$d10.' total '.$row['total'].' (Adnd2e::resolveInitiative).';
         }
 
-        if (self::mentions($question, 'weapon speed')) {
-            $weapon = null;
-            if (preg_match('/weapon speed(?:\s+(?:of|for|on))?\s+(?:a |an |the )?([a-z][a-z \'-]{2,30})/i', $question, $match)) {
-                $weapon = trim($match[1], " \t\n\r\0\x0B?.");
-            }
-            $speed = Adnd2e::weaponSpeed($weapon);
-            if ($weapon !== null && $speed !== null) {
-                $facts[] = 'Weapon speed for '.$weapon.': '.$speed.' (Adnd2e::weaponSpeed)';
-            } elseif ($weapon !== null) {
-                $facts[] = 'No weapon-speed entry for "'.$weapon.'" in Adnd2e::weaponSpeed (thin name lookup only; not a full weapon-vs-AC table).';
-            } else {
-                $facts[] = 'Weapon speed is a thin name lookup on the sheet (Adnd2e::weaponSpeed), not a full weapon-vs-AC table.';
-            }
-        }
-
         if (self::mentions($question, 'overnight rest|natural healing')) {
             $facts[] = 'Overnight rest only: recover 1 hit point if above '.Adnd2e::DEATH_THRESHOLD.', rememorize, reset daily class abilities (Adnd2e::overnightRest).';
         }
 
         if (self::mentions($question, 'vitality|death threshold|unconscious|dying')) {
             $facts[] = 'Vitality: 0 unconscious; negative dying; dead at '.Adnd2e::DEATH_THRESHOLD.' (Adnd2e::vitalityState).';
-        }
-
-        if (self::mentions($question, 'movement rate|move rate')) {
-            $race = self::parseRace($question) ?? 'Human';
-            $facts[] = $race.' movement rate: '.Adnd2e::movementRate($race).' (Adnd2e::movementRate)';
         }
 
         if (self::mentions($question, 'weapon proficiency|non-?weapon proficiency')) {
@@ -644,6 +863,53 @@ class Adnd2eOracleRulesLookup
                 $facts[] = $character['name'].' HP '.$hp.'/'.($character['max_hp'] ?? '?').' vitality '.Adnd2e::vitalityState($hp).' (Adnd2e::vitalityState)';
             }
         }
+    }
+
+    private static function parseSaveCategory(string $question): ?string
+    {
+        return match (true) {
+            self::mentions($question, 'paralyz|poison|death magic') => 'paralyzation',
+            self::mentions($question, 'rod|staff|wand') => 'rod',
+            self::mentions($question, 'petrif|polymorph') => 'petrification',
+            self::mentions($question, 'breath') => 'breath',
+            self::mentions($question, 'vs spells?|save.{0,16}spell|throws? vs spell') => 'spell',
+            default => null,
+        };
+    }
+
+    private static function parseArmor(string $question): ?string
+    {
+        $needles = [
+            'shield only', 'full plate', 'field plate', 'bronze plate', 'plate mail',
+            'studded leather', 'studded', 'chain mail', 'ring mail', 'scale mail',
+            'splint mail', 'banded mail', 'brigandine', 'hide armor', 'padded',
+            'leather', 'unarmored', 'unarmoured', 'no armor',
+        ];
+        foreach ($needles as $needle) {
+            if (preg_match('/\b'.preg_quote($needle, '/').'\b/i', $question)) {
+                return $needle;
+            }
+        }
+
+        return null;
+    }
+
+    private static function parseWeapon(string $question): ?string
+    {
+        $needles = [
+            'two-handed sword', 'two handed sword', 'short sword', 'long sword', 'bastard sword',
+            'hand axe', 'battle axe', 'short bow', 'long bow', 'light crossbow', 'crossbow, light',
+            'heavy crossbow', 'crossbow, heavy', 'morning star', 'quarterstaff', 'warhammer',
+            'halberd', 'javelin', 'dagger', 'dart', 'spear', 'mace', 'sling', 'flail',
+            'lance', 'club', 'staff',
+        ];
+        foreach ($needles as $needle) {
+            if (preg_match('/\b'.preg_quote($needle, '/').'\b/i', $question)) {
+                return $needle;
+            }
+        }
+
+        return null;
     }
 
     private static function parseClass(string $question): ?string
@@ -819,7 +1085,11 @@ class Adnd2eOracleRulesLookup
 
         return match ($ability) {
             'dexterity' => in_array($wantColumn, ['missile', 'react', 'def'], true),
-            'strength' => in_array($wantColumn, ['open', 'bend', 'hit', 'dmg'], true),
+            'strength' => in_array($wantColumn, ['open', 'bend', 'hit', 'dmg', 'wt', 'press'], true),
+            'constitution' => in_array($wantColumn, ['shock', 'resurrect', 'poison', 'regen'], true),
+            'intelligence' => in_array($wantColumn, ['langs', 'learn', 'spell lvl', 'max/lvl'], true),
+            'wisdom' => in_array($wantColumn, ['MD', 'bonus', 'fail'], true),
+            'charisma' => in_array($wantColumn, ['hench', 'loyalty', 'react'], true),
             default => $wantColumn === null && self::mentions($question, 'ability'),
         };
     }

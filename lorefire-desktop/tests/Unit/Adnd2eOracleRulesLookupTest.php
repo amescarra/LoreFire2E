@@ -126,4 +126,91 @@ class Adnd2eOracleRulesLookupTest extends TestCase
         $this->assertStringNotContainsString('## Engine lookup', $prompt);
         $this->assertStringContainsString('Lorefire 2E procedures', $prompt);
     }
+
+    public function test_combat_armor_weapon_and_expanded_thac0_lookups(): void
+    {
+        $armor = Adnd2eOracleRulesLookup::lookup('What is the AC of chain mail?');
+        $this->assertTrue($armor['resolved']);
+        $this->assertStringContainsString('Chain mail base AC: 5', $armor['markdown']);
+        $this->assertStringContainsString('Adnd2e::armorBaseAc', $armor['markdown']);
+
+        $weapon = Adnd2eOracleRulesLookup::lookup('Long sword damage dice and weapon speed?');
+        $this->assertTrue($weapon['resolved']);
+        $this->assertStringContainsString('SM 1d8', $weapon['markdown']);
+        $this->assertStringContainsString('L 1d12', $weapon['markdown']);
+        $this->assertStringContainsString('speed 5', $weapon['markdown']);
+        $this->assertStringContainsString('Adnd2e::weaponStats', $weapon['markdown']);
+
+        $paladin = Adnd2eOracleRulesLookup::lookup('Paladin THAC0 at level 7');
+        $this->assertTrue($paladin['resolved']);
+        $this->assertSame(14, Adnd2e::thac0('Paladin', 7));
+        $this->assertStringContainsString('Paladin 7 THAC0: 14', $paladin['markdown']);
+    }
+
+    public function test_full_ability_columns_are_queryable(): void
+    {
+        $wis = Adnd2eOracleRulesLookup::lookup('WIS 17 bonus spells?');
+        $this->assertTrue($wis['resolved']);
+        $this->assertStringContainsString('bonus: 1st×2, 2nd×2, 3rd×1', $wis['markdown']);
+
+        $con = Adnd2eOracleRulesLookup::lookup('CON 16 system shock?');
+        $this->assertTrue($con['resolved']);
+        $this->assertStringContainsString('shock: 95%', $con['markdown']);
+
+        $int = Adnd2eOracleRulesLookup::lookup('INT 16 chance to learn?');
+        $this->assertTrue($int['resolved']);
+        $this->assertStringContainsString('learn: 70%', $int['markdown']);
+
+        $cha = Adnd2eOracleRulesLookup::lookup('CHA 16 henchmen?');
+        $this->assertTrue($cha['resolved']);
+        $this->assertStringContainsString('hench: 8', $cha['markdown']);
+
+        $wt = Adnd2eOracleRulesLookup::lookup('STR 16 weight allowance?');
+        $this->assertTrue($wt['resolved']);
+        $this->assertStringContainsString('wt: 70', $wt['markdown']);
+    }
+
+    public function test_saving_throw_matrix_and_category_lookup(): void
+    {
+        $poison = Adnd2eOracleRulesLookup::lookup('Fighter save vs poison at level 1');
+        $this->assertTrue($poison['resolved']);
+        $this->assertStringContainsString('Fighter 1 paralyzation: 14', $poison['markdown']);
+        $this->assertStringContainsString('Adnd2e::savingThrows', $poison['markdown']);
+
+        $matrix = Adnd2eOracleRulesLookup::lookup('Cleric saving throw matrix');
+        $this->assertTrue($matrix['resolved']);
+        $this->assertStringContainsString('Cleric 1–3:', $matrix['markdown']);
+        $this->assertStringContainsString('Adnd2e::savingThrowBands', $matrix['markdown']);
+    }
+
+    public function test_memorization_and_priest_sphere_lookups(): void
+    {
+        $slots = Adnd2eOracleRulesLookup::lookup('How many spells can a 5th-level mage memorize?');
+        $this->assertTrue($slots['resolved']);
+        $this->assertStringContainsString('Mage 5 memorization: L1=4, L2=2, L3=1', $slots['markdown']);
+        $this->assertStringContainsString('Adnd2e::memorizationCapacity', $slots['markdown']);
+        $this->assertStringNotContainsStringIgnoringCase('spell slots', $slots['markdown']);
+
+        $spheres = Adnd2eOracleRulesLookup::lookup('Cleric priest spheres?');
+        $this->assertTrue($spheres['resolved']);
+        $this->assertStringContainsString('Cleric major: All, Astral', $spheres['markdown']);
+        $this->assertStringContainsString('minor: Elemental', $spheres['markdown']);
+        $this->assertStringContainsString('Adnd2e::priestSpheres', $spheres['markdown']);
+        $this->assertStringNotContainsString('Cure Light', $spheres['markdown']);
+    }
+
+    public function test_encumbrance_and_movement_lookups(): void
+    {
+        $move = Adnd2eOracleRulesLookup::lookup('Dwarf movement rate?');
+        $this->assertTrue($move['resolved']);
+        $this->assertStringContainsString('Dwarf movement rate: 6', $move['markdown']);
+
+        $enc = Adnd2eOracleRulesLookup::lookup('STR 10 encumbrance thresholds and Human carrying 41 lb');
+        $this->assertTrue($enc['resolved']);
+        $this->assertStringContainsString('none 40', $enc['markdown']);
+        $this->assertStringContainsString('light', $enc['markdown']);
+        $this->assertStringContainsString('MV 9', $enc['markdown']);
+        $this->assertStringContainsString('Adnd2e::encumbranceThresholds', $enc['markdown']);
+        $this->assertStringContainsString('Adnd2e::movementAtLoad', $enc['markdown']);
+    }
 }

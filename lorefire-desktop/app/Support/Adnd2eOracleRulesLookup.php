@@ -528,8 +528,8 @@ class Adnd2eOracleRulesLookup
         foreach ($cap as $spellLevel => $count) {
             $parts[] = 'L'.$spellLevel.'='.$count;
         }
-        $who = $subclass ? $subclass.' ' : $class.' ';
-        $facts[] = trim($who).$level.' memorization: '.($parts === [] ? 'none' : implode(', ', $parts)).' (Adnd2e::memorizationCapacity)';
+        $who = $subclass ?: $class;
+        $facts[] = $who.' '.$level.' memorization: '.($parts === [] ? 'none' : implode(', ', $parts)).' (Adnd2e::memorizationCapacity)';
         $facts[] = 'Vancian copies: a known spell may be memorized up to '.Adnd2e::MAX_TIMES_MEMORIZED.' times; casting burns one copy (Adnd2e::burnMemorizedInstance).';
 
         if (self::mentions($question, 'progression|by level') || count($levels) > 1) {
@@ -543,7 +543,7 @@ class Adnd2eOracleRulesLookup
                 foreach ($row as $spellLevel => $count) {
                     $rowParts[] = 'L'.$spellLevel.'='.$count;
                 }
-                $facts[] = trim($who).$sampleLevel.' memorization: '.($rowParts === [] ? 'none' : implode(', ', $rowParts)).' (Adnd2e::memorizationCapacity)';
+                $facts[] = $who.' '.$sampleLevel.' memorization: '.($rowParts === [] ? 'none' : implode(', ', $rowParts)).' (Adnd2e::memorizationCapacity)';
             }
         }
 
@@ -1120,6 +1120,6 @@ class Adnd2eOracleRulesLookup
 
     private static function mentions(string $question, string $pattern): bool
     {
-        return (bool) preg_match('/'.$pattern.'/i', $question);
+        return (bool) preg_match('#'.$pattern.'#i', $question);
     }
 }

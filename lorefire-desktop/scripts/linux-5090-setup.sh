@@ -155,7 +155,7 @@ npm install
 echo "==> frontend build"
 npm run build
 
-echo "==> bundled Python runtime (optional; setup.sh falls back to system python3)"
+echo "==> bundled Python runtime (optional; setup.sh prefers python3.12, not Resolute python3 3.14)"
 if [ -x resources/python/download_runtime.sh ]; then
   bash resources/python/download_runtime.sh || echo "WARNING: runtime download skipped; using system Python."
 fi

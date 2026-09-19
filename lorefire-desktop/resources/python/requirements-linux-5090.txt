@@ -30,8 +30,8 @@ urllib3>=2.0.0
 certifi>=2024.1.1
 tokenizers>=0.15.0
 
-# Alignment (Linux x86_64 wheels include CUDA)
-ctranslate2>=3.24.0
+# Alignment: do not pin ctranslate2 here. whisperx 3.2.x requires
+# ctranslate2==4.4.0; a loose >=3.24.0 fights that and pip fails.
 
 # Utilities
 numpy>=1.24.0

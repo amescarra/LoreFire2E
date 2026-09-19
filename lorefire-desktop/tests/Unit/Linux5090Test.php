@@ -139,7 +139,12 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('CUDA 11.8, optional GPU path', $sh);
         $this->assertStringContainsString('torch==2.5.1', $sh);
         $this->assertStringContainsString('pip==24.0', $sh);
-        $this->assertFileExists(dirname(__DIR__, 2).'/resources/python/requirements-linux-5090.txt');
+        $this->assertStringContainsString('python3.12', $sh);
+        $this->assertStringContainsString('Skipping', $sh);
+        $req5090 = file_get_contents(dirname(__DIR__, 2).'/resources/python/requirements-linux-5090.txt');
+        $this->assertIsString($req5090);
+        $this->assertDoesNotMatchRegularExpression('/^ctranslate2>=/m', $req5090);
+        $this->assertStringContainsString('ctranslate2==4.4.0', $req5090);
         $this->assertFileExists(dirname(__DIR__, 2).'/LINUX-5090.md');
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-setup.sh');
         $this->assertFileExists(dirname(__DIR__, 2).'/scripts/linux-5090-detect.sh');
@@ -158,6 +163,8 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('Do **not** add `ppa:ondrej/php`', $md);
         $this->assertStringContainsString('ondrej-ubuntu-php-*.list', $md);
         $this->assertStringContainsString('Noble (24.04) and Jammy (22.04) only', $md);
+        $this->assertStringContainsString('python3.12 python3.12-venv', $md);
+        $this->assertStringContainsString('3.14', $md);
 
         $this->assertStringContainsString('ubuntu_codename', $sh);
         $this->assertStringContainsString('print_php_install_help', $sh);

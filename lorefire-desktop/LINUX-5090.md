@@ -36,6 +36,7 @@ sudo apt install -y \
   composer \
   nodejs npm \
   python3 python3-venv python3-pip python3-dev \
+  python3.12 python3.12-venv python3.12-dev \
   ffmpeg \
   sqlite3 \
   ubuntu-drivers-common
@@ -71,8 +72,14 @@ Confirm:
 ```bash
 php -v          # 8.4+ (8.5 is fine on Resolute)
 node -v         # 20+
-python3 --version
+python3.12 --version   # preferred for WhisperX (Resolute's python3 is 3.14)
 composer -V
+```
+
+Resolute’s default `python3` is **3.14**. WhisperX / ctranslate2 wheels are unreliable there. `setup.sh` prefers `python3.12` or `python3.11` when they are on PATH. Install `python3.12` / `python3.12-venv` as above. If a 3.14 venv already exists, delete it before re-running setup:
+
+```bash
+rm -rf lorefire-desktop/resources/python/venv
 ```
 
 If `composer` is missing from apt:

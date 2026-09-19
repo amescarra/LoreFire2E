@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# linux-5090-setup.sh — Install Lorefire 2E for Anthony's Ubuntu x86_64 + RTX 5090 box.
+#
+# Does NOT touch the Windows ARM / Snapdragon path. Run from a clone of this repo:
+#   bash lorefire-desktop/scripts/linux-5090-setup.sh
+#
+# CUDA-first: uses GPU torch (cu128) when nvidia-smi works. Falls back to CPU
+# wheels only when the NVIDIA driver is missing.
+
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+DESKTOP="$ROOT/lorefire-desktop"
+DETECT="$ROOT/lorefire-desktop/scripts/linux-5090-detect.sh"
+
+echo "==> Lorefire linux-5090 setup"
+echo "    Repo    : $ROOT"
+echo "    Desktop : $DESKTOP"
+echo ""
+
+if [ "$(uname -s)" != "Linux" ] || [ "$(uname -m)" != "x86_64" ]; then
+  echo "ERROR: This script is only for Ubuntu x86_64 (linux-5090)."
+  echo "  Windows ARM: see lorefire-desktop/WINDOWS-ARM.md"
+  echo "  Other hosts: use the README development setup."
+  exit 1
+fi
+
+missing=()
+for bin in git php composer node npm python3 curl; do
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    missing+=("$bin")
+  fi
+done
+
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "ERROR: missing commands: ${missing[*]}"
+  echo "  Install the Ubuntu packages listed in lorefire-desktop/LINUX-5090.md"
+  echo "  then re-run this script."
+  exit 1
+fi
+
+php_ver="$(php -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;')"
+echo "    PHP     : $(php -v | head -1) ($php_ver)"
+echo "    Node    : $(node -v)"
+echo "    Python  : $(python3 --version)"
+echo ""
+
+GPU=false
+if bash "$DETECT"; then
+  GPU=true
+else
+  echo ""
+  echo "==> CUDA missing — continuing with CPU WhisperX (slower)."
+  echo "    After installing NVIDIA driver 570+, re-run:"
+  echo "      php artisan python:setup --gpu"
+fi
+echo ""
+
+cd "$DESKTOP"
+
+if [ ! -f composer.json ]; then
+  echo "ERROR: lorefire-desktop/composer.json not found."
+  exit 1
+fi
+
+echo "==> composer install"
+composer install --no-interaction
+
+if [ ! -f .env ]; then
+  echo "==> copying .env.example → .env"
+  cp .env.example .env
+  php artisan key:generate --ansi
+fi
+
+echo "==> npm install"
+npm install
+
+echo "==> migrations"
+php artisan native:migrate --force || php artisan migrate --force
+
+echo "==> frontend build"
+npm run build
+
+echo "==> bundled Python runtime (optional; setup.sh falls back to system python3)"
+if [ -x resources/python/download_runtime.sh ]; then
+  bash resources/python/download_runtime.sh || echo "WARNING: runtime download skipped; using system Python."
+fi
+
+echo "==> WhisperX venv"
+if [ "$GPU" = true ]; then
+  php artisan python:setup --gpu
+else
+  php artisan python:setup --cpu
+fi
+
+if command -v ollama >/dev/null 2>&1; then
+  echo "==> Ollama is installed ($(ollama --version 2>/dev/null || echo present))"
+  if [ "$GPU" = true ]; then
+    echo "    Pulling qwen2.5:32b (Q4, ~20GB — leaves room for WhisperX large-v3 on 32GB)..."
+    ollama pull qwen2.5:32b || echo "WARNING: ollama pull failed. Run: ollama pull qwen2.5:32b"
+  fi
+else
+  echo "==> Ollama not on PATH."
+  echo "    Install with: curl -fsSL https://ollama.com/install.sh | sh"
+  echo "    Then:         ollama pull qwen2.5:32b"
+fi
+
+echo ""
+echo "==> linux-5090 setup complete."
+echo ""
+echo "    Start Lorefire 2E:"
+echo "      cd $DESKTOP"
+echo "      php artisan native:serve"
+echo ""
+echo "    In Settings (or onboarding):"
+echo "      LLM provider     : Ollama"
+echo "      Ollama model     : qwen2.5:32b"
+echo "      WhisperX model   : large-v3"
+echo "      HuggingFace token: required for speaker diarization"
+echo ""
+echo "    Audio: Session page → Start Recording (mic) or Import Audio File"
+echo "    (webm, wav, mp3, m4a, flac) for AD&D 2E session transcription."
+echo ""

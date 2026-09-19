@@ -7,12 +7,20 @@ use Illuminate\Console\Command;
 
 class PythonSetup extends Command
 {
-    protected $signature   = 'python:setup {--gpu : Install GPU (CUDA) torch instead of CPU}';
+    protected $signature   = 'python:setup
+                            {--gpu : Install GPU (CUDA) torch instead of CPU}
+                            {--cpu : Force CPU wheels (overrides auto CUDA on linux-5090)}';
     protected $description = 'Install the bundled WhisperX Python venv';
 
     public function handle(PythonSetupService $service): int
     {
         $gpu = (bool) $this->option('gpu');
+        if ($this->option('cpu')) {
+            $gpu = false;
+        } elseif (! $gpu && \App\Support\Linux5090::shouldUseCudaStack()) {
+            $gpu = true;
+            $this->info('[python:setup] linux-5090: NVIDIA detected — using CUDA torch');
+        }
 
         $this->info('[python:setup] Starting WhisperX environment setup' . ($gpu ? ' (GPU mode)' : ' (CPU mode)') . '…');
 

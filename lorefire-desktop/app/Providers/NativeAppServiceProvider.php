@@ -35,9 +35,13 @@ class NativeAppServiceProvider implements ProvidesPhpIni
 
         // Kick off Python/WhisperX venv setup in the background on every boot.
         // - If the venv already exists and whisperx imports cleanly, marks 'ready' instantly.
-        // - If the venv is missing or broken, runs setup asynchronously (CPU wheels).
+        // - If the venv is missing or broken, runs setup asynchronously.
+        //   linux-5090 (Linux x86_64 + NVIDIA) uses CUDA wheels; Windows ARM / CPU hosts stay CPU.
         // - Reaps a stuck `running` job (timeout / silent log) before starting another.
         try {
+            if (! app()->environment('testing')) {
+                \App\Support\Linux5090::applyRuntimeDefaults();
+            }
             app(PythonSetupService::class)->bootCheck();
         } catch (\Throwable $e) {
             // Never crash the app over Python setup

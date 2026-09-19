@@ -94,7 +94,10 @@ class OnboardingController extends Controller
      */
     public function retryPython(): \Illuminate\Http\RedirectResponse
     {
-        $this->pythonSetup->runSetupAsync(force: true);
+        $this->pythonSetup->runSetupAsync(
+            gpu: \App\Support\Linux5090::shouldUseCudaStack(),
+            force: true
+        );
         return back()->with('info', 'Python setup restarted in the background.');
     }
 }

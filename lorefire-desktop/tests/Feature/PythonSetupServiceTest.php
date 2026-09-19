@@ -185,6 +185,16 @@ class PythonSetupServiceTest extends TestCase
         $this->assertStringContainsString('--gpu', $cmd);
     }
 
+    public function test_linux_async_gpu_flag_is_appended_without_changing_windows_cpu_default(): void
+    {
+        $linux = $this->service->buildAsyncCommand(true, 'Linux');
+        $windowsCpu = $this->service->buildAsyncCommand(false, 'Windows');
+
+        $this->assertStringContainsString('--gpu', $linux);
+        $this->assertStringNotContainsString('--gpu', $windowsCpu);
+        $this->assertStringContainsString('cmd /c start /b', $windowsCpu);
+    }
+
     public function test_shared_payload_includes_log_and_reaps_stale_status(): void
     {
         AppSetting::set(PythonSetupService::SETTING_STATUS, PythonSetupService::STATUS_RUNNING);

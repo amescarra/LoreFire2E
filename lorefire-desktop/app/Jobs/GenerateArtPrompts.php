@@ -322,11 +322,11 @@ PROMPT;
     {
         $baseUrl = AppSetting::get('ollama_base_url', 'http://localhost:11434');
         $model   = AppSetting::get('ollama_model', 'llama3');
-        $r = Http::timeout(120)->post("{$baseUrl}/api/generate", [
+        $r = Http::timeout(120)->post("{$baseUrl}/api/generate", \App\Support\Linux5090::withOllamaOptions([
             'model'  => $model,
             'prompt' => $prompt,
             'stream' => false,
-        ]);
+        ]));
         return $r->json('response');
     }
 

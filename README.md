@@ -56,6 +56,8 @@ xattr -rd com.apple.quarantine /Applications/Lorefire.app
 
 **Windows on ARM:** keep ARM64 Node (do not install x64 Node). `native:serve` uses your system ARM64 PHP (`winget install PHP.PHP.8.4`). NativePHP php-bin has no `win/arm64` zip — see [lorefire-desktop/WINDOWS-ARM.md](lorefire-desktop/WINDOWS-ARM.md). Packaged ARM installers are still blocked upstream.
 
+**Ubuntu x86_64 + RTX 5090 (CUDA):** separate path. Do not use the ARM scripts. See [lorefire-desktop/LINUX-5090.md](lorefire-desktop/LINUX-5090.md) and `bash lorefire-desktop/scripts/linux-5090-setup.sh`. WhisperX uses CUDA 12.8 when `nvidia-smi` works; CPU only if the NVIDIA driver is missing.
+
 ### Setup
 
 ```bash
@@ -228,7 +230,7 @@ Lorefire submits generation jobs via the ComfyUI API. The active checkpoint in C
 
 - **All data is local.** The SQLite database lives in `~/Library/Application Support/lorefire/` (production) or `~/Library/Application Support/lorefire-dev/` (dev).
 - **No account required.** Nothing is synced to a server. Your campaigns stay on your machine.
-- **Other hardware:** Tested on Apple Silicon. It may work on Intel Macs, Windows, or Linux, but this is untested. WhisperX in particular will be significantly slower without a dedicated neural engine or GPU.
+- **Other hardware:** Tested on Apple Silicon. Windows ARM is a supported CPU path ([WINDOWS-ARM.md](lorefire-desktop/WINDOWS-ARM.md)). Ubuntu x86_64 + RTX 5090 is a supported CUDA path ([LINUX-5090.md](lorefire-desktop/LINUX-5090.md)). WhisperX is significantly slower without a dedicated neural engine or GPU.
 - **Transcription is CPU/ANE-bound.** On Apple Silicon, WhisperX uses the `mps` backend. Large audio files may take a few minutes even on `base` model.
 - **Rules text.** This project implements original UI wording and mechanical tables only. It does not include TSR/WotC copyrighted rulebook prose.
 

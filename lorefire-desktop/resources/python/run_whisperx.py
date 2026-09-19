@@ -54,6 +54,9 @@ from whisperx_languages import (  # noqa: E402
 _cache_base = os.path.join(os.path.expanduser('~'), '.cache')
 os.environ.setdefault('HF_HOME',    os.path.join(_cache_base, 'huggingface'))
 os.environ.setdefault('TORCH_HOME', os.path.join(_cache_base, 'torch'))
+# torch 2.6+ defaults torch.load(weights_only=True). pyannote 3.x / WhisperX VAD
+# checkpoints need the escape hatch. Harmless on torch 2.5 (Windows ARM CPU).
+os.environ.setdefault('TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD', '1')
 
 # imageio-ffmpeg bundles ffmpeg with a platform-specific name (e.g.
 # ffmpeg-win64-v6.1.exe), not "ffmpeg.exe", so adding its directory to PATH
@@ -98,6 +101,7 @@ except Exception as _net_err:
 def detect_device() -> tuple[str, str, str]:
     """Return (ct2_device, torch_device, compute_type).
 
+    CUDA-first: NVIDIA (linux-5090 / any CUDA torch) wins over MPS/CPU.
     ct2_device   — device string for ctranslate2 / faster-whisper (transcription).
                    ctranslate2 only accepts 'cpu' or 'cuda'; MPS is not supported.
     torch_device — device string for pure-PyTorch steps (alignment, diarization).
@@ -116,6 +120,22 @@ def detect_device() -> tuple[str, str, str]:
     except Exception:
         pass
     return "cpu", "cpu", "int8"
+
+
+def default_batch_size(ct2_device: str) -> int:
+    """Use more VRAM on a 32GB 5090; keep 16 on CPU / small GPUs."""
+    if ct2_device != "cuda":
+        return 16
+    try:
+        import torch
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+        if vram_gb >= 28:
+            return 32
+        if vram_gb >= 16:
+            return 24
+    except Exception:
+        pass
+    return 16
 
 
 SAMPLE_RATE = 16000
@@ -308,10 +328,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--hf-token", default=None,   dest="hf_token",
                         help="HuggingFace token (required for diarization)")
     parser.add_argument("--device",   default="auto",  help="Device: auto, cpu, cuda, or mps")
-    parser.add_argument("--batch-size", type=int, default=16, dest="batch_size",
-                        help="Batch size for transcription (reduce if OOM)")
-    parser.add_argument("--compute-type", default="int8", dest="compute_type",
-                        help="Compute type: int8, float16, float32")
+    parser.add_argument("--batch-size", type=int, default=None, dest="batch_size",
+                        help="Batch size for transcription (default: 32 on 32GB CUDA, else 16)")
+    parser.add_argument("--compute-type", default=None, dest="compute_type",
+                        help="Compute type: int8, float16, float32 (default: float16 on CUDA, int8 on CPU)")
     parser.add_argument("--vad-method", default="silero", dest="vad_method",
                         help="VAD backend: silero (default) or pyannote")
     parser.add_argument("--min-speakers", type=int, default=None, dest="min_speakers")
@@ -334,15 +354,21 @@ def main() -> int:
     # ── Resolve device ───────────────────────────────────────────────
     if args.device == "auto":
         ct2_device, torch_device, compute_type = detect_device()
-        if args.compute_type != "int8":
-            # User explicitly passed compute_type — respect it
+        if args.compute_type:
             compute_type = args.compute_type
     else:
         ct2_device = args.device
         torch_device = args.device
-        compute_type = args.compute_type
+        compute_type = args.compute_type or ("float16" if args.device == "cuda" else "int8")
 
-    print(f"[whisperx] Using ct2_device={ct2_device} torch_device={torch_device} compute_type={compute_type}", file=sys.stderr)
+    if args.batch_size is None:
+        args.batch_size = default_batch_size(ct2_device)
+
+    print(
+        f"[whisperx] Using ct2_device={ct2_device} torch_device={torch_device} "
+        f"compute_type={compute_type} batch_size={args.batch_size}",
+        file=sys.stderr,
+    )
 
     allowlist = parse_languages(args.languages)
     languages_explicit = any(

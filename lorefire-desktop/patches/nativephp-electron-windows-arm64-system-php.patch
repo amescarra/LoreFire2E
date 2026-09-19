@@ -8,13 +8,14 @@
  
  // Differentiates for Serving and Building
  const isArm64 = isBuilding ? process.argv.includes('--arm64') : process.arch.includes('arm64');
-@@ -53,12 +54,31 @@
+@@ -53,12 +54,43 @@
  const phpVersionZip = 'php-' + phpVersion + '.zip';
  const binarySrcDir = join(phpBinaryPath, platform.os, platform.arch, phpVersionZip);
  const binaryDestDir = join(import.meta.dirname, 'resources/php');
 +const zipExists = Boolean(phpBinaryPath && fs.existsSync(binarySrcDir));
 +const systemPhpOk = Boolean(systemPhp && fs.existsSync(systemPhp));
 +const winArmServe = !isBuilding && isWindows && isArm64;
++const linuxX64Serve = !isBuilding && isLinux && !isArm64;
  
  console.log('Binary Source: ', binarySrcDir);
  console.log('Binary Filename: ', platform.phpBinary);
@@ -33,6 +34,17 @@
 +        console.log('Electron will use NATIVEPHP_PHP_EXECUTABLE or php.exe on PATH.');
 +        console.log('Install ARM64 PHP 8.4: winget install PHP.PHP.8.4');
 +    }
++} else if (linuxX64Serve && !zipExists) {
++    // php-bin 1.1.1 linux/x64 has php-8.3.zip + php-8.4.zip only. Resolute
++    // artisan is 8.5, so NativePHP looks for php-8.5.zip and ENOENT. Skip
++    // unzip and use system PHP (passed as NATIVEPHP_PHP_EXECUTABLE).
++    if (systemPhpOk) {
++        console.log('Linux x64 serve: php-bin zip missing; using system PHP:', systemPhp);
++    } else {
++        console.log('Linux x64 serve: no php-bin zip at', binarySrcDir);
++        console.log('Electron will use NATIVEPHP_PHP_EXECUTABLE or php on PATH.');
++        console.log('composer update nativephp/php-bin  # 1.2.0 ships linux/x64/php-8.5.zip');
++    }
 +} else if (isBuilding && isWindows && isArm64 && !zipExists) {
 +    console.error('Packaged Windows ARM64 is blocked: nativephp/php-bin has no', binarySrcDir);
 +    console.error('Use php artisan native:serve with ARM Node + ARM PHP for development.');
@@ -41,7 +53,6 @@
      try {
          console.log('Unzipping PHP binary from ' + binarySrcDir + ' to ' + binaryDestDir);
          removeSync(binaryDestDir);
-
 --- a/resources/js/src/main/index.js
 +++ b/resources/js/src/main/index.js
 @@ -1,3 +1,4 @@
@@ -49,7 +60,7 @@
  import {app} from 'electron'
  import NativePHP from '#plugin'
  import path from 'path'
-@@ -6,7 +7,24 @@
+@@ -6,7 +7,35 @@
  
  let phpBinary = process.platform === 'win32' ? 'php.exe' : 'php';
  
@@ -59,8 +70,11 @@
 +
 +// Windows ARM64 serve: php-bin has no win/arm64 zip. Launch the system ARM
 +// PHP in place (php.exe + php8.dll + ext/) instead of a copied php.exe.
++// Linux x64 serve: when php-{version}.zip is missing (php-bin 1.1.1 has no
++// linux/x64 php-8.5.zip), launch system PHP instead of a missing bundled binary.
 +const systemPhp = process.env.NATIVEPHP_PHP_EXECUTABLE;
 +const isWinArm64 = process.platform === 'win32' && process.arch.includes('arm64');
++const isLinux = process.platform === 'linux';
 +const isBuilding = Boolean(process.env.NATIVEPHP_BUILDING);
 +
 +if (isWinArm64 && !isBuilding) {
@@ -71,24 +85,33 @@
 +        phpBinary = 'php.exe';
 +        console.log('Windows ARM64: bundled PHP missing; launching php.exe from PATH');
 +    }
++} else if (isLinux && !isBuilding && !existsSync(bundledPhp)) {
++    if (systemPhp && existsSync(systemPhp)) {
++        phpBinary = systemPhp;
++        console.log('Linux: launching system PHP', phpBinary);
++    } else {
++        phpBinary = 'php';
++        console.log('Linux: bundled PHP missing; launching php from PATH');
++    }
 +}
  
  /**
   * Turn on the lights for the NativePHP app.
-
 --- a/src/Traits/ExecuteCommand.php
 +++ b/src/Traits/ExecuteCommand.php
-@@ -27,6 +27,9 @@
+@@ -27,6 +27,11 @@
                  'NATIVEPHP_PHP_BINARY_PATH' => base_path($this->phpBinaryPath()),
                  'NATIVE_PHP_SKIP_QUEUE' => $skip_queue,
                  'NATIVEPHP_BUILDING' => false,
 +                // Windows ARM64: php-bin has no win/arm64 zip. Pass the ARM
 +                // system PHP so Electron launches it in place (not x64 php-bin).
-+                'NATIVEPHP_PHP_EXECUTABLE' => $this->windowsArm64SystemPhp(),
++                // Linux x64: when php-{major.minor}.zip is missing (1.1.1 has
++                // no php-8.5.zip), pass system PHP. Empty when the zip exists.
++                'NATIVEPHP_PHP_EXECUTABLE' => $this->windowsArm64SystemPhp() ?: $this->linuxX64SystemPhpWhenBinMissing(),
              ],
          ];
  
-@@ -60,4 +63,28 @@
+@@ -60,4 +65,53 @@
  
          return $commands[$type];
      }
@@ -115,5 +138,30 @@
 +        }
 +
 +        return PHP_BINARY;
++    }
++
++    /**
++     * System PHP for Linux x64 native:serve when php-bin has no zip for the
++     * running PHP version. Empty when the zip exists so Electron unzips it.
++     * Does not run on Windows (including ARM).
++     */
++    protected function linuxX64SystemPhpWhenBinMissing(): string
++    {
++        if (PHP_OS_FAMILY !== 'Linux') {
++            return '';
++        }
++
++        $machine = strtolower(php_uname('m'));
++        if (! in_array($machine, ['x86_64', 'amd64'], true)) {
++            return '';
++        }
++
++        $version = PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;
++        $zip = base_path($this->phpBinaryPath()).'/linux/x64/php-'.$version.'.zip';
++        if (is_file($zip)) {
++            return '';
++        }
++
++        return is_file(PHP_BINARY) ? PHP_BINARY : '';
 +    }
  }

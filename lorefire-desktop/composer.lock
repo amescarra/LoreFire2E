@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9158349f1b643f9501bdab3bfcce6f43",
+    "content-hash": "0147bf869addc9e8f54819364575fcdc",
     "packages": [
         {
             "name": "brick/math",
@@ -2437,16 +2437,16 @@
         },
         {
             "name": "nativephp/php-bin",
-            "version": "1.1.1",
+            "version": "1.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/NativePHP/php-bin.git",
-                "reference": "6b5e11cd56f5214f37d4c175afb752b210545f59"
+                "reference": "df5f1f13ac3928f0630bc66a772ae1bf2ed7ebb3"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/NativePHP/php-bin/zipball/6b5e11cd56f5214f37d4c175afb752b210545f59",
-                "reference": "6b5e11cd56f5214f37d4c175afb752b210545f59",
+                "url": "https://api.github.com/repos/NativePHP/php-bin/zipball/df5f1f13ac3928f0630bc66a772ae1bf2ed7ebb3",
+                "reference": "df5f1f13ac3928f0630bc66a772ae1bf2ed7ebb3",
                 "shasum": ""
             },
             "type": "library",
@@ -2476,7 +2476,7 @@
                 "php"
             ],
             "support": {
-                "source": "https://github.com/NativePHP/php-bin/tree/1.1.1"
+                "source": "https://github.com/NativePHP/php-bin/tree/1.2.0"
             },
             "funding": [
                 {
@@ -2488,7 +2488,7 @@
                     "type": "opencollective"
                 }
             ],
-            "time": "2025-09-02T19:18:24+00:00"
+            "time": "2026-05-21T13:07:24+00:00"
         },
         {
             "name": "nesbot/carbon",

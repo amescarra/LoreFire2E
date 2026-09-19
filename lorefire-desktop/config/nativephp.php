@@ -169,7 +169,9 @@ return [
     /**
      * Custom PHP binary path (php-bin package directory, not php.exe).
      * Unused on Windows ARM64 serve — php-bin has no win/arm64 zip.
-     * native:serve passes NATIVEPHP_PHP_EXECUTABLE (system ARM php.exe) instead.
+     * Unused on Linux x64 serve when php-{major.minor}.zip is missing (php-bin
+     * 1.1.1 has linux/x64 8.3+8.4 only; 1.2.0 adds 8.5). native:serve then
+     * passes NATIVEPHP_PHP_EXECUTABLE (system PHP).
      */
     'binary_path' => env('NATIVEPHP_PHP_BINARY_PATH', null),
 ];

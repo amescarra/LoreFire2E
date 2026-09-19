@@ -56,7 +56,7 @@ xattr -rd com.apple.quarantine /Applications/Lorefire.app
 
 **Windows on ARM:** keep ARM64 Node (do not install x64 Node). `native:serve` uses your system ARM64 PHP (`winget install PHP.PHP.8.4`). NativePHP php-bin has no `win/arm64` zip — see [lorefire-desktop/WINDOWS-ARM.md](lorefire-desktop/WINDOWS-ARM.md). Packaged ARM installers are still blocked upstream.
 
-**Ubuntu x86_64 + RTX 5090 (CUDA):** separate path. Do not use the ARM scripts. See [lorefire-desktop/LINUX-5090.md](lorefire-desktop/LINUX-5090.md) and `bash lorefire-desktop/scripts/linux-5090-setup.sh`. WhisperX uses CUDA 12.8 when `nvidia-smi` works; CPU only if the NVIDIA driver is missing.
+**Ubuntu x86_64 + RTX 5090 (CUDA):** separate path. Do not use the ARM scripts. See [lorefire-desktop/LINUX-5090.md](lorefire-desktop/LINUX-5090.md) and `bash lorefire-desktop/scripts/linux-5090-setup.sh`. WhisperX uses CUDA 12.8 when `nvidia-smi` works; CPU only if the NVIDIA driver is missing. Resolute PHP 8.5 needs `nativephp/php-bin` **1.2.0+** (`php-8.5.zip`); 1.1.1 only ships linux/x64 8.3+8.4.
 
 ### Setup
 

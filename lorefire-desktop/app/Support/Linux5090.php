@@ -275,6 +275,57 @@ class Linux5090
         return 'WhisperX on Linux needs Python 3.12. System python3.14 cannot install ctranslate2==4.4.0 (whisperx 3.2). Ubuntu Resolute archives have no python3.12 — install via deadsnakes: '.self::DEADSNAKES_INSTALL.'. Then: rm -rf resources/python/venv && php artisan python:setup --gpu';
     }
 
+    /**
+     * Path NativePHP php.js opens: vendor/nativephp/php-bin/bin/linux/x64/php-{major.minor}.zip
+     */
+    public static function phpBinLinuxX64ZipPath(?string $phpBinDir = null, ?string $phpMinor = null): string
+    {
+        $phpBinDir ??= base_path(implode(DIRECTORY_SEPARATOR, ['vendor', 'nativephp', 'php-bin', 'bin']));
+        $phpMinor ??= PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;
+
+        return rtrim($phpBinDir, DIRECTORY_SEPARATOR).'/linux/x64/php-'.$phpMinor.'.zip';
+    }
+
+    public static function phpBinHasLinuxX64Zip(?string $phpBinDir = null, ?string $phpMinor = null): bool
+    {
+        return is_file(self::phpBinLinuxX64ZipPath($phpBinDir, $phpMinor));
+    }
+
+    /**
+     * Use system PHP for native:serve when the php-bin zip for this PHP version
+     * is missing. Never true on Windows ARM (that path is WindowsArm64Php).
+     */
+    public static function shouldUseSystemPhpForServe(
+        ?string $osFamily = null,
+        ?string $machine = null,
+        ?bool $zipExists = null
+    ): bool {
+        if (! self::isLinuxX86($osFamily, $machine) || self::isWindowsArmPath()) {
+            return false;
+        }
+
+        $zipExists ??= self::phpBinHasLinuxX64Zip();
+
+        return $zipExists === false;
+    }
+
+    public static function servePhpExecutable(
+        ?string $osFamily = null,
+        ?string $machine = null,
+        ?bool $zipExists = null
+    ): ?string {
+        $configured = getenv('NATIVEPHP_PHP_EXECUTABLE') ?: ($_ENV['NATIVEPHP_PHP_EXECUTABLE'] ?? null);
+        if (is_string($configured) && $configured !== '' && is_file($configured)) {
+            return $configured;
+        }
+
+        if (! self::shouldUseSystemPhpForServe($osFamily, $machine, $zipExists)) {
+            return null;
+        }
+
+        return is_file(PHP_BINARY) ? PHP_BINARY : null;
+    }
+
     public static function resetProbes(): void
     {
         self::$cudaProbe = null;

@@ -225,4 +225,72 @@ class Linux5090Test extends TestCase
         $this->assertStringNotContainsString('touch database/database.sqlite', $ps1);
         $this->assertStringNotContainsString('linux-5090', $ps1);
     }
+
+    public function test_php_bin_linux_x64_zip_path_and_system_php_fallback(): void
+    {
+        $this->assertSame(
+            '/tmp/php-bin/bin/linux/x64/php-8.5.zip',
+            Linux5090::phpBinLinuxX64ZipPath('/tmp/php-bin/bin', '8.5')
+        );
+        $this->assertFalse(Linux5090::phpBinHasLinuxX64Zip('/tmp/definitely-missing-php-bin', '8.5'));
+
+        $this->assertTrue(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', false));
+        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'x86_64', true));
+        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Linux', 'aarch64', false));
+        $this->assertFalse(Linux5090::shouldUseSystemPhpForServe('Windows', 'x86_64', false));
+
+        $previous = getenv('NATIVEPHP_PHP_EXECUTABLE') ?: null;
+        putenv('NATIVEPHP_PHP_EXECUTABLE');
+        unset($_ENV['NATIVEPHP_PHP_EXECUTABLE']);
+
+        try {
+            $this->assertNull(Linux5090::servePhpExecutable('Windows', 'ARM64', false));
+            $this->assertNull(Linux5090::servePhpExecutable('Linux', 'x86_64', true));
+
+            if (Linux5090::isLinuxX86() && is_file(PHP_BINARY)) {
+                $this->assertSame(PHP_BINARY, Linux5090::servePhpExecutable('Linux', 'x86_64', false));
+            }
+        } finally {
+            if ($previous) {
+                putenv('NATIVEPHP_PHP_EXECUTABLE='.$previous);
+                $_ENV['NATIVEPHP_PHP_EXECUTABLE'] = $previous;
+            } else {
+                putenv('NATIVEPHP_PHP_EXECUTABLE');
+                unset($_ENV['NATIVEPHP_PHP_EXECUTABLE']);
+            }
+        }
+    }
+
+    public function test_nativephp_php_bin_docs_and_electron_patch_cover_linux_8_5(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $md = file_get_contents($root.'/LINUX-5090.md');
+        $sh = file_get_contents($root.'/scripts/linux-5090-setup.sh');
+        $composer = file_get_contents($root.'/composer.json');
+        $patch = file_get_contents($root.'/patches/nativephp-electron-windows-arm64-system-php.patch');
+        $this->assertIsString($md);
+        $this->assertIsString($sh);
+        $this->assertIsString($composer);
+        $this->assertIsString($patch);
+
+        $this->assertStringContainsString('php-8.5.zip', $md);
+        $this->assertStringContainsString('php-8.3.zip`, `php-8.4.zip` only', $md);
+        $this->assertStringContainsString('1.2.0', $md);
+        $this->assertStringContainsString('composer update nativephp/php-bin', $md);
+        $this->assertStringContainsString('NATIVEPHP_PHP_EXECUTABLE', $md);
+        $this->assertStringContainsString('win/arm64', $md);
+
+        $this->assertStringContainsString('composer update nativephp/php-bin --with-all-dependencies', $sh);
+        $this->assertStringContainsString('php-8.3.zip and php-8.4.zip only', $sh);
+        $this->assertStringContainsString('vendor/nativephp/php-bin/bin/linux/x64', $sh);
+
+        $this->assertStringContainsString('"nativephp/php-bin": "^1.2"', $composer);
+
+        $this->assertStringContainsString('linuxX64Serve', $patch);
+        $this->assertStringContainsString('linuxX64SystemPhpWhenBinMissing', $patch);
+        $this->assertStringContainsString('winArmServe', $patch);
+        $this->assertStringContainsString('windowsArm64SystemPhp', $patch);
+        $this->assertStringContainsString('Packaged Windows ARM64 is blocked', $patch);
+        $this->assertStringContainsString('php.exe on PATH', $patch);
+    }
 }

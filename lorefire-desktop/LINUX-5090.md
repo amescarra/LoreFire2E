@@ -201,6 +201,50 @@ Leave `DB_DATABASE` unset in `.env` on this path. Laravel then uses `database/da
 
 `python:setup` on Linux x86_64 auto-enables `--gpu` when `nvidia-smi` works. `--cpu` forces the old CPU wheels.
 
+## 4b. NativePHP PHP binary (`php-8.5.zip`)
+
+`php artisan native:serve` sets `NATIVEPHP_PHP_BINARY_VERSION` from the **running** PHP (major.minor) and opens:
+
+```
+vendor/nativephp/php-bin/bin/linux/x64/php-{major.minor}.zip
+```
+
+**Verified** (do not assume):
+
+| php-bin | Published | `bin/linux/x64/` |
+|---|---|---|
+| **1.1.1** (what electron 1.3.0 locked) | 2025-09-02 | `php-8.3.zip`, `php-8.4.zip` only — **no `php-8.5.zip`** |
+| **1.2.0** | 2026-05-21 | `php-8.3.zip`, `php-8.4.zip`, **`php-8.5.zip`** |
+
+Ubuntu Resolute `php-cli` is **8.5**. With php-bin **1.1.1** that produces:
+
+```
+Binary Source: .../vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip
+[Error: ENOENT: no such file or directory, open '.../php-8.5.zip']
+```
+
+This branch **pins `nativephp/php-bin` ^1.2** so `composer install` gets `php-8.5.zip`. There is no separate NativePHP “download the zip” artisan command — the zip is the Composer package contents.
+
+One-time on a clone that still has 1.1.1 vendor:
+
+```bash
+cd lorefire/lorefire-desktop
+composer update nativephp/php-bin --with-all-dependencies
+ls vendor/nativephp/php-bin/bin/linux/x64/
+# expect: php-8.3.zip  php-8.4.zip  php-8.5.zip
+php artisan native:serve
+```
+
+If the zip is still missing (stale vendor, incomplete install), this repo’s NativePHP patch **skips the unzip** and launches **system PHP 8.5** (`PHP_BINARY` / `NATIVEPHP_PHP_EXECUTABLE` / `php` on PATH). Same idea as Windows ARM, without changing the ARM path. You can also force it:
+
+```bash
+export NATIVEPHP_PHP_EXECUTABLE="$(php -r 'echo PHP_BINARY;')"
+php artisan native:serve
+# log: Linux x64 serve: php-bin zip missing; using system PHP
+```
+
+Windows ARM is unchanged: it still uses system ARM `php.exe` because php-bin has **no** `win/arm64` zip (including 1.2.0).
+
 ## 5. First run
 
 ```bash

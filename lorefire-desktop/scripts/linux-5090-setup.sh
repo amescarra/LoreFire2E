@@ -136,6 +136,29 @@ fi
 echo "==> composer install"
 composer install --no-interaction
 
+# NativePHP electron picks php-{major.minor}.zip from php-bin for the running PHP.
+# php-bin 1.1.1 linux/x64 has 8.3+8.4 only. Resolute is 8.5 → ENOENT unless 1.2.0+.
+PHP_BIN_DIR="vendor/nativephp/php-bin/bin/linux/x64"
+PHP_BIN_ZIP="$PHP_BIN_DIR/php-${php_ver}.zip"
+echo "==> NativePHP php-bin (linux/x64)"
+if [ -d "$PHP_BIN_DIR" ]; then
+  ls -1 "$PHP_BIN_DIR"
+else
+  echo "    (directory missing — composer install did not unpack php-bin)"
+fi
+if [ -f "$PHP_BIN_ZIP" ]; then
+  echo "    Using php-bin zip: $PHP_BIN_ZIP"
+else
+  echo "WARNING: $PHP_BIN_ZIP is missing."
+  echo "  php-bin 1.1.1 ships php-8.3.zip and php-8.4.zip only (verified)."
+  echo "  php-bin 1.2.0 ships php-8.5.zip. This repo pins nativephp/php-bin ^1.2."
+  echo "  One-time: composer update nativephp/php-bin --with-all-dependencies"
+  echo "  native:serve will use system PHP ($(php -r 'echo PHP_BINARY;')) until the zip exists."
+  if ! php -r 'exit(PHP_VERSION_ID >= 80500 ? 0 : 1);'; then
+    echo "  (This PHP is $php_ver — the matching zip may already be in 1.1.1.)"
+  fi
+fi
+
 if [ ! -f .env ]; then
   echo "==> copying .env.example → .env"
   cp .env.example .env
@@ -201,6 +224,11 @@ echo "==> linux-5090 setup complete."
 echo ""
 echo "    Start Lorefire 2E:"
 echo "      cd $DESKTOP"
+echo "      ls vendor/nativephp/php-bin/bin/linux/x64/"
+echo "      php artisan native:serve"
+echo "    If native:serve errors ENOENT on php-${php_ver}.zip:"
+echo "      composer update nativephp/php-bin --with-all-dependencies"
+echo "      # or: export NATIVEPHP_PHP_EXECUTABLE=\$(php -r 'echo PHP_BINARY;')"
 echo "      php artisan native:serve"
 echo ""
 echo "    In Settings (or onboarding):"

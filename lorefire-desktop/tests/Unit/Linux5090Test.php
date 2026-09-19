@@ -332,5 +332,20 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('using php-\' + fallback + \'.zip', $patch);
         $this->assertStringContainsString('Packaged Windows ARM64 is blocked', $patch);
         $this->assertStringContainsString('php.exe on PATH', $patch);
+
+        $this->assertStringContainsString('chrome-sandbox', $md);
+        $this->assertStringContainsString('sudo chown root:root', $md);
+        $this->assertStringContainsString('sudo chmod 4755', $md);
+        $this->assertStringContainsString('ELECTRON_DISABLE_SANDBOX=1', $md);
+        $this->assertStringContainsString('setuid_sandbox_host', $md);
+        $this->assertStringContainsString('chrome-sandbox', $sh);
+        $this->assertStringContainsString('sudo chown root:root', $sh);
+        $this->assertStringContainsString('sudo chmod 4755', $sh);
+        $this->assertStringContainsString('ELECTRON_DISABLE_SANDBOX=1', $sh);
+        $this->assertStringContainsString('print_chrome_sandbox_help', $sh);
+        $armDoc = file_get_contents($root.'/WINDOWS-ARM.md');
+        $this->assertIsString($armDoc);
+        $this->assertStringNotContainsString('ELECTRON_DISABLE_SANDBOX', $armDoc);
+        $this->assertStringNotContainsString('chrome-sandbox', $armDoc);
     }
 }

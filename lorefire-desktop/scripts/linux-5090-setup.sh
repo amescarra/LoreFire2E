@@ -189,6 +189,27 @@ npm install
 echo "==> frontend build"
 npm run build
 
+# NativePHP native:serve npm-installs Electron under vendor/nativephp/electron/resources/js.
+# Ubuntu then FATALS unless chrome-sandbox is root:root mode 4755. Windows ARM unused.
+print_chrome_sandbox_help() {
+  local sandbox="$DESKTOP/vendor/nativephp/electron/resources/js/node_modules/electron/dist/chrome-sandbox"
+  echo "==> Electron chrome-sandbox (Linux setuid)"
+  if [ -e "$sandbox" ]; then
+    echo "    Found: $sandbox"
+    echo "    $(ls -l "$sandbox")"
+  else
+    echo "    Not installed yet (appears after the first native:serve electron npm install)."
+    echo "    Path: $sandbox"
+  fi
+  echo "    One-time after Electron install (re-run if node_modules/electron is wiped):"
+  echo "      sudo chown root:root $sandbox"
+  echo "      sudo chmod 4755 $sandbox"
+  echo "    Optional dev fallback (no sudo):"
+  echo "      ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve"
+}
+
+print_chrome_sandbox_help
+
 echo "==> bundled Python runtime (python-build-standalone 3.12, optional)"
 if [ -x resources/python/download_runtime.sh ]; then
   bash resources/python/download_runtime.sh || echo "WARNING: runtime download skipped; will require system python3.12."
@@ -234,6 +255,10 @@ echo "      zip=$DESKTOP/vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip"
 echo "      if [ -L \"\$zip\" ]; then rm -f \"\$zip\"; fi"
 echo "      php artisan native:serve"
 echo "    PHP $php_ver with php-bin 1.1.1: serve requests php-8.4.zip (not a symlink)."
+echo "    If FATAL chrome-sandbox owned by root mode 4755:"
+echo "      sudo chown root:root vendor/nativephp/electron/resources/js/node_modules/electron/dist/chrome-sandbox"
+echo "      sudo chmod 4755 vendor/nativephp/electron/resources/js/node_modules/electron/dist/chrome-sandbox"
+echo "      # or: ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve"
 echo ""
 echo "    In Settings (or onboarding):"
 echo "      LLM provider     : Ollama"

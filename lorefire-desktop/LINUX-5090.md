@@ -241,11 +241,48 @@ Optional: upgrade php-bin so a real 8.5 zip exists (`composer update nativephp/p
 
 Windows ARM is unchanged: it still uses system ARM `php.exe` because php-bin has **no** `win/arm64` zip (including 1.2.0).
 
+## 4c. Electron `chrome-sandbox` (Linux setuid)
+
+Unzip + `electron-vite` can succeed, then Electron still dies:
+
+```
+FATAL:setuid_sandbox_host.cc ... chrome-sandbox is owned by root and has mode 4755
+path: .../vendor/nativephp/electron/resources/js/node_modules/electron/dist/chrome-sandbox
+```
+
+On Ubuntu the sandbox helper must be **root:root** and **mode 4755** (setuid). `npm install` / `native:serve` drop a user-owned binary; Chromium then refuses to start. This is Linux-only. Windows ARM does not use `chrome-sandbox`.
+
+One-time after Electron’s npm install (re-run if `node_modules/electron` is reinstalled):
+
+```bash
+cd lorefire/lorefire-desktop
+sandbox=vendor/nativephp/electron/resources/js/node_modules/electron/dist/chrome-sandbox
+# if native:serve has not fetched Electron yet, run it once, let it fail, then:
+sudo chown root:root "$sandbox"
+sudo chmod 4755 "$sandbox"
+ls -l "$sandbox"   # expect: -rwsr-xr-x 1 root root ...
+php artisan native:serve
+```
+
+Optional **dev** fallback (no sudo, weaker isolation — fine for local smoke):
+
+```bash
+cd lorefire/lorefire-desktop
+ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve
+```
+
+Do not put `ELECTRON_DISABLE_SANDBOX=1` in a packaged/prod build. Prefer the `chown`/`chmod` for day-to-day `native:serve`.
+
 ## 5. First run
 
 ```bash
 cd lorefire/lorefire-desktop
+# php-bin 1.1.1: serve requests php-8.4.zip (remove any temp php-8.5.zip symlink)
+zip=vendor/nativephp/php-bin/bin/linux/x64/php-8.5.zip
+if [ -L "$zip" ]; then rm -f "$zip"; fi
 php artisan native:serve
+# if FATAL chrome-sandbox: sudo chown root:root + chmod 4755 on that path, or:
+# ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve
 ```
 
 Onboarding / Settings:

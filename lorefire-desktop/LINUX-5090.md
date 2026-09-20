@@ -9,6 +9,8 @@ Lorefire stays **local**. Transcription is WhisperX in a Python venv. The LLM is
 | Piece | linux-5090 (this box) | ARM / Windows Snapdragon |
 |---|---|---|
 | Install script | `scripts/linux-5090-setup.sh` | `scripts/native-serve.ps1` |
+| One-click launch | `scripts/linux-5090-launch.sh` + `scripts/lorefire-2e.desktop` | `scripts/native-serve.ps1` (no `.desktop`) |
+| App icon | `public/icon.png` (NativePHP → Electron `build/` + `resources/`) | same tree; Windows uses `public/icon.ico` (arch-independent) |
 | Docs | this file | `WINDOWS-ARM.md` |
 | WhisperX torch | CUDA 12.8 (`cu128`) when `nvidia-smi` works | CPU wheels (`setup.ps1`) |
 | First-run GPU | CUDA-first, CPU only if the driver is missing | CPU |
@@ -281,6 +283,32 @@ Lorefire therefore paints custom controls in the title bar (and on onboarding / 
 
 On Ubuntu, use the **right-hand** close button (red on hover) if the window has no OS decorations. `Alt` still reveals the hidden Electron menu. Windows ARM uses the same custom buttons because the window is frameless there too.
 
+## 4e. App icon (NativePHP / electron-builder)
+
+Design: fire / D&D book — split ash/lava, **LF** over **2E**, open tome with a flame (G3).
+
+`APP_NAME` must be **Lorefire 2E** (see `.env.example`). NativePHP slugs that and appends `-dev` on `native:serve`, so Electron’s Linux **WM_CLASS** is `lorefire-2e-dev` (not `lorefire-dev`, which GNOME showed as the default cog). Packaged / prod app-data is `~/.config/lorefire-2e/`; serve uses `~/.config/lorefire-2e-dev/`.
+
+Every `native:serve` republishes `public/icon.png` into Electron `resources/` + `build/` (and any stale `out/**/icon.png`). Electron also gets `NATIVEPHP_APP_ICON` pointing at `public/icon.png` so the running window/taskbar skips a cached NativePHP cog. `linux-5090-launch.sh` copies the same files again before artisan, and `php artisan lorefire:publish-native-icon` is the documented publish step. Windows ARM uses the same `installIcon` + `NATIVEPHP_APP_ICON` path (plus `public/icon.ico`).
+
+NativePHP `native:serve` / `native:build` copies these files into Electron (`vendor/nativephp/electron/resources/js/build/` and `…/resources/`):
+
+| File | Role |
+|---|---|
+| `public/icon.png` | Master, **1024×1024**. Desktop, dock, app switcher. Must be ≥ 512. |
+| `public/icon.ico` | Windows (x64 **and ARM64** — ICO is not arch-specific). |
+| `public/icon.icns` | macOS. |
+| `public/IconTemplate.png` / `@2x` | Menu-bar template. |
+| `public/icons/16x16.png` … `512x512.png` | electron-builder Linux sizes + `.desktop` fallbacks. |
+
+Regenerate derivatives from `public/icon.png`:
+
+```bash
+python3 lorefire-desktop/scripts/generate-app-icons.py
+```
+
+Do not put icons under `public/build/` — that directory is Vite output and is gitignored.
+
 ## 5. First run
 
 ```bash
@@ -292,6 +320,38 @@ php artisan native:serve
 # if FATAL chrome-sandbox: sudo chown root:root + chmod 4755 on that path, or:
 # ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve
 ```
+
+One-click (same `cd` + `native:serve`, plus chrome-sandbox note / fallback):
+
+```bash
+# from the repo root — or from a GNOME/KDE launcher after --install-desktop
+bash lorefire-desktop/scripts/linux-5090-launch.sh
+bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
+```
+
+`--install-desktop` writes `~/.local/share/applications/lorefire-2e.desktop` with **Icon=** the installed NativePHP PNG (`lorefire-desktop/public/icon.png`). See [§ Desktop launcher](#5b-desktop-launcher-one-click).
+
+### 5b. Desktop launcher (one-click)
+
+`scripts/linux-5090-launch.sh` **cd**s to `lorefire-desktop` and runs `php artisan native:serve`. It prints the chrome-sandbox `chown`/`chmod` docs. If `chrome-sandbox` is not **root:root mode 4755**, it exports `ELECTRON_DISABLE_SANDBOX=1` so a menu click still opens a window (local-dev only).
+
+A GNOME/KDE `.desktop` click has **no TTY**. NativePHP’s Symfony Process then dies immediately:
+
+```
+TTY mode requires /dev/tty to be read/writable.
+```
+
+The launcher checks stdin: a real terminal still `exec php artisan native:serve`. When stdin is not a TTY it wraps the same command in util-linux `script -qefc "php artisan native:serve …" "$LOG"` so NativePHP gets a PTY. The typescript is `lorefire-desktop/storage/logs/native-serve.desktop.log` (override with `LOREFIRE_NATIVE_SERVE_LOG`). Windows ARM is untouched.
+
+```bash
+# run now
+bash lorefire-desktop/scripts/linux-5090-launch.sh
+
+# install a menu shortcut (Icon → public/icon.png)
+bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
+```
+
+The template is `scripts/lorefire-2e.desktop` (`Icon=../public/icon.png`, **StartupWMClass=lorefire-2e-dev**). `--install-desktop` rewrites **Exec**, **Icon**, and **Path** to absolute paths under this clone and copies `public/icons/512x512.png` to `~/.local/share/icons/hicolor/512x512/apps/lorefire-2e-dev.png` so GNOME’s dock uses this `.desktop` icon while the window is running. Windows ARM keeps `scripts/native-serve.ps1` — no `.desktop`, no `ELECTRON_DISABLE_SANDBOX`.
 
 Onboarding / Settings:
 
@@ -431,6 +491,6 @@ Windows ARM remains `powershell -File scripts/native-serve.ps1` and `setup.ps1` 
 |---|---|---|
 | `php artisan python:setup`, `migrate`, other CLI | `lorefire-desktop/database/database.sqlite` | still that file if you run artisan outside Electron |
 | `php artisan native:serve` (dev window) | `lorefire-desktop/database/nativephp.sqlite` | same (`nativephp.sqlite`) |
-| Packaged app | `~/.config/lorefire/` (prod) or `~/.config/lorefire-dev/` (dev) | OS app-data dir |
+| Packaged app | `~/.config/lorefire-2e/` (prod) or `~/.config/lorefire-2e-dev/` (dev) | OS app-data dir |
 
 `linux-5090-setup.sh` `touch`es both repo sqlite files and migrates them **before** WhisperX setup. A missing `database.sqlite` makes `AppSetting::set()` fail during `python:setup`. The packaged-app path is not the macOS `~/Library/Application Support` location in the main README.

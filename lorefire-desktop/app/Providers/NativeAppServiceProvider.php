@@ -22,7 +22,7 @@ class NativeAppServiceProvider implements ProvidesPhpIni
             ->height(800)
             ->minWidth(900)
             ->minHeight(600)
-            ->title('Lorefire')
+            ->title('Lorefire 2E')
             ->titleBarHidden()
             ->trafficLightPosition(6, 17)
             ->hideMenu()

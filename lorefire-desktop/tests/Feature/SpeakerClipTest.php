@@ -16,6 +16,7 @@ class SpeakerClipTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->withoutVite();
         Storage::disk('local')->deleteDirectory('sessions');
     }
 
@@ -75,7 +76,9 @@ class SpeakerClipTest extends TestCase
         $response->assertOk();
         $response->assertHeader('content-type', 'audio/wav');
         $this->assertStringContainsString('inline', (string) $response->headers->get('content-disposition'));
-        $this->assertStringStartsWith('RIFF', $response->streamedContent());
+        $file = $response->baseResponse->getFile();
+        $this->assertSame(realpath($clipPath), $file->getRealPath());
+        $this->assertStringStartsWith('RIFF', (string) file_get_contents($file->getPathname()));
     }
 
     public function test_clip_route_rejects_invalid_label_and_unknown_speaker(): void
@@ -112,7 +115,7 @@ class SpeakerClipTest extends TestCase
 
         [, $session] = $this->sessionWithAudioAndTranscript();
         $audioAbs = Storage::disk('local')->path($session->audio_path);
-        file_put_contents($audioAbs, $this->sineWav(4.0));
+        file_put_contents($audioAbs, $this->sineWav(12.0));
 
         SpeakerClipExtractor::$ffmpegOverride = $ffmpeg;
         $result = app(SpeakerClipExtractor::class)->extract($session->fresh(), 'SPEAKER_00');

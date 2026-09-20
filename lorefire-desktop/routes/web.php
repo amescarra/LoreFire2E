@@ -182,6 +182,10 @@ Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
     Route::post('import-audio',    [ChunkedAudioController::class, 'importAudio'])->name('import-audio');
     // Download the stored audio file
     Route::get('download-audio',   [ChunkedAudioController::class, 'downloadAudio'])->name('download-audio');
+    // Short WAV montage of one SPEAKER_N (Identify Speakers playback)
+    Route::get('speakers/{label}/clip', [ChunkedAudioController::class, 'speakerClip'])
+        ->where('label', 'SPEAKER_[0-9]+')
+        ->name('speakers.clip');
     Route::post('transcribe', [TranscriptionController::class, 'transcribe'])->name('transcribe');
     Route::post('generate-summary', [TranscriptionController::class, 'generateSummary'])->name('generate-summary');
     Route::get('summary-status', [TranscriptionController::class, 'summaryStatus'])->name('summary-status');

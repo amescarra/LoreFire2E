@@ -115,4 +115,53 @@ class LiveRecordingHonestyTest extends TestCase
         $this->assertStringContainsString('enroll_dir()', $enroll);
         $this->assertStringContainsString('cleanup_path', $enroll);
     }
+
+    public function test_identify_speakers_exposes_play_stop_and_session_clip_route(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $show = file_get_contents($root.'/resources/js/Pages/Sessions/Show.tsx');
+        $routes = file_get_contents($root.'/routes/web.php');
+        $controller = file_get_contents($root.'/app/Http/Controllers/ChunkedAudioController.php');
+        $extractor = file_get_contents($root.'/app/Support/SpeakerClipExtractor.php');
+        $windows = file_get_contents($root.'/app/Support/SpeakerClipWindows.php');
+        $resolver = file_get_contents($root.'/app/Support/VoiceprintResolver.php');
+
+        $this->assertIsString($show);
+        $this->assertIsString($routes);
+        $this->assertIsString($controller);
+        $this->assertIsString($extractor);
+        $this->assertIsString($windows);
+        $this->assertIsString($resolver);
+
+        $this->assertStringContainsString('function SpeakerIdentificationPanel', $show);
+        $this->assertStringContainsString('function SpeakerClipPlayer', $show);
+        $this->assertStringContainsString('data-testid="speaker-clip-player"', $show);
+        $this->assertStringContainsString('data-testid="speaker-clip-play"', $show);
+        $this->assertStringContainsString('data-testid="speaker-clip-scrub"', $show);
+        $this->assertStringContainsString("playing ? 'Stop' : 'Play'", $show);
+        $this->assertStringContainsString('/speakers/${encodeURIComponent(label)}/clip', $show);
+        $this->assertStringContainsString('hasAudio={!!liveAudioPath}', $show);
+        $this->assertStringContainsString('clipWindowsForLabel', $show);
+        $this->assertStringContainsString('CLIP_MAX_SECONDS = 25', $show);
+        $this->assertStringContainsString('type="range"', $show);
+        $this->assertStringContainsString('new Audio()', $show);
+
+        $this->assertStringContainsString("speakers/{label}/clip", $routes);
+        $this->assertStringContainsString('speakerClip', $routes);
+        $this->assertStringContainsString("where('label', 'SPEAKER_[0-9]+')", $routes);
+
+        $this->assertStringContainsString('function speakerClip', $controller);
+        $this->assertStringContainsString('SpeakerClipExtractor', $controller);
+        $this->assertStringContainsString("Content-Type' => 'audio/wav'", $controller);
+        $this->assertStringContainsString("inline; filename=", $controller);
+
+        $this->assertStringContainsString('atrim=start=', $extractor);
+        $this->assertStringContainsString('concat=n=', $extractor);
+        $this->assertStringContainsString('loadTranscriptSegments', $extractor);
+        $this->assertStringContainsString('MAX_SECONDS = 25.0', $windows);
+        $this->assertStringContainsString('MAX_SEGMENTS = 3', $windows);
+
+        $this->assertStringContainsString('Does not rewrite SPEAKER_N inside transcript.json', $resolver);
+        $this->assertStringContainsString('applyToSession', $resolver);
+    }
 }

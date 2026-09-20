@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Head, router } from '@inertiajs/react'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { usePdfExport } from '@/hooks/usePdfExport'
@@ -10,6 +10,204 @@ import { Button } from '@/Components/Button'
 import { Campaign, CampaignVoiceprint, GameSession, Encounter, EncounterTurn, SceneArtPrompt, Character, SpeakerProfile } from '@/types'
 
 // ── Speaker Identification Panel ─────────────────────────────────────────────
+
+interface TranscriptSegment {
+  start: number
+  end: number
+  text: string
+  speaker?: string        // resolved display name
+  speaker_label?: string  // raw SPEAKER_XX label
+  speaker_is_dm?: boolean
+}
+
+interface SpeakerClipWindow {
+  start: number
+  end: number
+}
+
+// Keep in sync with App\Support\SpeakerClipWindows
+const CLIP_MAX_SEGMENTS = 3
+const CLIP_MAX_SECONDS = 25
+const CLIP_MAX_SEGMENT_SECONDS = 12
+const CLIP_MIN_SEGMENT_SECONDS = 0.35
+
+function clipWindowsForLabel(segments: TranscriptSegment[], label: string): SpeakerClipWindow[] {
+  const windows: SpeakerClipWindow[] = []
+  let total = 0
+  for (const seg of segments) {
+    const speaker = seg.speaker_label || seg.speaker
+    if (speaker !== label) continue
+    const start = Number(seg.start) || 0
+    const end = Number(seg.end) || start
+    const duration = end - start
+    if (duration < CLIP_MIN_SEGMENT_SECONDS) continue
+    if (windows.length >= CLIP_MAX_SEGMENTS) break
+    const remaining = CLIP_MAX_SECONDS - total
+    if (remaining < CLIP_MIN_SEGMENT_SECONDS) break
+    const take = Math.min(duration, remaining, CLIP_MAX_SEGMENT_SECONDS)
+    windows.push({ start, end: start + take })
+    total += take
+  }
+  return windows
+}
+
+function clipDuration(windows: SpeakerClipWindow[]): number {
+  return windows.reduce((sum, w) => sum + Math.max(0, w.end - w.start), 0)
+}
+
+function fmtClipTime(seconds: number): string {
+  const secs = Math.max(0, Math.floor(seconds))
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+}
+
+let stopActiveSpeakerClip: (() => void) | null = null
+
+function SpeakerClipPlayer({
+  sessionId,
+  label,
+  hasAudio,
+  windows,
+}: {
+  sessionId: number
+  label: string
+  hasAudio: boolean
+  windows: SpeakerClipWindow[]
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const stopRef = useRef<() => void>(() => {})
+  const [playing, setPlaying] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [current, setCurrent] = useState(0)
+  const estimated = clipDuration(windows)
+  const [duration, setDuration] = useState(estimated)
+
+  const src = `/sessions/${sessionId}/speakers/${encodeURIComponent(label)}/clip`
+
+  const stop = useCallback(() => {
+    const audio = audioRef.current
+    if (audio) {
+      audio.pause()
+      audio.currentTime = 0
+    }
+    setPlaying(false)
+    setCurrent(0)
+    setLoading(false)
+    if (stopActiveSpeakerClip === stopRef.current) {
+      stopActiveSpeakerClip = null
+    }
+  }, [])
+
+  stopRef.current = stop
+
+  useEffect(() => {
+    return () => {
+      stopRef.current()
+      const audio = audioRef.current
+      if (audio) {
+        audio.removeAttribute('src')
+        audio.load()
+      }
+      audioRef.current = null
+    }
+  }, [])
+
+  const ensureAudio = () => {
+    if (audioRef.current) return audioRef.current
+    const audio = new Audio()
+    audio.preload = 'auto'
+    audio.src = src
+    audio.addEventListener('timeupdate', () => setCurrent(audio.currentTime))
+    audio.addEventListener('durationchange', () => {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
+        setDuration(audio.duration)
+      }
+    })
+    audio.addEventListener('ended', () => {
+      setPlaying(false)
+      setCurrent(0)
+    })
+    audio.addEventListener('error', () => {
+      setError('Could not play this speaker clip.')
+      setPlaying(false)
+      setLoading(false)
+    })
+    audio.addEventListener('canplay', () => setLoading(false))
+    audioRef.current = audio
+    return audio
+  }
+
+  const playFrom = async (offset = 0) => {
+    if (!hasAudio || windows.length === 0) return
+    setError(null)
+    if (stopActiveSpeakerClip && stopActiveSpeakerClip !== stopRef.current) {
+      stopActiveSpeakerClip()
+    }
+    const audio = ensureAudio()
+    setLoading(true)
+    try {
+      if (offset > 0) audio.currentTime = offset
+      await audio.play()
+      setPlaying(true)
+      setLoading(false)
+      stopActiveSpeakerClip = stopRef.current
+    } catch {
+      setError('Could not play this speaker clip.')
+      setPlaying(false)
+      setLoading(false)
+    }
+  }
+
+  const toggle = () => {
+    if (playing) stop()
+    else void playFrom(current > 0.15 ? current : 0)
+  }
+
+  const seek = (time: number) => {
+    const audio = ensureAudio()
+    audio.currentTime = time
+    setCurrent(time)
+  }
+
+  const disabled = !hasAudio || windows.length === 0
+  const shownDuration = duration || estimated
+
+  return (
+    <div className="flex flex-col gap-1.5" data-testid="speaker-clip-player">
+      <div className="flex items-center gap-2">
+        <Button
+          variant={playing ? 'danger' : 'ghost'}
+          size="sm"
+          onClick={toggle}
+          disabled={disabled || loading}
+          data-testid="speaker-clip-play"
+          title={!hasAudio ? 'No session audio to play' : windows.length === 0 ? 'No timed speech for this label' : undefined}
+        >
+          {loading ? 'Loading…' : playing ? 'Stop' : 'Play'}
+        </Button>
+        <span className="text-[10px] font-mono text-[var(--color-text-dim)]" data-testid="speaker-clip-time">
+          {fmtClipTime(current)} / {fmtClipTime(shownDuration)}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={Math.max(shownDuration, 0.1)}
+        step={0.1}
+        value={Math.min(current, shownDuration)}
+        disabled={disabled}
+        onChange={e => seek(Number(e.target.value))}
+        className="w-full accent-[var(--color-rune)] h-1.5 cursor-pointer"
+        data-testid="speaker-clip-scrub"
+        aria-label={`Scrub ${label} clip`}
+      />
+      {error && <p className="text-[10px] text-[var(--color-danger)]">{error}</p>}
+      {!hasAudio && (
+        <p className="text-[10px] text-[var(--color-text-dim)] italic">Session audio is not available for playback.</p>
+      )}
+    </div>
+  )
+}
 
 interface SpeakerRowState {
   displayName: string
@@ -26,11 +224,13 @@ function SpeakerIdentificationPanel({
   transcriptSegments,
   characters,
   sessionId,
+  hasAudio,
 }: {
   unresolvedLabels: string[]
   transcriptSegments: TranscriptSegment[]
   characters: Character[]
   sessionId: number
+  hasAudio: boolean
 }) {
   const initial: Record<string, SpeakerRowState> = {}
   unresolvedLabels.forEach(label => {
@@ -97,20 +297,33 @@ function SpeakerIdentificationPanel({
       {pendingLabels.map(label => {
         const row = rows[label]
         const samples = samplesFor(label)
+        const windows = clipWindowsForLabel(transcriptSegments, label)
 
         return (
           <div
             key={label}
             className="runic-card p-3 flex flex-col gap-2"
+            data-testid="unresolved-speaker-card"
+            data-speaker-label={label}
           >
-            {/* Label header */}
-            <div className="flex items-center gap-2 mb-0.5">
-              <span className="font-mono text-[10px] text-[var(--color-text-dim)] bg-[var(--color-bg)] px-1.5 py-0.5 rounded">
-                {label}
-              </span>
-              {row.saved && (
-                <span className="text-[10px] text-[var(--color-success)]">Saved</span>
-              )}
+            {/* Label header + clip player */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="font-mono text-[10px] text-[var(--color-text-dim)] bg-[var(--color-bg)] px-1.5 py-0.5 rounded">
+                  {label}
+                </span>
+                {row.saved && (
+                  <span className="text-[10px] text-[var(--color-success)]">Saved</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-[10rem] max-w-xs">
+                <SpeakerClipPlayer
+                  sessionId={sessionId}
+                  label={label}
+                  hasAudio={hasAudio}
+                  windows={windows}
+                />
+              </div>
             </div>
 
             {/* Sample lines */}
@@ -331,15 +544,6 @@ function AssignedSpeakersPanel({
       ))}
     </div>
   )
-}
-
-interface TranscriptSegment {
-  start: number
-  end: number
-  text: string
-  speaker?: string        // resolved display name
-  speaker_label?: string  // raw SPEAKER_XX label
-  speaker_is_dm?: boolean
 }
 
 interface Props {
@@ -1061,6 +1265,7 @@ export default function Show({ campaign, session, characters, transcriptSegments
                       transcriptSegments={transcriptSegments}
                       characters={characters}
                       sessionId={session.id}
+                      hasAudio={!!liveAudioPath}
                     />
                   )}
                   <AssignedSpeakersPanel

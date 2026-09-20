@@ -80,6 +80,12 @@ class VoiceprintArmPathTest extends TestCase
         $this->assertStringContainsString('Elayas', $voices);
         $this->assertStringContainsString('Dungeon Master', $voices);
         $this->assertStringContainsString('Do not collapse', $voices);
+        $this->assertStringContainsString('Record new voice', $voices);
+        $this->assertStringContainsString('Stop', $voices);
+        $this->assertStringContainsString('Voiceprint ready', $voices);
+        $this->assertStringContainsString('useEnrollmentCapture', $voices);
+        $this->assertStringContainsString('openCaptureStream', file_get_contents($root.'/resources/js/hooks/useEnrollmentCapture.ts'));
+        $this->assertStringContainsString('Windows ARM stores enrollment audio but skips embedding extract', $voices);
 
         $this->assertIsString($campaign);
         $this->assertStringContainsString('Enrolled Voices', $campaign);

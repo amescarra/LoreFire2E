@@ -24,9 +24,13 @@ class VoiceprintEmbeddingExtractor
      */
     public static $extractOverride = null;
 
+    /** @var bool|null */
+    public static $supportedOverride = null;
+
     public static function resetOverride(): void
     {
         self::$extractOverride = null;
+        self::$supportedOverride = null;
     }
 
     public function isSupported(
@@ -34,6 +38,10 @@ class VoiceprintEmbeddingExtractor
         ?string $processorArchitecture = null,
         ?string $processorArchitectureW6432 = null
     ): bool {
+        if (self::$supportedOverride !== null) {
+            return (bool) self::$supportedOverride;
+        }
+
         if (Linux5090::isWindowsArmPath($osFamily, $processorArchitecture, $processorArchitectureW6432)) {
             return false;
         }

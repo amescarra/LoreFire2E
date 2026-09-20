@@ -124,6 +124,7 @@ class CampaignVoiceprintTest extends TestCase
                 ->has('voiceprints', 2)
                 ->where('voiceprints.0.display_name', 'Dungeon Master')
                 ->where('voiceprints.1.display_name', 'Elayas')
+                ->has('embeddingExtractSupported')
             );
     }
 
@@ -274,5 +275,77 @@ class CampaignVoiceprintTest extends TestCase
         $this->assertFalse($pc->is_dm);
         $this->assertTrue($dm->is_dm);
         $this->assertSame(2, $campaign->voiceprints()->count());
+    }
+
+    public function test_enroll_accepts_in_app_recording_webm(): void
+    {
+        [$campaign, $elayas] = $this->suorNoir();
+        $voiceprint = CampaignVoiceprint::factory()->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+        ]);
+
+        VoiceprintEmbeddingExtractor::$extractOverride = fn () => [
+            'model' => 'test-embedding',
+            'speakers' => ['enrollment' => [0.2, 0.8, 0.0]],
+        ];
+
+        $this->from("/campaigns/{$campaign->id}/voices")
+            ->post("/campaigns/{$campaign->id}/voiceprints/{$voiceprint->id}/enroll", [
+                'audio' => UploadedFile::fake()->create('enrollment.webm', 48, 'audio/webm'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Voiceprint ready.');
+
+        $voiceprint->refresh();
+        $this->assertTrue($voiceprint->hasEmbedding());
+        $this->assertNotNull($voiceprint->enrollment_audio_path);
+        $this->assertNotNull($voiceprint->enrolled_at);
+    }
+
+    public function test_store_from_recording_creates_voiceprint(): void
+    {
+        [$campaign] = $this->suorNoir();
+
+        VoiceprintEmbeddingExtractor::$extractOverride = fn () => [
+            'speakers' => ['enrollment' => [0.0, 1.0, 0.0]],
+        ];
+
+        $this->from("/campaigns/{$campaign->id}/voices")
+            ->post("/campaigns/{$campaign->id}/voiceprints", [
+                'display_name' => 'Dungeon Master',
+                'is_dm' => 1,
+                'audio' => UploadedFile::fake()->create('enrollment.webm', 36, 'audio/webm'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Voiceprint ready.');
+
+        $dm = CampaignVoiceprint::query()->where('display_name', 'Dungeon Master')->firstOrFail();
+        $this->assertTrue($dm->is_dm);
+        $this->assertTrue($dm->hasEmbedding());
+    }
+
+    public function test_enroll_explains_when_embedding_extract_is_skipped(): void
+    {
+        [$campaign] = $this->suorNoir();
+        $voiceprint = CampaignVoiceprint::factory()->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => 'Elayas',
+        ]);
+
+        VoiceprintEmbeddingExtractor::$supportedOverride = false;
+        VoiceprintEmbeddingExtractor::$extractOverride = fn () => ['speakers' => []];
+
+        $this->from("/campaigns/{$campaign->id}/voices")
+            ->post("/campaigns/{$campaign->id}/voiceprints/{$voiceprint->id}/enroll", [
+                'audio' => UploadedFile::fake()->create('enrollment.webm', 24, 'audio/webm'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('info');
+
+        $this->assertStringContainsString('Windows ARM', session('info'));
+        $this->assertFalse($voiceprint->fresh()->hasEmbedding());
+        $this->assertNotNull($voiceprint->fresh()->enrollment_audio_path);
     }
 }

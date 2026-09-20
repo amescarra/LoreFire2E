@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Campaign;
 use App\Models\CampaignVoiceprint;
 use App\Support\CampaignVoiceprintPromoter;
+use App\Support\VoiceprintEmbeddingExtractor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -28,6 +29,7 @@ class CampaignVoiceprintController extends Controller
             'campaign' => $campaign,
             'characters' => $campaign->characters,
             'voiceprints' => $voiceprints,
+            'embeddingExtractSupported' => app(VoiceprintEmbeddingExtractor::class)->isSupported(),
         ]);
     }
 
@@ -37,21 +39,23 @@ class CampaignVoiceprintController extends Controller
         $audio = $request->file('audio');
 
         if ($audio) {
-            $promoter->enrollAudio(
+            $voiceprint = $promoter->enrollAudio(
                 $campaign->id,
                 $data['display_name'],
                 (bool) ($data['is_dm'] ?? false),
                 $data['character_id'] ?? null,
                 $audio->getRealPath(),
             );
-        } else {
-            CampaignVoiceprint::query()->create([
-                'campaign_id' => $campaign->id,
-                'display_name' => $data['display_name'],
-                'character_id' => ! empty($data['is_dm']) ? null : ($data['character_id'] ?? null),
-                'is_dm' => (bool) ($data['is_dm'] ?? false),
-            ]);
+
+            return back()->with($this->flashFor($voiceprint));
         }
+
+        CampaignVoiceprint::query()->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => $data['display_name'],
+            'character_id' => ! empty($data['is_dm']) ? null : ($data['character_id'] ?? null),
+            'is_dm' => (bool) ($data['is_dm'] ?? false),
+        ]);
 
         return back()->with('success', 'Voice saved for this campaign.');
     }
@@ -81,7 +85,7 @@ class CampaignVoiceprintController extends Controller
             'audio' => 'required|file|max:512000',
         ]);
 
-        $promoter->enrollAudio(
+        $updated = $promoter->enrollAudio(
             $campaign->id,
             $voiceprint->display_name,
             (bool) $voiceprint->is_dm,
@@ -90,7 +94,7 @@ class CampaignVoiceprintController extends Controller
             $voiceprint,
         );
 
-        return back()->with('success', 'Voice re-enrolled.');
+        return back()->with($this->flashFor($updated));
     }
 
     public function destroy(Campaign $campaign, CampaignVoiceprint $voiceprint): RedirectResponse
@@ -121,6 +125,22 @@ class CampaignVoiceprintController extends Controller
     protected function assertCampaign(Campaign $campaign, CampaignVoiceprint $voiceprint): void
     {
         abort_unless($voiceprint->campaign_id === $campaign->id, 404);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function flashFor(CampaignVoiceprint $voiceprint): array
+    {
+        if ($voiceprint->hasEmbedding()) {
+            return ['success' => 'Voiceprint ready.'];
+        }
+
+        if (! app(VoiceprintEmbeddingExtractor::class)->isSupported()) {
+            return ['info' => 'Audio saved. Embedding extraction is skipped on Windows ARM — auto-label needs Linux WhisperX + pyannote.'];
+        }
+
+        return ['error' => 'Audio saved, but the voiceprint could not be extracted. Check the Hugging Face token and try again.'];
     }
 
     /**

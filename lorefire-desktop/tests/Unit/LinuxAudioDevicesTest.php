@@ -204,6 +204,8 @@ class LinuxAudioDevicesTest extends TestCase
         $ctx = file_get_contents(dirname(__DIR__, 2).'/resources/js/Contexts/RecordingContext.tsx');
         $lib = file_get_contents(dirname(__DIR__, 2).'/resources/js/lib/audioCapture.ts');
         $settings = file_get_contents(dirname(__DIR__, 2).'/resources/js/Pages/Settings/Index.tsx');
+        $enroll = file_get_contents(dirname(__DIR__, 2).'/resources/js/hooks/useEnrollmentCapture.ts');
+        $voices = file_get_contents(dirname(__DIR__, 2).'/resources/js/Pages/Campaigns/Voices.tsx');
         $this->assertIsString($ctx);
         $this->assertIsString($lib);
         $this->assertIsString($settings);
@@ -211,6 +213,14 @@ class LinuxAudioDevicesTest extends TestCase
         $this->assertStringContainsString('openCaptureStream', $ctx);
         $this->assertStringContainsString('fetchAudioCaptureConfig', $ctx);
         $this->assertStringContainsString('activeInputLabel', $ctx);
+
+        $this->assertIsString($enroll);
+        $this->assertStringContainsString('openCaptureStream', $enroll);
+        $this->assertStringContainsString('fetchAudioCaptureConfig', $enroll);
+        $this->assertStringContainsString('MediaRecorder', $enroll);
+        $this->assertIsString($voices);
+        $this->assertStringContainsString('useEnrollmentCapture', $voices);
+        $this->assertStringNotContainsString('getUserMedia({ audio: true })', $voices);
 
         $this->assertStringContainsString('{ audio: true }', $lib);
         $this->assertStringContainsString('Anker PowerConf S500', $lib);

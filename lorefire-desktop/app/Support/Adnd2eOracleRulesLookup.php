@@ -69,6 +69,46 @@ class Adnd2eOracleRulesLookup
         return self::lookup($question, $context)['markdown'];
     }
 
+    /**
+     * Player-facing structured answer when the engine can resolve a THAC0
+     * (or other THAC0-table) question without calling an LLM.
+     *
+     * @param  array<string, mixed>  $context
+     */
+    public static function playerReply(string $question, array $context = []): ?string
+    {
+        $lookup = self::lookup($question, $context);
+        if (! self::isDirectTableAnswer($question, $lookup)) {
+            return null;
+        }
+
+        $lines = ['## Engine'];
+        $lines[] = '';
+        foreach ($lookup['facts'] as $fact) {
+            $lines[] = '- '.$fact;
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array{intent?: string, resolved?: bool, facts?: list<string>, markdown?: string}  $lookup
+     */
+    public static function isDirectTableAnswer(string $question, array $lookup): bool
+    {
+        if (($lookup['intent'] ?? '') !== 'rules') {
+            return false;
+        }
+        if (! ($lookup['resolved'] ?? false)) {
+            return false;
+        }
+        if (($lookup['facts'] ?? []) === []) {
+            return false;
+        }
+
+        return self::mentions($question, 'thac0|thaco');
+    }
+
     public static function looksLikeRulesQuery(string $question): bool
     {
         $q = mb_strtolower($question);
@@ -1068,6 +1108,7 @@ class Adnd2eOracleRulesLookup
             'psion' => 'Psionicist',
             'paladin' => 'Paladin',
             'ranger' => 'Ranger',
+            'warrior' => 'Fighter',
             'fighter' => 'Fighter',
             'illusionist' => 'Mage',
             'wizard' => 'Mage',
@@ -1088,6 +1129,22 @@ class Adnd2eOracleRulesLookup
         }
 
         return null;
+    }
+
+    private static function classLevelNeedles(string $class): string
+    {
+        return match ($class) {
+            'Fighter' => 'fighter|warrior',
+            'Paladin' => 'paladin',
+            'Ranger' => 'ranger',
+            'Mage' => 'mage|wizard|illusionist|warlock|sorcerer',
+            'Cleric' => 'cleric|priest',
+            'Druid' => 'druid',
+            'Thief' => 'thief|rogue',
+            'Bard' => 'bard',
+            'Psionicist' => 'psionicist|psionic|psion',
+            default => preg_quote($class, '/'),
+        };
     }
 
     private static function parseRace(string $question): ?string
@@ -1113,13 +1170,15 @@ class Adnd2eOracleRulesLookup
         if (preg_match_all('/(\d{1,2})(?:st|nd|rd|th)[-\s]*level/i', $question, $matches)) {
             $levels = array_merge($levels, array_map('intval', $matches[1]));
         }
+        if (preg_match_all('/\b(?:lvl|lv)\.?\s*(\d{1,2})\b/i', $question, $matches)) {
+            $levels = array_merge($levels, array_map('intval', $matches[1]));
+        }
         if ($class !== null) {
-            $c = preg_quote($class, '/');
-            $wizard = $class === 'Mage' ? '|wizard|mage' : '';
-            if (preg_match_all('/\b(?:'.$c.$wizard.')s?\s+(?:at\s+)?(\d{1,2})\b/i', $question, $matches)) {
+            $needles = self::classLevelNeedles($class);
+            if (preg_match_all('/\b(?:'.$needles.')s?\s+(?:at\s+)?(\d{1,2})\b/i', $question, $matches)) {
                 $levels = array_merge($levels, array_map('intval', $matches[1]));
             }
-            if (preg_match_all('/\b(\d{1,2})\s+(?:'.$c.$wizard.')\b/i', $question, $matches)) {
+            if (preg_match_all('/\b(\d{1,2})\s+(?:'.$needles.')\b/i', $question, $matches)) {
                 $levels = array_merge($levels, array_map('intval', $matches[1]));
             }
         }

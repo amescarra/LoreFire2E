@@ -17,6 +17,26 @@ class Adnd2eTest extends TestCase
         $this->assertSame(18, Adnd2e::thac0('Cleric', 4));
         $this->assertSame(20, Adnd2e::thac0('Thief', 1));
         $this->assertSame(19, Adnd2e::thac0('Thief', 5));
+
+        $this->assertSame(11, Adnd2e::thac0('Fighter', 10));
+        $this->assertSame(10, Adnd2e::thac0('Fighter', 11));
+        $this->assertSame(10, Adnd2e::thac0('Paladin', 11));
+        $this->assertSame(11, Adnd2e::thac0('Ranger', 10));
+
+        $this->assertSame(20, Adnd2e::thac0('Cleric', 3));
+        $this->assertSame(18, Adnd2e::thac0('Druid', 6));
+        $this->assertSame(16, Adnd2e::thac0('Cleric', 7));
+        $this->assertSame(14, Adnd2e::thac0('Cleric', 10));
+
+        $this->assertSame(20, Adnd2e::thac0('Mage', 5));
+        $this->assertSame(19, Adnd2e::thac0('Mage', 6));
+        $this->assertSame(19, Adnd2e::thac0('Mage', 10));
+        $this->assertSame(16, Adnd2e::thac0('Mage', 11));
+
+        $this->assertSame(20, Adnd2e::thac0('Thief', 4));
+        $this->assertSame(19, Adnd2e::thac0('Bard', 8));
+        $this->assertSame(16, Adnd2e::thac0('Thief', 9));
+        $this->assertSame(16, Adnd2e::thac0('Psionicist', 9));
     }
 
     public function test_attack_uses_thac0_minus_descending_ac(): void

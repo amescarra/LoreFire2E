@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Jobs\AskOracle;
 use App\Models\AppSetting;
 use App\Models\Character;
+use App\Models\OracleReply;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -70,19 +73,183 @@ class OracleAskTest extends TestCase
             'messages' => [['role' => 'user', 'content' => 'STR 18/01 open doors']],
         ]);
         $open->assertOk();
-        $openPrompt = Http::recorded()[0][0]->data()['messages'][0]['content'] ?? '';
+        $openPrompt = '';
+        foreach (Http::recorded() as [$request]) {
+            if (str_contains($request->url(), '/api/chat')) {
+                $openPrompt = $request->data()['messages'][0]['content'] ?? '';
+                break;
+            }
+        }
         $this->assertStringContainsString('open doors: 12', $openPrompt);
 
-        Http::fake([
-            '*' => Http::response(['message' => ['content' => 'ok']], 200),
-        ]);
+        Http::fake();
 
         $thac0 = $this->postJson('/oracle/ask', [
             'messages' => [['role' => 'user', 'content' => 'fighter THAC0 at level 5']],
         ]);
         $thac0->assertOk();
-        $thac0Prompt = Http::recorded()[0][0]->data()['messages'][0]['content'] ?? '';
-        $this->assertStringContainsString('Fighter 5 THAC0: 16', $thac0Prompt);
+        $this->getJson('/oracle/replies/'.$thac0->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'done');
+        $this->assertStringContainsString(
+            'Fighter 5 THAC0: 16',
+            (string) $this->getJson('/oracle/replies/'.$thac0->json('reply_id'))->json('reply')
+        );
+        Http::assertNothingSent();
+    }
+
+    public function test_thac0_questions_answer_from_engine_without_llm(): void
+    {
+        AppSetting::set('llm_provider', 'none');
+        Http::fake();
+
+        $cases = [
+            ['what is THAC0 for a 10th level fighter', 'Fighter 10 THAC0: 11'],
+            ['fighter 11 thac0', 'Fighter 11 THAC0: 10'],
+            ['cleric 4 thac0', 'Cleric 4 THAC0: 18'],
+            ['wizard 6 thac0', 'Mage 6 THAC0: 19'],
+            ['rogue 5 thac0', 'Thief 5 THAC0: 19'],
+        ];
+
+        foreach ($cases as [$question, $expect]) {
+            $response = $this->postJson('/oracle/ask', [
+                'messages' => [['role' => 'user', 'content' => $question]],
+            ]);
+            $response->assertOk()->assertJsonStructure(['reply_id']);
+
+            $status = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+                ->assertOk()
+                ->assertJsonPath('status', 'done')
+                ->json('reply');
+
+            $this->assertIsString($status);
+            $this->assertStringContainsString($expect, $status, $question);
+            $this->assertStringNotContainsString('THAC0 of 9', $status, $question);
+            $this->assertStringNotContainsString('THAC0 of 5', $status, $question);
+        }
+
+        Http::assertNothingSent();
+    }
+
+    public function test_thac0_skips_llm_even_when_provider_is_configured(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3');
+
+        Http::fake([
+            '*' => Http::response(['message' => ['content' => 'Level 11 Fighter has a THAC0 of 9']], 200),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'fighter 11 thac0']],
+        ]);
+        $response->assertOk();
+
+        $reply = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'done')
+            ->json('reply');
+
+        $this->assertStringContainsString('Fighter 11 THAC0: 10', (string) $reply);
+        $this->assertStringNotContainsString('THAC0 of 9', (string) $reply);
+        Http::assertNothingSent();
+    }
+
+    public function test_ollama_missing_model_lists_available_names(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3.1:8b');
+
+        Http::fake([
+            'http://localhost:11434/api/tags' => Http::response([
+                'models' => [['name' => 'llama3.1:latest']],
+            ], 200),
+            'http://localhost:11434/api/chat' => Http::response([
+                'error' => "model 'llama3.1:8b' not found",
+            ], 404),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $reply = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'failed')
+            ->json('reply');
+
+        $this->assertIsString($reply);
+        $this->assertStringContainsString('llama3.1:8b', $reply);
+        $this->assertStringContainsString('not found', $reply);
+        $this->assertStringContainsString('llama3.1:latest', $reply);
+        $this->assertStringContainsString('Settings', $reply);
+    }
+
+    public function test_ollama_http_failure_stores_visible_error(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3');
+
+        Http::fake([
+            '*' => Http::response('internal error', 500),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $status = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'failed');
+
+        $reply = $status->json('reply');
+        $this->assertIsString($reply);
+        $this->assertNotSame('', $reply);
+        $this->assertStringContainsString('Ollama', $reply);
+        $this->assertStringContainsString('HTTP 500', $reply);
+    }
+
+    public function test_ollama_connection_exception_stores_visible_error(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3');
+
+        Http::fake(function () {
+            throw new ConnectionException('cURL error 7: Failed to connect to localhost port 11434');
+        });
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $reply = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'failed')
+            ->json('reply');
+
+        $this->assertIsString($reply);
+        $this->assertStringContainsString('Oracle request failed', $reply);
+        $this->assertStringContainsString('cURL error 7', $reply);
+    }
+
+    public function test_ask_oracle_failed_handler_writes_visible_error(): void
+    {
+        $row = OracleReply::create(['status' => 'pending']);
+        $job = new AskOracle($row, 'sys', [['role' => 'user', 'content' => 'hi']]);
+        $job->failed(new \RuntimeException('cURL error 7: Failed to connect to localhost port 11434'));
+
+        $row->refresh();
+        $this->assertSame('failed', $row->status);
+        $this->assertNotNull($row->reply);
+        $this->assertStringContainsString('Oracle request failed', $row->reply);
+        $this->assertStringContainsString('cURL error 7', $row->reply);
     }
 
     public function test_ask_material_inspect_uses_sheet_not_phb(): void
@@ -126,6 +293,34 @@ class OracleAskTest extends TestCase
         $this->assertStringContainsString('sulfur', mb_strtolower($system));
         $this->assertStringContainsString('can supply those sheet requirements', $system);
         $this->assertStringNotContainsStringIgnoringCase('PHB page', $system);
+    }
+
+    public function test_missing_huggingface_token_does_not_break_oracle(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3.1:latest');
+
+        $this->assertNull(AppSetting::get('huggingface_token'));
+
+        Http::fake([
+            'http://localhost:11434/api/tags' => Http::response([
+                'models' => [['name' => 'llama3.1:latest']],
+            ], 200),
+            'http://localhost:11434/api/chat' => Http::response([
+                'message' => ['content' => 'Session recap from the engine briefing.'],
+            ], 200),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('reply', 'Session recap from the engine briefing.');
     }
 
     public function test_oracle_index_renders(): void

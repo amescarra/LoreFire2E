@@ -8,6 +8,7 @@ use App\Models\Campaign;
 use App\Models\GameSession;
 use App\Models\OracleReply;
 use App\Support\Adnd2eOracleBriefing;
+use App\Support\Adnd2eOracleRulesLookup;
 use App\Support\SessionSheetUpdates;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -60,6 +61,25 @@ class OracleController extends Controller
             }
         }
 
+        $context = $request->input('context', []);
+        $context = is_array($context) ? $context : [];
+        $direct = $question !== ''
+            ? Adnd2eOracleRulesLookup::playerReply($question, $context)
+            : null;
+
+        if ($direct !== null) {
+            $reply = OracleReply::create(['status' => 'done', 'reply' => $direct]);
+            Log::info('Oracle engine table answer', [
+                'reply_id' => $reply->id,
+                'question' => $question,
+            ]);
+
+            return response()->json([
+                'reply_id' => $reply->id,
+                'sheet_updated' => $sheetUpdated,
+            ]);
+        }
+
         $provider = AppSetting::get('llm_provider', 'none');
 
         if ($provider === 'none') {
@@ -69,7 +89,7 @@ class OracleController extends Controller
             ], 422);
         }
 
-        $systemPrompt = $this->buildSystemPrompt($request->input('context', []), $question);
+        $systemPrompt = $this->buildSystemPrompt($context, $question);
 
         $reply = OracleReply::create(['status' => 'pending']);
 

@@ -36,6 +36,43 @@ class Adnd2eOracleRulesLookupTest extends TestCase
         $this->assertStringContainsString('Adnd2e::thac0', $result['markdown']);
     }
 
+    public function test_natural_thac0_prompts_use_group_tables(): void
+    {
+        $cases = [
+            ['what is THAC0 for a 10th level fighter', 'Fighter 10 THAC0: 11'],
+            ['fighter 11 thac0', 'Fighter 11 THAC0: 10'],
+            ['Level 11 Fighter thac0', 'Fighter 11 THAC0: 10'],
+            ['warrior 11 thac0', 'Fighter 11 THAC0: 10'],
+            ['cleric 4 thac0', 'Cleric 4 THAC0: 18'],
+            ['priest 4 thac0', 'Cleric 4 THAC0: 18'],
+            ['mage 6 thac0', 'Mage 6 THAC0: 19'],
+            ['wizard 6 thac0', 'Mage 6 THAC0: 19'],
+            ['thief 5 thac0', 'Thief 5 THAC0: 19'],
+            ['rogue 5 thac0', 'Thief 5 THAC0: 19'],
+        ];
+
+        foreach ($cases as [$question, $expect]) {
+            $result = Adnd2eOracleRulesLookup::lookup($question);
+            $this->assertTrue($result['resolved'], $question);
+            $this->assertSame('rules', $result['intent'], $question);
+            $this->assertStringContainsString($expect, $result['markdown'], $question);
+            $this->assertTrue(Adnd2eOracleRulesLookup::isDirectTableAnswer($question, $result), $question);
+
+            $player = Adnd2eOracleRulesLookup::playerReply($question);
+            $this->assertNotNull($player, $question);
+            $this->assertStringContainsString($expect, $player, $question);
+            $this->assertStringNotContainsString('These values come from', $player, $question);
+            $this->assertStringNotContainsString('Do not invent', $player, $question);
+        }
+    }
+
+    public function test_player_reply_skips_non_thac0_and_narrative(): void
+    {
+        $this->assertNull(Adnd2eOracleRulesLookup::playerReply('Summarize my most recent session.'));
+        $this->assertNull(Adnd2eOracleRulesLookup::playerReply('What is the missile adjustment for DEX 17?'));
+        $this->assertNull(Adnd2eOracleRulesLookup::playerReply('Quote the official Fireball spell text from the PHB page 145.'));
+    }
+
     public function test_strength_18_01_open_doors_uses_engine(): void
     {
         $result = Adnd2eOracleRulesLookup::lookup('STR 18/01 open doors?');

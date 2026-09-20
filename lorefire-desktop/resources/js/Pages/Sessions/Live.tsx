@@ -96,7 +96,11 @@ function OraclePanel({ campaignContext, hasLlm, sessionId, onSheetUpdated }: {
             setMessages(prev => [...prev, { role: 'assistant', content: sd.reply }])
           } else if (sd.status === 'failed') {
             clearInterval(pollRef.current!); pollRef.current = null; setLoading(false)
-            setError('The Oracle failed to respond.')
+            const detail = typeof sd.reply === 'string' && sd.reply.trim() !== ''
+              ? sd.reply
+              : 'The Oracle failed to respond. Check Settings and application logs.'
+            setError(detail)
+            setMessages(prev => [...prev, { role: 'assistant', content: detail }])
           }
         } catch {
           clearInterval(pollRef.current!); pollRef.current = null; setLoading(false)
@@ -108,17 +112,14 @@ function OraclePanel({ campaignContext, hasLlm, sessionId, onSheetUpdated }: {
     }
   }
 
-  if (!hasLlm) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-center p-6">
-        <p className="text-sm" style={{ color: 'var(--color-text-dim)' }}>No LLM provider configured.</p>
-        <Link href="/settings" className="text-xs underline" style={{ color: 'var(--color-rune)' }}>Open Settings</Link>
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full">
+      {!hasLlm && (
+        <div className="px-3 pt-3 text-xs" style={{ color: 'var(--color-text-dim)' }}>
+          No LLM configured — THAC0 and other 2E table questions still answer from the engine.{' '}
+          <Link href="/settings" className="underline" style={{ color: 'var(--color-rune)' }}>Settings</Link>
+        </div>
+      )}
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 min-h-0">
         {messages.length === 0 && !loading && (

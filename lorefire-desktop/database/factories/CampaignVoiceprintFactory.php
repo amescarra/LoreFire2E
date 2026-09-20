@@ -23,6 +23,7 @@ class CampaignVoiceprintFactory extends Factory
             'embedding' => null,
             'embedding_model' => null,
             'enrollment_audio_path' => null,
+            'extract_error' => null,
             'enrolled_at' => null,
         ];
     }

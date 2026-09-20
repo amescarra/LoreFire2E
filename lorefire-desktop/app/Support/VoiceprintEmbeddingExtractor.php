@@ -69,23 +69,57 @@ class VoiceprintEmbeddingExtractor
      */
     public function extract(string $audioPath, ?string $transcriptJson = null, ?string $clipsDir = null): array
     {
-        if (is_callable(self::$extractOverride)) {
-            $decoded = (self::$extractOverride)($audioPath, $transcriptJson);
-            return is_array($decoded) ? $this->speakersFromPayload($decoded) : [];
-        }
+        return $this->extractDetailed($audioPath, $transcriptJson, $clipsDir)['speakers'];
+    }
+
+    /**
+     * @return array{speakers: array<string, list<float>>, model: string|null, clips: array<string, string>, error: string|null, skipped: bool}
+     */
+    public function extractDetailed(string $audioPath, ?string $transcriptJson = null, ?string $clipsDir = null): array
+    {
+        $empty = ['speakers' => [], 'model' => null, 'clips' => [], 'error' => null, 'skipped' => false];
 
         if (! $this->isSupported()) {
-            return [];
+            return array_merge($empty, [
+                'skipped' => true,
+                'error' => 'Embedding extraction is skipped on Windows ARM — auto-label needs Linux WhisperX + pyannote.',
+            ]);
+        }
+
+        if (is_callable(self::$extractOverride)) {
+            $decoded = (self::$extractOverride)($audioPath, $transcriptJson);
+            if (! is_array($decoded)) {
+                return array_merge($empty, ['error' => 'Embedding extract override returned no payload.']);
+            }
+
+            $speakers = $this->speakersFromPayload($decoded);
+            $error = is_string($decoded['error'] ?? null) && $decoded['error'] !== ''
+                ? $decoded['error']
+                : null;
+            if ($speakers === [] && $error === null) {
+                $error = 'No speaker embedding was produced from this recording.';
+            }
+
+            return [
+                'speakers' => $speakers,
+                'model' => is_string($decoded['model'] ?? null) ? $decoded['model'] : ($speakers === [] ? null : 'test-embedding'),
+                'clips' => is_array($decoded['clips'] ?? null) ? $decoded['clips'] : [],
+                'error' => $error,
+                'skipped' => (bool) ($decoded['skipped'] ?? false),
+            ];
         }
 
         if (! is_file($audioPath)) {
-            return [];
+            return array_merge($empty, ['error' => 'Enrollment audio was not found on disk after upload.']);
         }
 
         $python = app(PythonSetupService::class)->venvPythonPath();
         $script = base_path(implode(DIRECTORY_SEPARATOR, ['resources', 'python', 'extract_speaker_embeddings.py']));
-        if (! is_file($python) || ! is_file($script)) {
-            return [];
+        if (! is_file($python)) {
+            return array_merge($empty, ['error' => 'WhisperX Python venv is not installed. Finish onboarding, then try Record again.']);
+        }
+        if (! is_file($script)) {
+            return array_merge($empty, ['error' => 'Speaker embedding script is missing.']);
         }
 
         $hfToken = (string) AppSetting::get('huggingface_token', '');
@@ -112,49 +146,49 @@ class VoiceprintEmbeddingExtractor
         $process->setTimeout(300);
         $process->run();
 
+        $stderr = trim($process->getErrorOutput());
         if (! $process->isSuccessful()) {
             Log::info('[VoiceprintEmbeddingExtractor] extract failed', [
                 'exit' => $process->getExitCode(),
-                'stderr' => $process->getErrorOutput(),
+                'stderr' => $stderr,
             ]);
         }
 
-        if (! is_file($output)) {
-            return [];
+        $decoded = [];
+        if (is_file($output)) {
+            $decoded = json_decode((string) file_get_contents($output), true);
+            @unlink($output);
         }
 
-        $decoded = json_decode((string) file_get_contents($output), true);
-        @unlink($output);
+        if (! is_array($decoded)) {
+            $decoded = [];
+        }
 
-        return is_array($decoded) ? $this->speakersFromPayload($decoded) : [];
-    }
+        $speakers = $this->speakersFromPayload($decoded);
+        $error = is_string($decoded['error'] ?? null) && $decoded['error'] !== ''
+            ? $decoded['error']
+            : null;
 
-    /**
-     * @return array{speakers: array<string, list<float>>, model: string|null, clips: array<string, string>}
-     */
-    public function extractDetailed(string $audioPath, ?string $transcriptJson = null, ?string $clipsDir = null): array
-    {
-        $empty = ['speakers' => [], 'model' => null, 'clips' => []];
-
-        if (is_callable(self::$extractOverride)) {
-            $decoded = (self::$extractOverride)($audioPath, $transcriptJson);
-            if (! is_array($decoded)) {
-                return $empty;
+        if ($speakers === [] && $error === null) {
+            if ($hfToken === '') {
+                $error = 'No speaker embedding was produced. Add a Hugging Face token in Settings (same token as WhisperX diarization) and try again.';
+            } elseif ($stderr !== '') {
+                $error = $this->truncateError($stderr);
+            } else {
+                $error = 'No speaker embedding was produced from this recording. Check the Hugging Face token and try a longer take.';
             }
-
-            return [
-                'speakers' => $this->speakersFromPayload($decoded),
-                'model' => is_string($decoded['model'] ?? null) ? $decoded['model'] : 'test-embedding',
-                'clips' => is_array($decoded['clips'] ?? null) ? $decoded['clips'] : [],
-            ];
+        } elseif ($speakers === [] && $hfToken === '' && ! str_contains(strtolower((string) $error), 'hugging face')) {
+            $error = $this->truncateError((string) $error).' Add a Hugging Face token in Settings (same token as WhisperX diarization).';
         }
-
-        $speakers = $this->extract($audioPath, $transcriptJson, $clipsDir);
 
         return [
             'speakers' => $speakers,
-            'model' => $speakers === [] ? null : 'pyannote/embedding',
-            'clips' => [],
+            'model' => is_string($decoded['model'] ?? null) && $decoded['model'] !== ''
+                ? $decoded['model']
+                : ($speakers === [] ? null : 'pyannote/embedding'),
+            'clips' => is_array($decoded['clips'] ?? null) ? $decoded['clips'] : [],
+            'error' => $speakers === [] ? $error : null,
+            'skipped' => false,
         ];
     }
 
@@ -171,15 +205,30 @@ class VoiceprintEmbeddingExtractor
 
         $out = [];
         foreach ($raw as $label => $value) {
+            if (in_array($label, ['model', 'error', 'clips', 'skipped'], true) && ! isset($payload['speakers'])) {
+                continue;
+            }
             $vector = is_array($value) && isset($value['embedding']) && is_array($value['embedding'])
                 ? $value['embedding']
                 : $value;
             if (! is_array($vector) || $vector === []) {
                 continue;
             }
-            $out[(string) $label] = array_values(array_map('floatval', $vector));
+            // Ignore non-numeric payloads such as {"error": "..."}.
+            $numeric = array_values(array_filter($vector, 'is_numeric'));
+            if ($numeric === [] || count($numeric) !== count($vector)) {
+                continue;
+            }
+            $out[(string) $label] = array_values(array_map('floatval', $numeric));
         }
 
         return $out;
+    }
+
+    protected function truncateError(string $error): string
+    {
+        $error = trim(preg_replace('/\s+/', ' ', $error) ?? $error);
+
+        return mb_substr($error, 0, 500);
     }
 }

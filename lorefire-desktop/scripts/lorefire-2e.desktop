@@ -1,0 +1,16 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Lorefire 2E
+GenericName=AD&D 2E Chronicle
+Comment=Local-first chronicle for Advanced Dungeons & Dragons 2nd Edition
+# linux-5090-launch.sh --install-desktop rewrites Exec, Icon, and Path to absolute
+# paths. Icon always points at the NativePHP-installed PNG (public/icon.png).
+Exec=bash -lc 'cd "$(dirname "$0")/.." && exec ./scripts/linux-5090-launch.sh'
+Icon=../public/icon.png
+Path=..
+Terminal=false
+Categories=Game;RolePlaying;
+StartupNotify=true
+Keywords=D&D;AD&D;2E;Lorefire;campaign;
+StartupWMClass=Electron

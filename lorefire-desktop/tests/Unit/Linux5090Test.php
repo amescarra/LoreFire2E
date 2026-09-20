@@ -349,4 +349,54 @@ class Linux5090Test extends TestCase
         $this->assertStringNotContainsString('ELECTRON_DISABLE_SANDBOX', $armDoc);
         $this->assertStringNotContainsString('chrome-sandbox', $armDoc);
     }
+
+    public function test_linux_desktop_launcher_cds_and_serves_with_installed_icon(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $launch = file_get_contents($root.'/scripts/linux-5090-launch.sh');
+        $desktop = file_get_contents($root.'/scripts/lorefire-2e.desktop');
+        $md = file_get_contents($root.'/LINUX-5090.md');
+        $setup = file_get_contents($root.'/scripts/linux-5090-setup.sh');
+        $arm = file_get_contents($root.'/WINDOWS-ARM.md');
+        $ps1 = file_get_contents($root.'/scripts/native-serve.ps1');
+        $this->assertIsString($launch);
+        $this->assertIsString($desktop);
+        $this->assertIsString($md);
+        $this->assertIsString($setup);
+        $this->assertIsString($arm);
+        $this->assertIsString($ps1);
+
+        $this->assertStringContainsString('cd "$DESKTOP"', $launch);
+        $this->assertStringContainsString('php artisan native:serve', $launch);
+        $this->assertStringContainsString('public/icon.png', $launch);
+        $this->assertStringContainsString('ELECTRON_DISABLE_SANDBOX=1', $launch);
+        $this->assertStringContainsString('chrome-sandbox', $launch);
+        $this->assertStringContainsString('sudo chown root:root', $launch);
+        $this->assertStringContainsString('sudo chmod 4755', $launch);
+        $this->assertStringContainsString('--install-desktop', $launch);
+        $this->assertStringContainsString('lorefire-2e.desktop', $launch);
+        $this->assertStringContainsString('native-serve.ps1', $launch);
+        $this->assertStringContainsString('ICON="$DESKTOP/public/icon.png"', $launch);
+
+        $this->assertStringContainsString('Name=Lorefire 2E', $desktop);
+        $this->assertStringContainsString('Icon=../public/icon.png', $desktop);
+        $this->assertStringContainsString('linux-5090-launch.sh', $desktop);
+        $this->assertStringContainsString('Type=Application', $desktop);
+
+        $this->assertStringContainsString('linux-5090-launch.sh', $md);
+        $this->assertStringContainsString('lorefire-2e.desktop', $md);
+        $this->assertStringContainsString('public/icon.png', $md);
+        $this->assertStringContainsString('public/icon.ico', $md);
+        $this->assertStringContainsString('generate-app-icons.py', $md);
+        $this->assertStringContainsString('--install-desktop', $md);
+
+        $this->assertStringContainsString('linux-5090-launch.sh', $setup);
+        $this->assertStringContainsString('--install-desktop', $setup);
+
+        $this->assertStringContainsString('public/icon.ico', $arm);
+        $this->assertStringNotContainsString('ELECTRON_DISABLE_SANDBOX', $arm);
+        $this->assertStringNotContainsString('chrome-sandbox', $arm);
+        $this->assertStringNotContainsString('linux-5090-launch.sh', $ps1);
+        $this->assertStringContainsString('php artisan native:serve', $ps1);
+    }
 }

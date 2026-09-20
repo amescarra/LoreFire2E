@@ -64,6 +64,10 @@ NATIVEPHP_PHP_EXECUTABLE=C:\path\to\arm64\php.exe
 
 The NativePHP window is **frameless** (`titleBarHidden()`). Windows ARM has no OS traffic lights, so Lorefire draws the same custom **minimize / maximize / close** buttons as Linux (right side of the title bar). They are `no-drag` so they stay clickable next to the drag region. Close calls Electron `window.close()` (NativePHP `Window::close('main')` as fallback).
 
+## App icon
+
+NativePHP copies `public/icon.png` and `public/icon.ico` into Electron `build/` and `resources/` on `native:serve`. The ICO is **architecture-independent** — ARM64 uses the same `public/icon.ico` as x64. Do not add a `win/arm64` icon path. Use `scripts/native-serve.ps1` on this host; the Linux `.desktop` launcher is a different path.
+
 ## Packaging
 
 `php artisan native:build win arm64` remains blocked until NativePHP ships `bin/win/arm64`. Use `native:serve` for ARM development. x64 Windows packages are a separate (emulated) path and are not the goal here.

@@ -9,6 +9,8 @@ Lorefire stays **local**. Transcription is WhisperX in a Python venv. The LLM is
 | Piece | linux-5090 (this box) | ARM / Windows Snapdragon |
 |---|---|---|
 | Install script | `scripts/linux-5090-setup.sh` | `scripts/native-serve.ps1` |
+| One-click launch | `scripts/linux-5090-launch.sh` + `scripts/lorefire-2e.desktop` | `scripts/native-serve.ps1` (no `.desktop`) |
+| App icon | `public/icon.png` (NativePHP → Electron `build/` + `resources/`) | same tree; Windows uses `public/icon.ico` (arch-independent) |
 | Docs | this file | `WINDOWS-ARM.md` |
 | WhisperX torch | CUDA 12.8 (`cu128`) when `nvidia-smi` works | CPU wheels (`setup.ps1`) |
 | First-run GPU | CUDA-first, CPU only if the driver is missing | CPU |
@@ -281,6 +283,28 @@ Lorefire therefore paints custom controls in the title bar (and on onboarding / 
 
 On Ubuntu, use the **right-hand** close button (red on hover) if the window has no OS decorations. `Alt` still reveals the hidden Electron menu. Windows ARM uses the same custom buttons because the window is frameless there too.
 
+## 4e. App icon (NativePHP / electron-builder)
+
+Design: fire / D&D book — split ash/lava, **LF** over **2E**, open tome with a flame (G3).
+
+NativePHP `native:serve` / `native:build` copies these files into Electron (`vendor/nativephp/electron/resources/js/build/` and `…/resources/`):
+
+| File | Role |
+|---|---|
+| `public/icon.png` | Master, **1024×1024**. Desktop, dock, app switcher. Must be ≥ 512. |
+| `public/icon.ico` | Windows (x64 **and ARM64** — ICO is not arch-specific). |
+| `public/icon.icns` | macOS. |
+| `public/IconTemplate.png` / `@2x` | Menu-bar template. |
+| `public/icons/16x16.png` … `512x512.png` | electron-builder Linux sizes + `.desktop` fallbacks. |
+
+Regenerate derivatives from `public/icon.png`:
+
+```bash
+python3 lorefire-desktop/scripts/generate-app-icons.py
+```
+
+Do not put icons under `public/build/` — that directory is Vite output and is gitignored.
+
 ## 5. First run
 
 ```bash
@@ -292,6 +316,30 @@ php artisan native:serve
 # if FATAL chrome-sandbox: sudo chown root:root + chmod 4755 on that path, or:
 # ELECTRON_DISABLE_SANDBOX=1 php artisan native:serve
 ```
+
+One-click (same `cd` + `native:serve`, plus chrome-sandbox note / fallback):
+
+```bash
+# from the repo root — or from a GNOME/KDE launcher after --install-desktop
+bash lorefire-desktop/scripts/linux-5090-launch.sh
+bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
+```
+
+`--install-desktop` writes `~/.local/share/applications/lorefire-2e.desktop` with **Icon=** the installed NativePHP PNG (`lorefire-desktop/public/icon.png`). See [§ Desktop launcher](#5b-desktop-launcher-one-click).
+
+### 5b. Desktop launcher (one-click)
+
+`scripts/linux-5090-launch.sh` **cd**s to `lorefire-desktop` and runs `php artisan native:serve`. It prints the chrome-sandbox `chown`/`chmod` docs. If `chrome-sandbox` is not **root:root mode 4755**, it exports `ELECTRON_DISABLE_SANDBOX=1` so a menu click still opens a window (local-dev only).
+
+```bash
+# run now
+bash lorefire-desktop/scripts/linux-5090-launch.sh
+
+# install a menu shortcut (Icon → public/icon.png)
+bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
+```
+
+The template is `scripts/lorefire-2e.desktop` (`Icon=../public/icon.png`). `--install-desktop` rewrites **Exec**, **Icon**, and **Path** to absolute paths under this clone. Windows ARM keeps `scripts/native-serve.ps1` — no `.desktop`, no `ELECTRON_DISABLE_SANDBOX`.
 
 Onboarding / Settings:
 

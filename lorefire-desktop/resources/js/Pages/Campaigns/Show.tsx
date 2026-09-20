@@ -7,7 +7,7 @@ import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
-import { Campaign, Character, GameSession, Npc } from '@/types'
+import { Campaign, CampaignVoiceprint, Character, GameSession, Npc } from '@/types'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { ClassSummary, characterListSubtitle } from '@/Components/ClassSummary'
 import { ABILITY_ORDER } from '@/lib/adnd2e'
@@ -263,6 +263,37 @@ export default function Show({ campaign, imageGenProvider }: Props) {
                 <InfoRow label="NPCs" value={campaign.npcs.length} />
                 <InfoRow label="Art Style" value={campaign.art_style} />
               </dl>
+            </Card>
+
+            {/* Enrolled voices */}
+            <Card>
+              <CardHeader
+                title="Enrolled Voices"
+                subtitle="Campaign-persistent voiceprints"
+                action={
+                  <Button variant="ghost" size="sm" as="a" href={`/campaigns/${campaign.id}/voices`}>
+                    Manage
+                  </Button>
+                }
+              />
+              {(campaign.voiceprints ?? []).length === 0 ? (
+                <p className="text-xs text-[var(--color-text-dim)]">
+                  Save speakers after a session — or enroll Elayas and Dungeon Master as two profiles for Shaun.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {(campaign.voiceprints as CampaignVoiceprint[]).map(vp => (
+                    <div key={vp.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className={vp.is_dm ? 'text-[var(--color-rune-bright)]' : 'text-[var(--color-text-base)]'}>
+                        {vp.display_name}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-wide">
+                        {vp.is_dm ? 'DM' : (vp.character?.name ?? 'unlinked')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* NPCs */}

@@ -7,7 +7,7 @@ import AppLayout from '@/Layouts/AppLayout'
 import { Card, CardHeader } from '@/Components/Card'
 import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
-import { Campaign, GameSession, Encounter, EncounterTurn, SceneArtPrompt, Character, SpeakerProfile } from '@/types'
+import { Campaign, CampaignVoiceprint, GameSession, Encounter, EncounterTurn, SceneArtPrompt, Character, SpeakerProfile } from '@/types'
 
 // ── Speaker Identification Panel ─────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ interface SpeakerRowState {
   displayName: string
   characterId: string
   isDm: boolean
+  saveToCampaign: boolean
   saving: boolean
   saved: boolean
   error: string | null
@@ -33,7 +34,7 @@ function SpeakerIdentificationPanel({
 }) {
   const initial: Record<string, SpeakerRowState> = {}
   unresolvedLabels.forEach(label => {
-    initial[label] = { displayName: '', characterId: '', isDm: false, saving: false, saved: false, error: null }
+    initial[label] = { displayName: '', characterId: '', isDm: false, saveToCampaign: true, saving: false, saved: false, error: null }
   })
   const [rows, setRows] = useState<Record<string, SpeakerRowState>>(initial)
 
@@ -54,6 +55,7 @@ function SpeakerIdentificationPanel({
       display_name: row.displayName.trim(),
       is_dm: row.isDm ? 1 : 0,
       character_id: row.characterId ? Number(row.characterId) : '',
+      save_to_campaign: row.saveToCampaign ? 1 : 0,
     }, {
       preserveScroll: true,
       onSuccess: () => {
@@ -164,6 +166,16 @@ function SpeakerIdentificationPanel({
                 <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-wide">DM</span>
               </label>
 
+              <label className="flex items-center gap-1.5 cursor-pointer pb-0.5">
+                <input
+                  type="checkbox"
+                  checked={row.saveToCampaign}
+                  onChange={e => setRow(label, { saveToCampaign: e.target.checked })}
+                  className="w-3 h-3 accent-[var(--color-rune)]"
+                />
+                <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-wide">Save to campaign</span>
+              </label>
+
               {/* Save */}
               <Button
                 variant="rune"
@@ -191,6 +203,136 @@ function SpeakerIdentificationPanel({
   )
 }
 
+function AssignedSpeakersPanel({
+  speakerProfiles,
+  characters,
+  sessionId,
+  campaignId,
+}: {
+  speakerProfiles: SpeakerProfile[]
+  characters: Character[]
+  sessionId: number
+  campaignId: number
+}) {
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [name, setName] = useState('')
+  const [characterId, setCharacterId] = useState('')
+  const [isDm, setIsDm] = useState(false)
+  const [updateVoiceprint, setUpdateVoiceprint] = useState(true)
+  const [promoting, setPromoting] = useState(false)
+
+  if (speakerProfiles.length === 0) return null
+
+  const startEdit = (profile: SpeakerProfile) => {
+    setEditingId(profile.id)
+    setName(profile.display_name)
+    setCharacterId(profile.character_id ? String(profile.character_id) : '')
+    setIsDm(profile.is_dm)
+    setUpdateVoiceprint(true)
+  }
+
+  const saveEdit = (profile: SpeakerProfile) => {
+    if (!name.trim()) return
+    router.patch(`/sessions/${sessionId}/speakers/${profile.id}`, {
+      display_name: name.trim(),
+      character_id: characterId ? Number(characterId) : '',
+      is_dm: isDm ? 1 : 0,
+      update_voiceprint: updateVoiceprint ? 1 : 0,
+    }, {
+      preserveScroll: true,
+      onSuccess: () => setEditingId(null),
+    })
+  }
+
+  const promote = () => {
+    if (!confirm('Save these session voices as campaign voiceprints? Later sessions will auto-label when the match is confident.')) return
+    setPromoting(true)
+    router.post(`/sessions/${sessionId}/speakers/promote`, {}, {
+      preserveScroll: true,
+      onFinish: () => setPromoting(false),
+    })
+  }
+
+  return (
+    <div className="mb-4 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <span className="font-heading text-xs uppercase tracking-widest text-[var(--color-text-white)]">
+            Session voices
+          </span>
+          <p className="text-[10px] text-[var(--color-text-dim)] mt-0.5">
+            Corrections stay on this session. Confirm “update campaign voiceprint” to teach later games.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" size="sm" as="a" href={`/campaigns/${campaignId}/voices`}>
+            Manage campaign voices
+          </Button>
+          <Button variant="rune" size="sm" onClick={promote} disabled={promoting}>
+            {promoting ? 'Saving…' : 'Save voices for this campaign'}
+          </Button>
+        </div>
+      </div>
+
+      {speakerProfiles.map(profile => (
+        <div key={profile.id} className="runic-card p-3 flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-[10px] text-[var(--color-text-dim)] bg-[var(--color-bg)] px-1.5 py-0.5 rounded">
+                {profile.speaker_label}
+              </span>
+              <span className={`text-xs ${profile.is_dm ? 'text-[var(--color-rune-bright)]' : 'text-[var(--color-arcane)]'}`}>
+                {profile.display_name}
+              </span>
+              {profile.match_source === 'auto' && (
+                <span className="text-[10px] text-[var(--color-text-dim)]">
+                  auto{profile.match_confidence != null ? ` ${Math.round(profile.match_confidence * 100)}%` : ''}
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)] hover:text-[var(--color-rune)]"
+              onClick={() => editingId === profile.id ? setEditingId(null) : startEdit(profile)}
+            >
+              {editingId === profile.id ? 'Close' : 'Correct'}
+            </button>
+          </div>
+          {editingId === profile.id && (
+            <div className="flex flex-wrap items-end gap-2">
+              <input
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="h-7 px-2 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-[var(--color-text-base)] w-28"
+              />
+              <select
+                value={characterId}
+                onChange={e => setCharacterId(e.target.value)}
+                className="h-7 px-2 text-xs bg-[var(--color-bg)] border border-[var(--color-border)] rounded text-[var(--color-text-base)] w-32"
+              >
+                <option value="">— none —</option>
+                {characters.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <label className="flex items-center gap-1.5 pb-0.5 cursor-pointer">
+                <input type="checkbox" checked={isDm} onChange={e => setIsDm(e.target.checked)} className="w-3 h-3 accent-[var(--color-rune)]" />
+                <span className="text-[10px] text-[var(--color-text-dim)] uppercase">DM</span>
+              </label>
+              <label className="flex items-center gap-1.5 pb-0.5 cursor-pointer">
+                <input type="checkbox" checked={updateVoiceprint} onChange={e => setUpdateVoiceprint(e.target.checked)} className="w-3 h-3 accent-[var(--color-rune)]" />
+                <span className="text-[10px] text-[var(--color-text-dim)] uppercase">Update campaign voiceprint</span>
+              </label>
+              <Button variant="rune" size="sm" onClick={() => saveEdit(profile)}>Save correction</Button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 interface TranscriptSegment {
   start: number
   end: number
@@ -209,6 +351,7 @@ interface Props {
   characters: Character[]
   transcriptSegments: TranscriptSegment[] | null
   speakerProfiles: SpeakerProfile[]
+  campaignVoiceprints?: CampaignVoiceprint[]
   imageGenProvider: string | null
 }
 
@@ -809,14 +952,24 @@ export default function Show({ campaign, session, characters, transcriptSegments
                     .filter((l): l is string => !!l && /^SPEAKER_\d+$/.test(l) && !resolvedLabels.has(l))
                 )
               ).sort()
-              return unresolved.length > 0 ? (
-                <SpeakerIdentificationPanel
-                  unresolvedLabels={unresolved}
-                  transcriptSegments={transcriptSegments}
-                  characters={characters}
-                  sessionId={session.id}
-                />
-              ) : null
+              return (
+                <>
+                  {unresolved.length > 0 && (
+                    <SpeakerIdentificationPanel
+                      unresolvedLabels={unresolved}
+                      transcriptSegments={transcriptSegments}
+                      characters={characters}
+                      sessionId={session.id}
+                    />
+                  )}
+                  <AssignedSpeakersPanel
+                    speakerProfiles={speakerProfiles}
+                    characters={characters}
+                    sessionId={session.id}
+                    campaignId={campaign.id}
+                  />
+                </>
+              )
             })()}
 
             {/* ── Transcript ──────────────────────────────────────── */}

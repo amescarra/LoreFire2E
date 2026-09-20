@@ -161,6 +161,15 @@ class TranscribeAudio implements ShouldQueue
             'transcription_status' => 'done',
         ]);
 
+        try {
+            app(\App\Support\VoiceprintResolver::class)->applyToSession($this->session->fresh());
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::info('[TranscribeAudio] voiceprint apply skipped', [
+                'session' => $this->session->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
         // Clean up sentinel and progress file — poller already got status=done above
         $this->cleanupCancelSentinel();
         Storage::disk('local')->delete($this->progressPath());

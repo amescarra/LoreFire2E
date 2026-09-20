@@ -45,4 +45,9 @@ class Campaign extends Model
     {
         return $this->hasMany(SpeakerProfile::class);
     }
+
+    public function voiceprints(): HasMany
+    {
+        return $this->hasMany(CampaignVoiceprint::class);
+    }
 }

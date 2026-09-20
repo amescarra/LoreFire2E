@@ -13,6 +13,7 @@ export interface Campaign {
   npcs?: Npc[]
   game_sessions?: GameSession[]
   speaker_profiles?: SpeakerProfile[]
+  voiceprints?: CampaignVoiceprint[]
   characters_count?: number
   game_sessions_count?: number
   npcs_count?: number
@@ -257,7 +258,24 @@ export interface SpeakerProfile {
   display_name: string
   character_id: number | null
   is_dm: boolean
+  campaign_voiceprint_id?: number | null
+  match_confidence?: number | null
+  match_source?: 'manual' | 'auto' | 'promoted' | null
   character?: Character | null
+  voiceprint?: CampaignVoiceprint | null
+}
+
+export interface CampaignVoiceprint {
+  id: number
+  campaign_id: number
+  display_name: string
+  character_id: number | null
+  is_dm: boolean
+  has_embedding?: boolean
+  embedding_model?: string | null
+  enrollment_audio_path?: string | null
+  enrolled_at?: string | null
+  character?: { id: number; name: string } | null
 }
 
 export interface AppSettings {

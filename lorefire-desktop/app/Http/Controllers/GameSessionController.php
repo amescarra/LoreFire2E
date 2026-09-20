@@ -57,11 +57,16 @@ class GameSessionController extends Controller
         $characters = $campaign->characters()->orderBy('name')->get(['id', 'name', 'class', 'level']);
 
         // Build speaker label → display name map from this session's speaker profiles
-        $speakerProfiles = $session->speakerProfiles()->with('character')->get();
+        $speakerProfiles = $session->speakerProfiles()->with(['character', 'voiceprint'])->get();
         $speakerMap = $speakerProfiles->keyBy('speaker_label')->map(fn ($p) => [
-            'display_name' => $p->display_name,
+            'display_name' => $p->transcriptLabel(),
             'is_dm'        => $p->is_dm,
         ]);
+        $campaignVoiceprints = $campaign->voiceprints()
+            ->with('character:id,name')
+            ->orderByDesc('is_dm')
+            ->orderBy('display_name')
+            ->get();
 
         // Load transcript segments if available, resolving raw speaker labels to display names
         $transcriptSegments = null;
@@ -90,6 +95,7 @@ class GameSessionController extends Controller
             'characters'          => $characters,
             'transcriptSegments'  => $transcriptSegments,
             'speakerProfiles'     => $speakerProfiles,
+            'campaignVoiceprints' => $campaignVoiceprints,
             'imageGenProvider'    => AppSetting::get('image_gen_provider', 'none'),
         ]);
     }

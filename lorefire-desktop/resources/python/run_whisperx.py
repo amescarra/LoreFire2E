@@ -43,6 +43,7 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from lorefire_tmp import ensure_ffmpeg_on_path  # noqa: E402
 from whisperx_languages import (  # noqa: E402
     clamp_detected_language,
     coerce_multilingual_model,
@@ -60,22 +61,9 @@ os.environ.setdefault('TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD', '1')
 
 # imageio-ffmpeg bundles ffmpeg with a platform-specific name (e.g.
 # ffmpeg-win64-v6.1.exe), not "ffmpeg.exe", so adding its directory to PATH
-# is not enough.  Copy/hardlink the binary into a temp dir under the name
-# "ffmpeg" so that whisperx.load_audio() finds it by the standard name.
-try:
-    import shutil as _shutil
-    import tempfile as _tempfile
-    import imageio_ffmpeg as _iio_ffmpeg
-    _ffmpeg_src = _iio_ffmpeg.get_ffmpeg_exe()
-    _ffmpeg_alias_dir = _tempfile.mkdtemp(prefix="lorefire_ffmpeg_")
-    _ffmpeg_alias = os.path.join(_ffmpeg_alias_dir, "ffmpeg" + os.path.splitext(_ffmpeg_src)[1])
-    try:
-        os.link(_ffmpeg_src, _ffmpeg_alias)        # hardlink — no admin needed
-    except OSError:
-        _shutil.copy2(_ffmpeg_src, _ffmpeg_alias)  # fallback: copy
-    os.environ['PATH'] = _ffmpeg_alias_dir + os.pathsep + os.environ.get('PATH', '')
-except Exception:
-    pass  # Fall back to system ffmpeg if available
+# is not enough. Reuse one alias under LOREFIRE_TMP / XDG cache — never
+# create a unique lorefire_ffmpeg temp directory per live slice.
+ensure_ffmpeg_on_path()
 
 # python-build-standalone does not hook into the Windows certificate store,
 # so urllib (used by torch.hub and huggingface_hub) fails SSL verification.

@@ -176,6 +176,8 @@ Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
     Route::post('record/init',     [ChunkedAudioController::class, 'init'])->name('record.init');
     Route::post('record/chunk',    [ChunkedAudioController::class, 'chunk'])->name('record.chunk');
     Route::post('record/finalize', [ChunkedAudioController::class, 'finalize'])->name('record.finalize');
+    Route::get('record/takes',     [ChunkedAudioController::class, 'takes'])->name('record.takes');
+    Route::post('record/recover',  [ChunkedAudioController::class, 'recover'])->name('record.recover');
     // Import an existing audio file
     Route::post('import-audio',    [ChunkedAudioController::class, 'importAudio'])->name('import-audio');
     // Download the stored audio file

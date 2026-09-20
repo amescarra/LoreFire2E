@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Campaign;
 use App\Models\GameSession;
 use App\Models\AppSetting;
+use App\Support\ChunkedRecording;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -36,6 +37,7 @@ class LiveSessionController extends Controller
             'characters' => $characters,
             'hasLlm'     => $hasLlm,
             'campaignContext' => $campaignContext,
+            'recoverableTakes' => ChunkedRecording::listTakes($session),
         ]);
     }
 
@@ -58,6 +60,7 @@ class LiveSessionController extends Controller
         return response()->json([
             'characters' => $characters,
             'sheet_update_cursor' => (int) ($session->sheet_update_cursor ?? 0),
+            'recoverable_takes' => ChunkedRecording::listTakes($session),
         ]);
     }
 }

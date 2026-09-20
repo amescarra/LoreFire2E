@@ -63,8 +63,10 @@ class WhisperxRunner
             $model,
         );
 
+        AppTemp::sweep();
         $process = new Process($cmd);
         $process->setTimeout(600);
+        AppTemp::applyToProcess($process);
         $process->run();
 
         if (! $process->isSuccessful()) {
@@ -120,6 +122,7 @@ PY;
 
         $process = new Process([$python, '-c', $code, $source, $destination, sprintf('%.3f', max(0, $startSeconds))]);
         $process->setTimeout(60);
+        AppTemp::applyToProcess($process);
         $process->run();
 
         return $process->isSuccessful() && is_file($destination) && filesize($destination) > 64;
@@ -151,6 +154,7 @@ PY;
 
         $process = new Process([$python, '-c', $code, $path]);
         $process->setTimeout(30);
+        AppTemp::applyToProcess($process);
         $process->run();
         if (! $process->isSuccessful()) {
             return null;

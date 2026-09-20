@@ -32,6 +32,8 @@ _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 if _SCRIPT_DIR not in sys.path:
     sys.path.insert(0, _SCRIPT_DIR)
 
+from lorefire_tmp import cleanup_path, enroll_dir, sweep_stale  # noqa: E402
+
 _cache_base = os.path.join(os.path.expanduser("~"), ".cache")
 os.environ.setdefault("HF_HOME", os.path.join(_cache_base, "huggingface"))
 os.environ.setdefault("TORCH_HOME", os.path.join(_cache_base, "torch"))
@@ -105,7 +107,7 @@ def prepare_wav(audio_path: str) -> tuple[str, str | None]:
     pyannote/torchaudio often cannot load Chromium webm/opus or files with no
     extension. WhisperX already uses ffmpeg for the same reason.
     """
-    dest_fd, dest = tempfile.mkstemp(prefix="lorefire-enroll-", suffix=".wav")
+    dest_fd, dest = tempfile.mkstemp(prefix="lorefire-enroll-", suffix=".wav", dir=enroll_dir())
     os.close(dest_fd)
     ffmpeg = ffmpeg_exe()
     cmd = [
@@ -192,6 +194,7 @@ def maybe_write_clip(audio_path: str, dest: str, start: float, end: float) -> No
 
 
 def main() -> int:
+    sweep_stale()
     args = parse_args()
     if not os.path.isfile(args.audio):
         return write_empty(args.output, f"audio not found: {args.audio}")
@@ -212,63 +215,61 @@ def main() -> int:
         wav_path = args.audio
 
     try:
-        inference, model_name = load_inference(args.hf_token)
-    except Exception as exc:
-        if cleanup_wav and os.path.isfile(cleanup_wav):
-            os.unlink(cleanup_wav)
-        return write_empty(args.output, str(exc))
+        try:
+            inference, model_name = load_inference(args.hf_token)
+        except Exception as exc:
+            return write_empty(args.output, str(exc))
 
-    ranges = speaker_ranges(args.transcript, args.min_seconds)
-    speakers: dict[str, dict] = {}
-    errors: list[str] = []
+        ranges = speaker_ranges(args.transcript, args.min_seconds)
+        speakers: dict[str, dict] = {}
+        errors: list[str] = []
 
-    if args.clips_dir:
-        os.makedirs(args.clips_dir, exist_ok=True)
+        if args.clips_dir:
+            os.makedirs(args.clips_dir, exist_ok=True)
 
-    for label, windows in ranges.items():
-        vectors = []
-        used_windows = []
-        if label == "enrollment" and windows == [(0.0, 0.0)]:
-            try:
-                vectors.append(crop_embedding(inference, wav_path, 0.0, 0.0))
-                used_windows.append((0.0, 0.0))
-            except Exception as exc:
-                errors.append(f"enrollment embed failed: {exc}")
-                print(f"[voiceprint] enrollment embed failed: {exc}", file=sys.stderr)
-        else:
-            for start, end in windows:
+        for label, windows in ranges.items():
+            vectors = []
+            used_windows = []
+            if label == "enrollment" and windows == [(0.0, 0.0)]:
                 try:
-                    vectors.append(crop_embedding(inference, wav_path, start, end))
-                    used_windows.append((start, end))
+                    vectors.append(crop_embedding(inference, wav_path, 0.0, 0.0))
+                    used_windows.append((0.0, 0.0))
                 except Exception as exc:
-                    errors.append(f"crop {label} {start}-{end} failed: {exc}")
-                    print(f"[voiceprint] crop {label} {start}-{end} failed: {exc}", file=sys.stderr)
+                    errors.append(f"enrollment embed failed: {exc}")
+                    print(f"[voiceprint] enrollment embed failed: {exc}", file=sys.stderr)
+            else:
+                for start, end in windows:
+                    try:
+                        vectors.append(crop_embedding(inference, wav_path, start, end))
+                        used_windows.append((start, end))
+                    except Exception as exc:
+                        errors.append(f"crop {label} {start}-{end} failed: {exc}")
+                        print(f"[voiceprint] crop {label} {start}-{end} failed: {exc}", file=sys.stderr)
 
-        if not vectors:
-            continue
+            if not vectors:
+                continue
 
-        stacked = np.vstack(vectors)
-        mean = stacked.mean(axis=0)
-        norm = float(np.linalg.norm(mean))
-        if norm > 0:
-            mean = mean / norm
+            stacked = np.vstack(vectors)
+            mean = stacked.mean(axis=0)
+            norm = float(np.linalg.norm(mean))
+            if norm > 0:
+                mean = mean / norm
 
-        clip_path = None
-        if args.clips_dir and used_windows:
-            longest = max(used_windows, key=lambda pair: pair[1] - pair[0])
-            clip_path = os.path.join(args.clips_dir, f"{label}.wav")
-            maybe_write_clip(args.audio, clip_path, longest[0], longest[1])
-            if not os.path.isfile(clip_path):
-                clip_path = None
+            clip_path = None
+            if args.clips_dir and used_windows:
+                longest = max(used_windows, key=lambda pair: pair[1] - pair[0])
+                clip_path = os.path.join(args.clips_dir, f"{label}.wav")
+                maybe_write_clip(args.audio, clip_path, longest[0], longest[1])
+                if not os.path.isfile(clip_path):
+                    clip_path = None
 
-        speakers[label] = {
-            "embedding": [float(x) for x in mean.tolist()],
-            "duration": float(sum(end - start for start, end in used_windows)),
-            "clip": clip_path,
-        }
-
-    if cleanup_wav and os.path.isfile(cleanup_wav):
-        os.unlink(cleanup_wav)
+            speakers[label] = {
+                "embedding": [float(x) for x in mean.tolist()],
+                "duration": float(sum(end - start for start, end in used_windows)),
+                "clip": clip_path,
+            }
+    finally:
+        cleanup_path(cleanup_wav)
 
     if not speakers:
         parts = [p for p in [convert_error, *errors] if p]

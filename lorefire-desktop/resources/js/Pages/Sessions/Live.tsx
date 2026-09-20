@@ -15,12 +15,24 @@ import { ABILITY_ORDER, inventoryQuantityLabel, missingSpellMaterials, remaining
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface RecoverableTake {
+  kind: 'chunks' | 'file'
+  upload_id: string | null
+  path: string
+  parts: number | null
+  bytes: number
+  estimated_seconds: number | null
+  modified_at: string | null
+  label: string
+}
+
 interface Props {
   campaign: Campaign
   session: GameSession
   characters: Character[]
   hasLlm: boolean
   campaignContext: Campaign
+  recoverableTakes?: RecoverableTake[]
 }
 
 type LiveTab = 'characters' | 'oracle' | 'session'
@@ -632,8 +644,8 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
 
 // ── Session panel ─────────────────────────────────────────────────────────────
 
-function SessionPanel({ campaign, session }: { campaign: Campaign; session: GameSession }) {
-  const { isRecording, recordingSeconds, isUploading, uploadProgress, stopRecording, activeSessionId, activeInputLabel } = useRecording()
+function SessionPanel({ campaign, session, recoverableTakes = [] }: { campaign: Campaign; session: GameSession; recoverableTakes?: RecoverableTake[] }) {
+  const { isRecording, recordingSeconds, isUploading, uploadProgress, recordingError, recordingSaveFailed, stopRecording, activeSessionId, activeInputLabel } = useRecording()
   const isThisSession = activeSessionId === session.id
 
   const sessionUrl = `/campaigns/${campaign.id}/sessions/${session.id}`
@@ -661,15 +673,20 @@ function SessionPanel({ campaign, session }: { campaign: Campaign; session: Game
         {isThisSession && isRecording && (
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-sm font-mono" style={{ color: '#f87171' }}>
-                {fmtTime(recordingSeconds)}
+              <div className={`w-2 h-2 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
+              <span className="text-sm font-mono" style={{ color: recordingSaveFailed ? '#fbbf24' : '#f87171' }}>
+                {recordingSaveFailed ? `Save failed · ${fmtTime(recordingSeconds)}` : fmtTime(recordingSeconds)}
               </span>
             </div>
             <Button variant="danger" size="sm" onClick={stopRecording}>
-              Stop Recording
+              {recordingSaveFailed ? 'Save what reached disk' : 'Stop Recording'}
             </Button>
           </div>
+        )}
+        {isThisSession && recordingError && (
+          <p data-testid="live-session-recording-error" className="text-xs" style={{ color: '#fbbf24' }}>
+            {recordingError}
+          </p>
         )}
         {isThisSession && isRecording && activeInputLabel && (
           <p className="text-[10px] font-mono truncate" style={{ color: 'var(--color-text-dim)' }}>
@@ -685,6 +702,12 @@ function SessionPanel({ campaign, session }: { campaign: Campaign; session: Game
         {!isThisSession && !isRecording && (
           <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
             Recording controls are on the{' '}
+            <Link href={sessionUrl} className="underline" style={{ color: 'var(--color-rune)' }}>session page</Link>.
+          </p>
+        )}
+        {recoverableTakes.length > 0 && (
+          <p className="text-xs" style={{ color: '#fbbf24' }}>
+            {recoverableTakes.length} recoverable take{recoverableTakes.length === 1 ? '' : 's'} on the{' '}
             <Link href={sessionUrl} className="underline" style={{ color: 'var(--color-rune)' }}>session page</Link>.
           </p>
         )}
@@ -724,10 +747,10 @@ function SessionPanel({ campaign, session }: { campaign: Campaign; session: Game
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function Live({ campaign, session, characters, hasLlm, campaignContext }: Props) {
+export default function Live({ campaign, session, characters, hasLlm, campaignContext, recoverableTakes = [] }: Props) {
   const [tab, setTab] = useState<LiveTab>('characters')
   const [liveCharacters, setLiveCharacters] = useState(characters)
-  const { isRecording, activeSessionId } = useRecording()
+  const { isRecording, recordingSaveFailed, activeSessionId } = useRecording()
   const isThisSession = activeSessionId === session.id
 
   useEffect(() => {
@@ -765,7 +788,7 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
         <div className="flex items-center gap-4 mb-4">
           <div className="flex items-center gap-2">
             {isThisSession && isRecording && (
-              <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <div className={`w-2 h-2 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
             )}
             <h1 className="font-heading text-base tracking-widest uppercase" style={{ color: 'var(--color-text-white)' }}>
               Live — {session.title}
@@ -836,7 +859,7 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
         {/* ── Session info ──────────────────────────────────────────────── */}
         {tab === 'session' && (
           <div className="runic-card overflow-y-auto" style={{ maxHeight: '100%' }}>
-            <SessionPanel campaign={campaign} session={session} />
+            <SessionPanel campaign={campaign} session={session} recoverableTakes={recoverableTakes} />
           </div>
         )}
 

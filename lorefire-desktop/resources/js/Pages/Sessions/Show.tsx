@@ -353,14 +353,26 @@ interface Props {
   speakerProfiles: SpeakerProfile[]
   campaignVoiceprints?: CampaignVoiceprint[]
   imageGenProvider: string | null
+  recoverableTakes?: Array<{
+    kind: 'chunks' | 'file'
+    upload_id: string | null
+    path: string
+    parts: number | null
+    bytes: number
+    estimated_seconds: number | null
+    modified_at: string | null
+    label: string
+  }>
 }
 
-export default function Show({ campaign, session, characters, transcriptSegments, speakerProfiles, imageGenProvider }: Props) {
+export default function Show({ campaign, session, characters, transcriptSegments, speakerProfiles, imageGenProvider, recoverableTakes = [] }: Props) {
   const {
     isRecording,
     recordingSeconds,
     isUploading,
     uploadProgress,
+    recordingError,
+    recordingSaveFailed,
     activeSessionId,
     startRecording,
     stopRecording,
@@ -378,6 +390,13 @@ export default function Show({ campaign, session, characters, transcriptSegments
   )
   const [liveHasTranscript, setLiveHasTranscript] = useState(!!session.transcript_path)
   const [liveAudioPath, setLiveAudioPath] = useState<string | null>(session.audio_path)
+  const [takes, setTakes] = useState(recoverableTakes)
+  const [recoveringTake, setRecoveringTake] = useState<string | null>(null)
+  const [recoverError, setRecoverError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setTakes(recoverableTakes)
+  }, [recoverableTakes])
   const [transcriptionProgress, setTranscriptionProgress] = useState<{ stage: string; percent: number } | null>(null)
   const transcriptionPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -648,6 +667,40 @@ export default function Show({ campaign, session, characters, transcriptSegments
   }
 
   const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+  const fmtBytes = (n: number) => n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
+
+  const handleRecoverTake = async (take: (typeof takes)[number]) => {
+    const key = take.upload_id ?? take.path
+    setRecoveringTake(key)
+    setRecoverError(null)
+    try {
+      const fd = new FormData()
+      if (take.kind === 'file') {
+        fd.append('path', take.path)
+      } else if (take.upload_id) {
+        fd.append('upload_id', take.upload_id)
+      }
+      fd.append('transcribe', '1')
+      const res = await fetch(`/sessions/${session.id}/record/recover`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': CSRF() },
+        body: fd,
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setRecoverError(data.error ?? 'Could not recover this take.')
+        return
+      }
+      if (data.audio_path) setLiveAudioPath(data.audio_path)
+      setLiveTranscriptionStatus('pending')
+      startTranscriptionPolling()
+      setTakes(prev => prev.filter(t => (t.upload_id ?? t.path) !== key))
+    } catch {
+      setRecoverError('Could not recover this take.')
+    } finally {
+      setRecoveringTake(null)
+    }
+  }
 
   return (
     <>
@@ -742,8 +795,8 @@ export default function Show({ campaign, session, characters, transcriptSegments
                   </Button>
                 ) : (
                   <Button variant="danger" onClick={stopRecording} size="sm">
-                    <div className="w-2 h-2 rounded bg-[var(--color-danger)] animate-pulse" />
-                    Stop · {fmtTime(recordingSeconds)}
+                    <div className={`w-2 h-2 rounded ${recordingSaveFailed ? 'bg-amber-400' : 'bg-[var(--color-danger)] animate-pulse'}`} />
+                    {recordingSaveFailed ? `Save failed · ${fmtTime(recordingSeconds)}` : `Stop · ${fmtTime(recordingSeconds)}`}
                   </Button>
                 )}
 
@@ -798,16 +851,64 @@ export default function Show({ campaign, session, characters, transcriptSegments
                     {Array.from({ length: 20 }).map((_, i) => (
                       <div
                         key={i}
-                        className="w-0.5 rounded-full bg-[var(--color-danger)] animate-pulse"
+                        className={`w-0.5 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-[var(--color-danger)] animate-pulse'}`}
                         style={{ height: `${4 + Math.random() * 16}px`, animationDelay: `${i * 50}ms` }}
                       />
                     ))}
                   </div>
-                  <span className="text-xs text-[var(--color-danger)] font-mono">{fmtTime(recordingSeconds)}</span>
+                  <span className={`text-xs font-mono ${recordingSaveFailed ? 'text-amber-400' : 'text-[var(--color-danger)]'}`}>{fmtTime(recordingSeconds)}</span>
                   {activeInputLabel && (
                     <span className="text-[10px] text-[var(--color-text-dim)] font-mono truncate max-w-[20rem]">
                       {activeInputLabel}
                     </span>
+                  )}
+                </div>
+              )}
+
+              {recordingError && (
+                <p data-testid="session-recording-error" className="mt-3 text-xs text-amber-400">
+                  {recordingError} The timer is frozen — audio is not being written.
+                </p>
+              )}
+
+              {takes.length > 0 && !isRecording && (
+                <div data-testid="recoverable-takes" className="mt-4 flex flex-col gap-2">
+                  <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>
+                    Recoverable takes
+                  </p>
+                  {takes.map(take => {
+                    const key = take.upload_id ?? take.path
+                    const duration = take.estimated_seconds != null ? fmtTime(take.estimated_seconds) : null
+                    return (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between gap-3 rounded px-3 py-2"
+                        style={{ background: 'var(--color-abyss)', border: '1px solid var(--color-border)' }}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs" style={{ color: 'var(--color-text-base)' }}>
+                            {take.label}
+                            {take.parts != null ? ` · ${take.parts} parts` : ''}
+                            {duration ? ` · ~${duration}` : ''}
+                            {` · ${fmtBytes(take.bytes)}`}
+                          </p>
+                          <p className="text-[10px] font-mono truncate" style={{ color: 'var(--color-text-dim)' }}>
+                            {take.upload_id ?? take.path}
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={recoveringTake !== null || isUploading || isImporting}
+                          onClick={() => handleRecoverTake(take)}
+                        >
+                          {recoveringTake === key ? 'Recovering…' : 'Use as session audio'}
+                        </Button>
+                      </div>
+                    )
+                  })}
+                  {recoverError && (
+                    <p className="text-xs text-amber-400">{recoverError}</p>
                   )}
                 </div>
               )}
@@ -1270,7 +1371,7 @@ export default function Show({ campaign, session, characters, transcriptSegments
             Replace Recording?
           </h2>
           <p className="text-sm text-[var(--color-text-dim)]">
-            This session already has a recording. Starting a new one will overwrite it and clear any existing transcription. This cannot be undone.
+            This session already has a recording. Starting a new one will overwrite the current session audio after you stop. Unfinished chunk folders are archived as Recoverable takes instead of being discarded.
           </p>
           <div className="flex gap-3 justify-end">
             <button

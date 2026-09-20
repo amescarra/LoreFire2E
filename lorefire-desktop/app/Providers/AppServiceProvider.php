@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Support\AppTemp;
 use App\Support\NativeSqliteMigrator;
 use App\Support\WindowsArm64Php;
 use Illuminate\Console\Events\CommandFinished;
@@ -23,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        AppTemp::install();
+
         if (PHP_SAPI === 'cli') {
             WindowsArm64Php::applyToEnvironment();
         }

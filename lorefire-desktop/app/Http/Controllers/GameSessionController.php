@@ -6,6 +6,7 @@ use App\Models\Campaign;
 use App\Models\GameSession;
 use App\Models\AppSetting;
 use App\Jobs\TranscribeAudio;
+use App\Support\ChunkedRecording;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Storage;
@@ -97,6 +98,7 @@ class GameSessionController extends Controller
             'speakerProfiles'     => $speakerProfiles,
             'campaignVoiceprints' => $campaignVoiceprints,
             'imageGenProvider'    => AppSetting::get('image_gen_provider', 'none'),
+            'recoverableTakes'    => ChunkedRecording::listTakes($session),
         ]);
     }
 

@@ -8,6 +8,8 @@ use App\Models\GameSession;
 use App\Support\AppTemp;
 use App\Support\ChunkedRecording;
 use App\Support\LiveTranscript;
+use App\Support\SpeakerClipExtractor;
+use App\Support\SpeakerClipWindows;
 use App\Support\WhisperxRunner;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -80,6 +82,31 @@ class ChunkedAudioController extends Controller
         }, $filename, [
             'Content-Type'   => mime_content_type($absPath) ?: 'application/octet-stream',
             'Content-Length' => filesize($absPath),
+        ]);
+    }
+
+    /**
+     * Stream a short WAV montage of one unresolved SPEAKER_N from session audio.
+     * Times are taken from the session transcript — the client cannot pick ranges.
+     */
+    public function speakerClip(GameSession $session, string $label): \Symfony\Component\HttpFoundation\BinaryFileResponse|\Illuminate\Http\JsonResponse
+    {
+        if (! SpeakerClipWindows::isValidLabel($label)) {
+            return response()->json(['error' => 'Invalid speaker label.'], 422);
+        }
+
+        $result = app(SpeakerClipExtractor::class)->extract($session, $label);
+        if (! is_string($result['path']) || ! is_file($result['path'])) {
+            return response()->json([
+                'error' => $result['error'] ?? 'Could not extract a speaker clip.',
+            ], $result['status'] ?: 500);
+        }
+
+        return response()->file($result['path'], [
+            'Content-Type' => 'audio/wav',
+            'Content-Disposition' => 'inline; filename="'.$label.'.wav"',
+            'Cache-Control' => 'private, max-age=300',
+            'X-Speaker-Label' => $label,
         ]);
     }
 

@@ -97,6 +97,7 @@ class TranscribeAudio implements ShouldQueue
 
         $process = new Process($cmd);
         $process->setTimeout(3600);
+        \App\Support\AppTemp::applyToProcess($process);
 
         // Stream stderr in real-time and update progress after each recognisable line.
         // Collect output manually — Symfony's getErrorOutput()/getOutput() are not

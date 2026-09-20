@@ -123,7 +123,7 @@ class VoiceprintEmbeddingExtractor
         }
 
         $hfToken = (string) AppSetting::get('huggingface_token', '');
-        $output = sys_get_temp_dir().DIRECTORY_SEPARATOR.'lorefire-voiceprint-'.uniqid('', true).'.json';
+        $output = AppTemp::root().DIRECTORY_SEPARATOR.'lorefire-voiceprint-'.uniqid('', true).'.json';
 
         $cmd = [$python, $script, '--audio', $audioPath, '--output', $output];
         if (is_string($transcriptJson) && is_file($transcriptJson)) {
@@ -144,20 +144,28 @@ class VoiceprintEmbeddingExtractor
 
         $process = new Process($cmd);
         $process->setTimeout(300);
-        $process->run();
-
-        $stderr = trim($process->getErrorOutput());
-        if (! $process->isSuccessful()) {
-            Log::info('[VoiceprintEmbeddingExtractor] extract failed', [
-                'exit' => $process->getExitCode(),
-                'stderr' => $stderr,
-            ]);
-        }
-
+        AppTemp::applyToProcess($process);
+        $stderr = '';
         $decoded = [];
-        if (is_file($output)) {
-            $decoded = json_decode((string) file_get_contents($output), true);
-            @unlink($output);
+        try {
+            $process->run();
+
+            $stderr = trim($process->getErrorOutput());
+            if (! $process->isSuccessful()) {
+                Log::info('[VoiceprintEmbeddingExtractor] extract failed', [
+                    'exit' => $process->getExitCode(),
+                    'stderr' => $stderr,
+                ]);
+            }
+
+            $decoded = [];
+            if (is_file($output)) {
+                $decoded = json_decode((string) file_get_contents($output), true);
+            }
+        } finally {
+            if (is_file($output)) {
+                @unlink($output);
+            }
         }
 
         if (! is_array($decoded)) {

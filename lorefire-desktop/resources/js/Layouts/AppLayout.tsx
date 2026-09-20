@@ -90,7 +90,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children, title, breadcrumbs }: AppLayoutProps) {
   const { url } = usePage()
-  const { isRecording, recordingSeconds, isUploading, uploadProgress, activeLiveUrl, activeSessionId } = useRecording()
+  const { isRecording, recordingSeconds, isUploading, uploadProgress, recordingError, recordingSaveFailed, activeLiveUrl, activeSessionId } = useRecording()
 
   const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
@@ -157,11 +157,15 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
               <Link
                 href={activeLiveUrl ?? '#'}
                 className="no-drag flex flex-col items-center gap-1 transition-opacity hover:opacity-80"
-                title={isUploading ? (uploadProgress ?? 'Saving…') : `Recording · ${fmtTime(recordingSeconds)} — go to live session`}
+                title={
+                  recordingSaveFailed
+                    ? (recordingError ?? 'Audio is not being saved')
+                    : (isUploading ? (uploadProgress ?? 'Saving…') : `Recording · ${fmtTime(recordingSeconds)} — go to live session`)
+                }
               >
-                <div className={`w-2 h-2 rounded-full ${isRecording ? 'animate-pulse bg-red-500' : 'bg-amber-400'}`} />
-                <span className="text-[8px] font-mono leading-none" style={{ color: 'var(--color-text-dim)' }}>
-                  {isRecording ? fmtTime(recordingSeconds) : '…'}
+                <div className={`w-2 h-2 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : isRecording ? 'animate-pulse bg-red-500' : 'bg-amber-400'}`} />
+                <span className="text-[8px] font-mono leading-none" style={{ color: recordingSaveFailed ? '#fbbf24' : 'var(--color-text-dim)' }}>
+                  {recordingSaveFailed ? 'ERR' : isRecording ? fmtTime(recordingSeconds) : '…'}
                 </span>
               </Link>
             )}
@@ -221,12 +225,27 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
               {isRecording && (
                 <Link
                   href={activeLiveUrl ?? '#'}
+                  data-testid="live-recording-badge"
                   className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-                  style={{ background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
+                  style={recordingSaveFailed
+                    ? { background: 'rgba(180,83,9,0.18)', color: '#fbbf24' }
+                    : { background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
                 >
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                  Recording · {fmtTime(recordingSeconds)}
+                  <div className={`w-1.5 h-1.5 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
+                  {recordingSaveFailed
+                    ? `Save failed · ${fmtTime(recordingSeconds)}`
+                    : `Recording · ${fmtTime(recordingSeconds)}`}
                 </Link>
+              )}
+              {recordingError && (
+                <div
+                  data-testid="live-recording-error"
+                  className="no-drag max-w-[28rem] truncate text-xs px-2 py-0.5 rounded"
+                  style={{ background: 'rgba(180,83,9,0.18)', color: '#fbbf24' }}
+                  title={recordingError}
+                >
+                  {recordingError}
+                </div>
               )}
               {isUploading && (
                 <div className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded" style={{ background: 'rgba(180,83,9,0.15)', color: '#fbbf24' }}>

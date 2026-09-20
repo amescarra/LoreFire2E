@@ -7,6 +7,10 @@
  * Show.tsx calls the functions exposed by this context instead of owning the
  * recorder itself.  AppLayout reads `isRecording` to show the persistent
  * recording indicator and to block navigation while a session is in progress.
+ *
+ * Chunk ACK is the source of truth for "audio is being saved." The timer
+ * freezes and a persistent error is shown if record/chunk fails — never leave
+ * "Recording · NNN" implying a healthy multi-hour take when writes have stalled.
  */
 
 import React, { createContext, useContext, useRef, useState, useCallback } from 'react'
@@ -15,14 +19,18 @@ import { fetchAudioCaptureConfig, openCaptureStream } from '@/lib/audioCapture'
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RecordingContextValue {
-  /** True while the MediaRecorder is running (mic is live). */
+  /** True while the MediaRecorder is running (mic is live) or a failed take is waiting to be saved. */
   isRecording: boolean
-  /** Elapsed seconds since recording started. */
+  /** Elapsed seconds since recording started. Frozen after a chunk write failure. */
   recordingSeconds: number
   /** True while the finalize POST is in-flight. */
   isUploading: boolean
   /** Human-readable upload progress message. */
   uploadProgress: string | null
+  /** Persistent error when a chunk could not be written. Timer is frozen. */
+  recordingError: string | null
+  /** True after a chunk write failure — timer must not look like a healthy take. */
+  recordingSaveFailed: boolean
   /** The session ID currently being recorded (null when idle). */
   activeSessionId: number | null
   /** The campaign ID for the active session (null when idle). */
@@ -60,7 +68,21 @@ function csrf(): string {
 
 const FLUSH_EVERY_CHUNKS = 10 // ~10 s at 1 s timeslice
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+async function readError(res: Response, fallback: string): Promise<string> {
+  const data = await res.json().catch(() => ({} as { error?: string }))
+  if (data && typeof data.error === 'string' && data.error.trim() !== '') {
+    return data.error
+  }
+  if (res.status === 507) {
+    return 'Disk, /tmp, or quota is full — audio is not being saved.'
+  }
+  if (res.status >= 500) {
+    return 'Server could not save this audio chunk.'
+  }
+  return fallback
+}
+
+// ── Provider ─────────────────────────────────────────────────────────────────
 
 export function RecordingProvider({ children }: { children: React.ReactNode }) {
   // ── Reactive state (shown in UI) ─────────────────────────────────────────
@@ -68,6 +90,8 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const [recordingSeconds, setRecordingSeconds] = useState(0)
   const [isUploading, setIsUploading]       = useState(false)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
+  const [recordingError, setRecordingError] = useState<string | null>(null)
+  const [recordingSaveFailed, setRecordingSaveFailed] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
   const [activeCampaignId, setActiveCampaignId] = useState<number | null>(null)
   const [activeInputLabel, setActiveInputLabel] = useState<string | null>(null)
@@ -82,12 +106,47 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   const isFlushing       = useRef<boolean>(false)
   const sessionIdRef     = useRef<number | null>(null)
   const onFinalizedRef   = useRef<((audioPath: string | null) => void) | null>(null)
+  const saveFailedRef    = useRef<boolean>(false)
+  const haltInFlightRef  = useRef<boolean>(false)
+
+  const freezeTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
+  }, [])
+
+  const haltForSaveFailure = useCallback((message: string) => {
+    if (saveFailedRef.current) {
+      setRecordingError(message)
+      setRecordingSaveFailed(true)
+      freezeTimer()
+      return
+    }
+    saveFailedRef.current = true
+    haltInFlightRef.current = true
+    freezeTimer()
+    setRecordingError(message)
+    setRecordingSaveFailed(true)
+    setActiveInputLabel(null)
+
+    const mr = mediaRecorderRef.current
+    if (mr && mr.state !== 'inactive') {
+      mr.ondataavailable = null
+      mr.onstop = () => {
+        mr.stream.getTracks().forEach(t => t.stop())
+      }
+      try { mr.stop() } catch { /* already stopped */ }
+    } else if (mr) {
+      mr.stream.getTracks().forEach(t => t.stop())
+    }
+  }, [freezeTimer])
 
   // ── Chunk helpers ─────────────────────────────────────────────────────────
 
-  const postChunk = useCallback(async (blob: Blob, index: number): Promise<boolean> => {
+  const postChunk = useCallback(async (blob: Blob, index: number): Promise<{ ok: boolean; error?: string }> => {
     const sid = sessionIdRef.current
-    if (sid === null) return false
+    if (sid === null) return { ok: false, error: 'No active session.' }
     const fd = new FormData()
     fd.append('upload_id',   uploadIdRef.current!)
     fd.append('chunk_index', String(index))
@@ -98,28 +157,116 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
         headers: { 'X-CSRF-TOKEN': csrf() },
         body: fd,
       })
-      return res.ok
+      if (res.ok) return { ok: true }
+      return { ok: false, error: await readError(res, 'Chunk upload failed.') }
     } catch {
-      return false
+      return { ok: false, error: 'Network error — audio chunk was not saved.' }
     }
   }, [])
 
   const flushPending = useCallback(async () => {
     if (isFlushing.current) return
+    if (saveFailedRef.current) return
     if (pendingChunksRef.current.length === 0) return
     isFlushing.current = true
 
     const toFlush = pendingChunksRef.current.splice(0)
     const blob    = new Blob(toFlush, { type: mimeTypeRef.current })
-    const index   = chunkIndexRef.current++
+    const index   = chunkIndexRef.current
 
-    const ok = await postChunk(blob, index)
-    if (!ok) {
-      pendingChunksRef.current.unshift(...toFlush)
-      console.warn(`Chunk ${index} upload failed — will retry on finalize`)
+    let result = await postChunk(blob, index)
+    if (!result.ok) {
+      result = await postChunk(blob, index)
     }
+    if (!result.ok) {
+      pendingChunksRef.current.unshift(...toFlush)
+      isFlushing.current = false
+      haltForSaveFailure(result.error ?? 'Chunk upload failed — recording is not being saved.')
+      return
+    }
+    chunkIndexRef.current = index + 1
     isFlushing.current = false
-  }, [postChunk])
+  }, [postChunk, haltForSaveFailure])
+
+  const finalizeStored = useCallback(async () => {
+    const sid = sessionIdRef.current
+    if (sid === null) return
+
+    setIsUploading(true)
+    setUploadProgress(saveFailedRef.current
+      ? 'Saving audio that reached disk…'
+      : 'Flushing remaining audio…')
+
+    try {
+      if (!saveFailedRef.current) {
+        await flushPending()
+        while (isFlushing.current) {
+          await new Promise(r => setTimeout(r, 100))
+        }
+      }
+
+      const totalChunks = chunkIndexRef.current
+      if (totalChunks < 1 && pendingChunksRef.current.length === 0) {
+        setIsUploading(false)
+        setUploadProgress(null)
+        setIsRecording(false)
+        setActiveSessionId(null)
+        setActiveCampaignId(null)
+        onFinalizedRef.current?.(null)
+        uploadIdRef.current    = null
+        sessionIdRef.current   = null
+        onFinalizedRef.current = null
+        return
+      }
+
+      setUploadProgress(`Finalising ${totalChunks} chunk${totalChunks !== 1 ? 's' : ''}…`)
+
+      const fd = new FormData()
+      fd.append('upload_id',    uploadIdRef.current!)
+      fd.append('total_chunks', String(totalChunks))
+      fd.append('mime_type',    mimeTypeRef.current)
+
+      const res = await fetch(`/sessions/${sid}/record/finalize`, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': csrf() },
+        body: fd,
+      })
+
+      setIsUploading(false)
+      setUploadProgress(null)
+      setIsRecording(false)
+      setActiveSessionId(null)
+      setActiveCampaignId(null)
+
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setRecordingError(null)
+        setRecordingSaveFailed(false)
+        onFinalizedRef.current?.(data.audio_path ?? null)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        onFinalizedRef.current?.(null)
+        const msg = 'Failed to finalise recording: ' + (err.error ?? res.statusText)
+        setRecordingError(msg)
+        setRecordingSaveFailed(true)
+        alert(msg)
+      }
+    } catch (e) {
+      setIsUploading(false)
+      setUploadProgress(null)
+      setIsRecording(false)
+      setActiveSessionId(null)
+      setActiveCampaignId(null)
+      onFinalizedRef.current?.(null)
+      setRecordingError('Failed to finalise recording.')
+      setRecordingSaveFailed(true)
+      console.error('Finalise error', e)
+    }
+
+    uploadIdRef.current    = null
+    sessionIdRef.current   = null
+    onFinalizedRef.current = null
+  }, [flushPending])
 
   // ── startRecording ────────────────────────────────────────────────────────
 
@@ -138,7 +285,6 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
       const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
       mimeTypeRef.current = mimeType
 
-      // 1. Init upload session on the server
       const initRes = await fetch(`/sessions/${sessionId}/record/init`, {
         method: 'POST',
         headers: { 'X-CSRF-TOKEN': csrf() },
@@ -150,17 +296,18 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
       }
       const { upload_id } = await initRes.json()
 
-      // Reset all refs
       sessionIdRef.current     = sessionId
       onFinalizedRef.current   = onFinalized
       uploadIdRef.current      = upload_id
       pendingChunksRef.current = []
       chunkIndexRef.current    = 0
       isFlushing.current       = false
+      saveFailedRef.current    = false
+      haltInFlightRef.current  = false
 
-      // 2. Start MediaRecorder with 1 s timeslice
       const mr = new MediaRecorder(stream, { mimeType })
       mr.ondataavailable = async (e: BlobEvent) => {
+        if (saveFailedRef.current) return
         if (!e.data || e.data.size === 0) return
         pendingChunksRef.current.push(e.data)
         if (pendingChunksRef.current.length >= FLUSH_EVERY_CHUNKS) {
@@ -172,9 +319,14 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
 
       setActiveSessionId(sessionId)
       setActiveCampaignId(campaignId)
+      setRecordingError(null)
+      setRecordingSaveFailed(false)
       setIsRecording(true)
       setRecordingSeconds(0)
-      timerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000)
+      timerRef.current = setInterval(() => {
+        if (saveFailedRef.current) return
+        setRecordingSeconds(s => s + 1)
+      }, 1000)
     } catch {
       alert('Could not access microphone. Please grant audio permissions.')
     }
@@ -183,78 +335,26 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
   // ── stopRecording ─────────────────────────────────────────────────────────
 
   const stopRecording = useCallback(() => {
-    if (!mediaRecorderRef.current) return
-    const mr  = mediaRecorderRef.current
-    const sid = sessionIdRef.current!
-
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
-    setIsRecording(false)
+    freezeTimer()
     setActiveInputLabel(null)
 
+    const mr = mediaRecorderRef.current
+    if (!mr || mr.state === 'inactive' || haltInFlightRef.current) {
+      mediaRecorderRef.current = null
+      void finalizeStored()
+      return
+    }
+
     mr.onstop = async () => {
-      // Stop mic tracks immediately so the OS recording indicator goes away
       mr.stream.getTracks().forEach(t => t.stop())
       mediaRecorderRef.current = null
-
-      setIsUploading(true)
-      setUploadProgress('Flushing remaining audio…')
-
-      try {
-        await flushPending()
-        // Wait for any concurrent flush to settle
-        while (isFlushing.current) {
-          await new Promise(r => setTimeout(r, 100))
-        }
-
-        const totalChunks = chunkIndexRef.current
-        setUploadProgress(`Finalising ${totalChunks} chunk${totalChunks !== 1 ? 's' : ''}…`)
-
-        const fd = new FormData()
-        fd.append('upload_id',    uploadIdRef.current!)
-        fd.append('total_chunks', String(totalChunks))
-        fd.append('mime_type',    mimeTypeRef.current)
-
-        const res = await fetch(`/sessions/${sid}/record/finalize`, {
-          method: 'POST',
-          headers: { 'X-CSRF-TOKEN': csrf() },
-          body: fd,
-        })
-
-        setIsUploading(false)
-        setUploadProgress(null)
-        setActiveSessionId(null)
-        setActiveCampaignId(null)
-
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}))
-          onFinalizedRef.current?.(data.audio_path ?? null)
-        } else {
-          const err = await res.json().catch(() => ({}))
-          onFinalizedRef.current?.(null)
-          alert('Failed to finalise recording: ' + (err.error ?? res.statusText))
-        }
-      } catch (e) {
-        setIsUploading(false)
-        setUploadProgress(null)
-        setActiveSessionId(null)
-        setActiveCampaignId(null)
-        onFinalizedRef.current?.(null)
-        console.error('Finalise error', e)
-      }
-
-      // Reset refs
-      uploadIdRef.current    = null
-      sessionIdRef.current   = null
-      onFinalizedRef.current = null
+      await finalizeStored()
     }
 
     mr.stop()
-  }, [flushPending])
+  }, [finalizeStored, freezeTimer])
 
   // ── registerOnFinalized ───────────────────────────────────────────────────
-  // Allows Show.tsx to refresh the callback on every mount so the correct
-  // React state setters are always current.
-
   const registerOnFinalized = useCallback((sessionId: number, cb: (audioPath: string | null) => void) => {
     if (sessionIdRef.current === sessionId) {
       onFinalizedRef.current = cb
@@ -268,6 +368,8 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
     recordingSeconds,
     isUploading,
     uploadProgress,
+    recordingError,
+    recordingSaveFailed,
     activeSessionId,
     activeCampaignId,
     activeLiveUrl: activeSessionId && activeCampaignId

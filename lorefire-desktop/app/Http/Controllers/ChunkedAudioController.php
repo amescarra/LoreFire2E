@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Jobs\TranscribeAudio;
 use App\Jobs\TranscribeLiveAudio;
 use App\Models\GameSession;
+use App\Support\AppTemp;
+use App\Support\ChunkedRecording;
 use App\Support\LiveTranscript;
 use App\Support\WhisperxRunner;
 use Illuminate\Http\JsonResponse;
@@ -87,14 +89,20 @@ class ChunkedAudioController extends Controller
      */
     public function init(Request $request, GameSession $session): JsonResponse
     {
+        AppTemp::sweep();
+
+        $recovered = ChunkedRecording::archivePriorTakes($session);
+
         $uploadId = Str::uuid()->toString();
 
-        // Create the chunk directory so we can detect stale uploads later if needed
-        Storage::disk('local')->makeDirectory("sessions/{$session->id}/chunks/{$uploadId}");
+        Storage::disk('local')->makeDirectory(ChunkedRecording::chunkDir($session, $uploadId));
 
         LiveTranscript::reset($session);
 
-        return response()->json(['upload_id' => $uploadId]);
+        return response()->json([
+            'upload_id' => $uploadId,
+            'recovered' => $recovered,
+        ]);
     }
 
     /**
@@ -113,17 +121,24 @@ class ChunkedAudioController extends Controller
             'chunk'       => 'required|file',
         ]);
 
-        $uploadId   = $request->input('upload_id');
-        $index      = (int) $request->input('chunk_index');
-        $padded     = str_pad($index, 6, '0', STR_PAD_LEFT); // 000000.part → natural sort order
-        $chunkPath  = "sessions/{$session->id}/chunks/{$uploadId}/{$padded}.part";
+        $uploadId = $request->input('upload_id');
+        $index = (int) $request->input('chunk_index');
 
-        $request->file('chunk')->storeAs(
-            "sessions/{$session->id}/chunks/{$uploadId}",
-            "{$padded}.part",
-            'local'
+        $stored = ChunkedRecording::storeUploadedChunk(
+            $session,
+            $uploadId,
+            $index,
+            $request->file('chunk')
         );
 
+        if (! ($stored['ok'] ?? false)) {
+            return response()->json([
+                'stored' => false,
+                'error' => $stored['error'] ?? 'Could not write audio chunk to disk.',
+            ], 507);
+        }
+
+        $chunkPath = $stored['path'];
         $chunkAbs = Storage::disk('local')->path($chunkPath);
         $partialAbs = Storage::disk('local')->path(LiveTranscript::partialAudioPath($session));
         app(WhisperxRunner::class)->appendFile($chunkAbs, $partialAbs);
@@ -145,69 +160,114 @@ class ChunkedAudioController extends Controller
     public function finalize(Request $request, GameSession $session): JsonResponse
     {
         $request->validate([
-            'upload_id'    => 'required|string',
-            'total_chunks' => 'required|integer|min:1',
-            'mime_type'    => 'nullable|string',
+            'upload_id' => 'required|string',
+            'total_chunks' => 'nullable|integer|min:0',
+            'mime_type' => 'nullable|string',
         ]);
 
-        $uploadId    = $request->input('upload_id');
-        $totalChunks = (int) $request->input('total_chunks');
-        $chunkDir = "sessions/{$session->id}/chunks/{$uploadId}";
-
-        // Gather chunk files sorted by name (zero-padded so string sort == numeric sort)
-        $files = Storage::disk('local')->files($chunkDir);
-        sort($files);
-
-        if (count($files) !== $totalChunks) {
-            return response()->json([
-                'error' => "Expected {$totalChunks} chunks, found " . count($files),
-            ], 422);
+        $uploadId = $request->input('upload_id');
+        $files = ChunkedRecording::partFiles($session, $uploadId);
+        if ($files === []) {
+            return response()->json(['error' => 'No chunks found for this take.'], 422);
         }
 
-        // Determine extension from mime or default to webm
-        $mimeType  = $request->input('mime_type', 'audio/webm');
-        $extension = match (true) {
-            str_contains($mimeType, 'ogg')  => 'ogg',
-            str_contains($mimeType, 'wav')  => 'wav',
-            str_contains($mimeType, 'mp4')  => 'mp4',
-            default                         => 'webm',
-        };
-
-        $finalPath = "sessions/{$session->id}/audio.{$extension}";
-        $absPath   = str_replace('/', DIRECTORY_SEPARATOR, Storage::disk('local')->path($finalPath));
-
-        // Ensure the sessions directory exists
-        if (!is_dir(dirname($absPath))) {
-            mkdir(dirname($absPath), 0755, true);
-        }
-
-        // Stream-concatenate chunks — zero extra memory regardless of file size
-        $out = fopen($absPath, 'wb');
-        if (!$out) {
-            return response()->json(['error' => 'Could not open output file.'], 500);
-        }
-
-        foreach ($files as $relPath) {
-            $absChunk = str_replace('/', DIRECTORY_SEPARATOR, Storage::disk('local')->path($relPath));
-            $in = fopen($absChunk, 'rb');
-            if ($in) {
-                stream_copy_to_stream($in, $out);
-                fclose($in);
+        $found = count($files);
+        $mismatch = null;
+        if ($request->filled('total_chunks')) {
+            $expected = (int) $request->input('total_chunks');
+            if ($expected > 0 && $expected !== $found) {
+                $mismatch = ['expected' => $expected, 'found' => $found];
             }
         }
-        fclose($out);
 
-        // Clean up chunk directory
-        Storage::disk('local')->deleteDirectory($chunkDir);
+        $extension = ChunkedRecording::extensionFromMime($request->input('mime_type'));
+        $assembled = ChunkedRecording::assemble($session, $uploadId, $extension);
+        if (! ($assembled['ok'] ?? false)) {
+            return response()->json(['error' => $assembled['error'] ?? 'Could not assemble chunks.'], 500);
+        }
 
-        // Persist + dispatch
+        Storage::disk('local')->deleteDirectory(ChunkedRecording::chunkDir($session, $uploadId));
+
+        $finalPath = $assembled['path'];
         $session->update([
-            'audio_path'           => $finalPath,
+            'audio_path' => $finalPath,
             'transcription_status' => 'pending',
         ]);
 
         TranscribeAudio::dispatch($session);
 
-        return response()->json(['audio_path' => $finalPath]);
+        return response()->json([
+            'audio_path' => $finalPath,
+            'parts' => $assembled['parts'] ?? $found,
+            'chunk_count_mismatch' => $mismatch,
+        ]);
+    }
+
+    /**
+     * List leftover chunk folders and dated recovered files for this session.
+     */
+    public function takes(GameSession $session): JsonResponse
+    {
+        return response()->json(['takes' => ChunkedRecording::listTakes($session)]);
+    }
+
+    /**
+     * Finalize an existing chunk directory or promote a recovered file to
+     * session audio after an app restart — no manual shell concat required.
+     */
+    public function recover(Request $request, GameSession $session): JsonResponse
+    {
+        $request->validate([
+            'upload_id' => 'nullable|string',
+            'path' => 'nullable|string',
+            'mime_type' => 'nullable|string',
+            'transcribe' => 'nullable|boolean',
+        ]);
+
+        $path = $request->input('path');
+        if (is_string($path) && $path !== '') {
+            if (! ChunkedRecording::isSessionRelative($session, $path) || ! Storage::disk('local')->exists($path)) {
+                return response()->json(['error' => 'Recovered file was not found for this session.'], 404);
+            }
+
+            $session->update([
+                'audio_path' => $path,
+                'transcription_status' => $request->boolean('transcribe', true) ? 'pending' : ($session->transcription_status ?? 'none'),
+            ]);
+
+            if ($request->boolean('transcribe', true)) {
+                TranscribeAudio::dispatch($session);
+            }
+
+            return response()->json(['audio_path' => $path, 'kind' => 'file']);
+        }
+
+        $uploadId = $request->input('upload_id');
+        if (! is_string($uploadId) || $uploadId === '') {
+            return response()->json(['error' => 'Provide upload_id or path to recover.'], 422);
+        }
+
+        $extension = ChunkedRecording::extensionFromMime($request->input('mime_type'));
+        $assembled = ChunkedRecording::assemble($session, $uploadId, $extension);
+        if (! ($assembled['ok'] ?? false)) {
+            return response()->json(['error' => $assembled['error'] ?? 'Could not assemble chunks.'], 422);
+        }
+
+        Storage::disk('local')->deleteDirectory(ChunkedRecording::chunkDir($session, $uploadId));
+
+        $session->update([
+            'audio_path' => $assembled['path'],
+            'transcription_status' => $request->boolean('transcribe', true) ? 'pending' : ($session->transcription_status ?? 'none'),
+        ]);
+
+        if ($request->boolean('transcribe', true)) {
+            TranscribeAudio::dispatch($session);
+        }
+
+        return response()->json([
+            'audio_path' => $assembled['path'],
+            'parts' => $assembled['parts'] ?? 0,
+            'kind' => 'chunks',
+        ]);
     }
 }

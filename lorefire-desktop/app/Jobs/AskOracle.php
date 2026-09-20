@@ -70,21 +70,49 @@ class AskOracle implements ShouldQueue
 
     protected function markFailed(string $message, ?Throwable $e = null): void
     {
+        $id = $this->reply->id;
         Log::error('AskOracle failed', [
-            'reply_id' => $this->reply->id,
+            'reply_id' => $id,
             'error' => $message,
             'exception' => $e?->getMessage(),
+            'database' => $this->databasePath(),
         ]);
 
-        $this->reply->refresh();
-        if ($this->reply->status === 'done' && filled($this->reply->reply)) {
-            return;
+        try {
+            $row = OracleReply::query()->find($id);
+            if ($row === null) {
+                Log::error('AskOracle: oracle_replies row missing after failure', [
+                    'reply_id' => $id,
+                    'database' => $this->databasePath(),
+                ]);
+
+                return;
+            }
+            if ($row->status === 'done' && filled($row->reply)) {
+                return;
+            }
+            $row->update([
+                'status' => 'failed',
+                'reply' => $message,
+            ]);
+        } catch (Throwable $inner) {
+            Log::error('AskOracle: could not persist failure text', [
+                'reply_id' => $id,
+                'error' => $inner->getMessage(),
+                'database' => $this->databasePath(),
+            ]);
         }
+    }
 
-        $this->reply->update([
-            'status' => 'failed',
-            'reply' => $message,
-        ]);
+    protected function databasePath(): ?string
+    {
+        try {
+            $database = config('database.connections.'.config('database.default').'.database');
+
+            return is_string($database) ? $database : null;
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     // ── Providers ──────────────────────────────────────────────────────────

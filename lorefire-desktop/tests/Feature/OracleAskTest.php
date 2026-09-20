@@ -295,6 +295,34 @@ class OracleAskTest extends TestCase
         $this->assertStringNotContainsStringIgnoringCase('PHB page', $system);
     }
 
+    public function test_missing_huggingface_token_does_not_break_oracle(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3.1:latest');
+
+        $this->assertNull(AppSetting::get('huggingface_token'));
+
+        Http::fake([
+            'http://localhost:11434/api/tags' => Http::response([
+                'models' => [['name' => 'llama3.1:latest']],
+            ], 200),
+            'http://localhost:11434/api/chat' => Http::response([
+                'message' => ['content' => 'Session recap from the engine briefing.'],
+            ], 200),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'done')
+            ->assertJsonPath('reply', 'Session recap from the engine briefing.');
+    }
+
     public function test_oracle_index_renders(): void
     {
         $this->withoutVite()->get('/oracle')->assertOk();

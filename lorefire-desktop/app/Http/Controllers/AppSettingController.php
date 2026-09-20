@@ -25,7 +25,7 @@ class AppSettingController extends Controller
         'whisperx_model',    // tiny | base | small | medium | large-v2 | large-v3 (never *.en)
         'whisperx_languages', // csv allowlist, default en,es
         'whisperx_language', // legacy single code; read-only fallback
-        'huggingface_token', // required for speaker diarization
+        'huggingface_token', // WhisperX diarization only; Oracle/AskOracle never read this key
         'default_art_style',      // comic | lifelike
         'image_gen_provider',     // none | zai | openai | comfyui
         'image_gen_model',        // e.g. cogview-4-flash, dall-e-3 (not used for comfyui)

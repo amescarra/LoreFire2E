@@ -439,7 +439,8 @@ export default function Index({ settings, whisperx_languages, audio_capture }: P
                 label="Model Name"
                 value={data.ollama_model}
                 onChange={e => setData('ollama_model', e.target.value)}
-                placeholder="llama3, mistral, gemma…"
+                placeholder="llama3.1:latest"
+                hint="Must match a name from `ollama list` exactly (llama3.1:8b fails if only llama3.1:latest is pulled)."
               />
             </div>
           )}

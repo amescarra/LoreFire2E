@@ -219,8 +219,15 @@ class AskOracle implements ShouldQueue
 
     protected function callOllama(): ?string
     {
-        $baseUrl = AppSetting::get('ollama_base_url', 'http://localhost:11434');
-        $model = AppSetting::get('ollama_model', 'llama3');
+        $baseUrl = rtrim((string) AppSetting::get('ollama_base_url', 'http://localhost:11434'), '/');
+        $model = (string) AppSetting::get('ollama_model', 'llama3');
+
+        $available = $this->ollamaModelNames($baseUrl);
+        if ($available !== [] && ! $this->ollamaHasModel($available, $model)) {
+            $this->lastError = $this->ollamaMissingModelMessage($model, $available, $baseUrl);
+
+            return null;
+        }
 
         $response = Http::timeout(240)
             ->post("{$baseUrl}/api/chat", \App\Support\Linux5090::withOllamaOptions([
@@ -233,13 +240,21 @@ class AskOracle implements ShouldQueue
             ]));
 
         if (! $response->successful()) {
-            $this->lastError = 'Ollama returned HTTP '.$response->status()
-                .' from '.$baseUrl.' (model '.$model.'). Check that Ollama is running and the model is pulled.';
+            $ollamaError = $this->ollamaErrorText($response);
+            $available = $available !== [] ? $available : $this->ollamaModelNames($baseUrl);
+            if ($this->looksLikeMissingOllamaModel($ollamaError, $response->status())) {
+                $this->lastError = $this->ollamaMissingModelMessage($model, $available, $baseUrl, $ollamaError);
+            } else {
+                $this->lastError = 'Ollama returned HTTP '.$response->status()
+                    .' from '.$baseUrl.' (model '.$model.').'
+                    .($ollamaError !== '' ? ' '.$ollamaError : ' Check that Ollama is running and the model is pulled.');
+            }
             Log::warning('AskOracle: Ollama error', [
                 'status' => $response->status(),
                 'base_url' => $baseUrl,
                 'model' => $model,
                 'body' => $response->body(),
+                'available' => $available,
             ]);
 
             return null;
@@ -253,5 +268,82 @@ class AskOracle implements ShouldQueue
         }
 
         return $text;
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function ollamaModelNames(string $baseUrl): array
+    {
+        try {
+            $response = Http::timeout(5)->get($baseUrl.'/api/tags');
+            if (! $response->successful()) {
+                return [];
+            }
+
+            $names = [];
+            foreach ($response->json('models') ?? [] as $row) {
+                if (! is_array($row) || ! isset($row['name']) || ! is_string($row['name']) || $row['name'] === '') {
+                    continue;
+                }
+                $names[] = $row['name'];
+            }
+
+            return array_values(array_unique($names));
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /**
+     * @param  list<string>  $available
+     */
+    protected function ollamaHasModel(array $available, string $model): bool
+    {
+        foreach ($available as $name) {
+            if (strcasecmp($name, $model) === 0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $available
+     */
+    protected function ollamaMissingModelMessage(string $model, array $available, string $baseUrl, string $ollamaError = ''): string
+    {
+        $parts = [
+            'Ollama model "'.$model.'" was not found at '.$baseUrl.'.',
+        ];
+        if ($ollamaError !== '') {
+            $parts[] = $ollamaError;
+        }
+        $parts[] = $available === []
+            ? 'No models were listed by /api/tags. Run `ollama pull` and set the exact name in Settings.'
+            : 'Available models: '.implode(', ', $available).'. Set Settings → Ollama model to one of those names.';
+
+        return implode(' ', $parts);
+    }
+
+    protected function looksLikeMissingOllamaModel(string $error, int $status): bool
+    {
+        return $status === 404 || (bool) preg_match('/model .+ not found/i', $error);
+    }
+
+    protected function ollamaErrorText(\Illuminate\Http\Client\Response $response): string
+    {
+        $jsonError = $response->json('error');
+        if (is_string($jsonError) && trim($jsonError) !== '') {
+            return trim($jsonError);
+        }
+
+        $body = trim($response->body());
+        if ($body === '' || strlen($body) > 300) {
+            return '';
+        }
+
+        return $body;
     }
 }

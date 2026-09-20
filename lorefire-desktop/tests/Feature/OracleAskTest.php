@@ -73,7 +73,13 @@ class OracleAskTest extends TestCase
             'messages' => [['role' => 'user', 'content' => 'STR 18/01 open doors']],
         ]);
         $open->assertOk();
-        $openPrompt = Http::recorded()[0][0]->data()['messages'][0]['content'] ?? '';
+        $openPrompt = '';
+        foreach (Http::recorded() as [$request]) {
+            if (str_contains($request->url(), '/api/chat')) {
+                $openPrompt = $request->data()['messages'][0]['content'] ?? '';
+                break;
+            }
+        }
         $this->assertStringContainsString('open doors: 12', $openPrompt);
 
         Http::fake();
@@ -150,6 +156,38 @@ class OracleAskTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_ollama_missing_model_lists_available_names(): void
+    {
+        AppSetting::set('llm_provider', 'ollama');
+        AppSetting::set('ollama_base_url', 'http://localhost:11434');
+        AppSetting::set('ollama_model', 'llama3.1:8b');
+
+        Http::fake([
+            'http://localhost:11434/api/tags' => Http::response([
+                'models' => [['name' => 'llama3.1:latest']],
+            ], 200),
+            'http://localhost:11434/api/chat' => Http::response([
+                'error' => "model 'llama3.1:8b' not found",
+            ], 404),
+        ]);
+
+        $response = $this->postJson('/oracle/ask', [
+            'messages' => [['role' => 'user', 'content' => 'Summarize my most recent session.']],
+        ]);
+        $response->assertOk();
+
+        $reply = $this->getJson('/oracle/replies/'.$response->json('reply_id'))
+            ->assertOk()
+            ->assertJsonPath('status', 'failed')
+            ->json('reply');
+
+        $this->assertIsString($reply);
+        $this->assertStringContainsString('llama3.1:8b', $reply);
+        $this->assertStringContainsString('not found', $reply);
+        $this->assertStringContainsString('llama3.1:latest', $reply);
+        $this->assertStringContainsString('Settings', $reply);
+    }
+
     public function test_ollama_http_failure_stores_visible_error(): void
     {
         AppSetting::set('llm_provider', 'ollama');
@@ -157,7 +195,7 @@ class OracleAskTest extends TestCase
         AppSetting::set('ollama_model', 'llama3');
 
         Http::fake([
-            '*' => Http::response('model not found', 500),
+            '*' => Http::response('internal error', 500),
         ]);
 
         $response = $this->postJson('/oracle/ask', [

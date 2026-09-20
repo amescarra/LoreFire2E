@@ -83,6 +83,8 @@ class VoiceprintArmPathTest extends TestCase
 
         $this->assertIsString($campaign);
         $this->assertStringContainsString('Enrolled Voices', $campaign);
-        $this->assertStringContainsString('/voices', $campaign);
+        $this->assertStringContainsString('Open Enrolled Voices', $campaign);
+        $this->assertStringContainsString('href={`/campaigns/${campaign.id}/voices`}', $campaign);
+        $this->assertGreaterThanOrEqual(3, substr_count($campaign, '/voices'));
     }
 }

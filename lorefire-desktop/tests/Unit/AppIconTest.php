@@ -96,4 +96,22 @@ class AppIconTest extends TestCase
         $this->assertStringContainsString('Windows ARM64', $src);
         $this->assertStringContainsString('architecture-independent', $src);
     }
+
+    public function test_nativephp_installs_app_icon_copies_public_png_and_ico(): void
+    {
+        $trait = $this->desktopRoot().'/vendor/nativephp/electron/src/Traits/InstallsAppIcon.php';
+        if (! is_file($trait)) {
+            $this->markTestSkipped('vendor/nativephp/electron is not installed.');
+        }
+
+        $src = file_get_contents($trait);
+        $this->assertIsString($src);
+        $this->assertStringContainsString("public_path('icon.png')", $src);
+        $this->assertStringContainsString("public_path('icon.ico')", $src);
+        $this->assertStringContainsString("public_path('icon.icns')", $src);
+        $this->assertStringContainsString('resources/js/build/icon.png', $src);
+        $this->assertStringContainsString('resources/js/resources/icon.png', $src);
+        $this->assertStringContainsString('resources/js/build/icon.ico', $src);
+        $this->assertStringContainsString('resources/js/resources/icon.ico', $src);
+    }
 }

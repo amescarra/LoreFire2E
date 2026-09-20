@@ -32,7 +32,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     /**
      * @return array{0: Campaign, 1: \App\Models\GameSession}
      */
-    protected function session(): array
+    protected function liveSession(): array
     {
         $campaign = Campaign::factory()->create(['name' => 'Dragon Lava Cave']);
         $session = $campaign->gameSessions()->create([
@@ -44,7 +44,7 @@ class ChunkedAudioRecoveryTest extends TestCase
 
     public function test_init_archives_prior_chunk_folder_instead_of_orphaning_it(): void
     {
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $orphanId = '11111111-2222-3333-4444-555555555555';
         Storage::disk('local')->put("sessions/{$session->id}/chunks/{$orphanId}/000000.part", 'CHUNK-A');
         Storage::disk('local')->put("sessions/{$session->id}/chunks/{$orphanId}/000001.part", 'CHUNK-B');
@@ -72,7 +72,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     public function test_finalize_assembles_existing_chunk_dir_after_restart_even_if_count_mismatches(): void
     {
         Bus::fake();
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $uploadId = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
         Storage::disk('local')->put("sessions/{$session->id}/chunks/{$uploadId}/000000.part", 'ONE');
         Storage::disk('local')->put("sessions/{$session->id}/chunks/{$uploadId}/000001.part", 'TWO');
@@ -92,7 +92,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     public function test_recover_promotes_orphaned_chunks_without_manual_concat(): void
     {
         Bus::fake();
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $uploadId = '99999999-aaaa-bbbb-cccc-dddddddddddd';
         Storage::disk('local')->put("sessions/{$session->id}/chunks/{$uploadId}/000000.part", 'KEEP');
 
@@ -108,7 +108,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     public function test_recover_imports_an_assembled_recovered_file(): void
     {
         Bus::fake();
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $path = "sessions/{$session->id}/recovered/20260920-120000-old.webm";
         Storage::disk('local')->put($path, 'RECOVERED-WAV');
 
@@ -123,7 +123,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     public function test_chunk_write_failure_returns_507_and_does_not_dispatch_live_job(): void
     {
         Bus::fake();
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $init = $this->postJson(route('sessions.record.init', $session))->assertOk();
         $uploadId = $init->json('upload_id');
 
@@ -142,7 +142,7 @@ class ChunkedAudioRecoveryTest extends TestCase
     public function test_successful_chunk_still_dispatches_live_transcription(): void
     {
         Bus::fake();
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $init = $this->postJson(route('sessions.record.init', $session))->assertOk();
 
         $this->postJson(route('sessions.record.chunk', $session), [
@@ -156,7 +156,7 @@ class ChunkedAudioRecoveryTest extends TestCase
 
     public function test_list_takes_includes_leftover_chunk_uuid_folders(): void
     {
-        [, $session] = $this->session();
+        [, $session] = $this->liveSession();
         $uploadId = '37437437-0000-0000-0000-000000000374';
         for ($i = 0; $i < 3; $i++) {
             Storage::disk('local')->put(

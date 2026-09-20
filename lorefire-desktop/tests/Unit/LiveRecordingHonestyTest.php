@@ -52,7 +52,8 @@ class LiveRecordingHonestyTest extends TestCase
         $this->assertIsString($helper);
         $this->assertIsString($enroll);
 
-        $this->assertStringNotContainsString('mkdtemp(prefix="lorefire_ffmpeg_")', $runner);
+        $this->assertStringNotContainsString('_tempfile.mkdtemp', $runner);
+        $this->assertStringNotContainsString("prefix=\"lorefire_ffmpeg_\"", $runner);
         $this->assertStringContainsString('ensure_ffmpeg_on_path()', $runner);
         $this->assertStringContainsString('ffmpeg-alias', $helper);
         $this->assertStringContainsString('sweep_stale', $helper);

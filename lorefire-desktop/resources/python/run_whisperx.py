@@ -61,8 +61,8 @@ os.environ.setdefault('TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD', '1')
 
 # imageio-ffmpeg bundles ffmpeg with a platform-specific name (e.g.
 # ffmpeg-win64-v6.1.exe), not "ffmpeg.exe", so adding its directory to PATH
-# is not enough. Reuse one alias under LOREFIRE_TMP / XDG cache — do not
-# mkdtemp(prefix="lorefire_ffmpeg_") per slice (those leftovers filled /tmp).
+# is not enough. Reuse one alias under LOREFIRE_TMP / XDG cache — never
+# create a unique lorefire_ffmpeg temp directory per live slice.
 ensure_ffmpeg_on_path()
 
 # python-build-standalone does not hook into the Windows certificate store,

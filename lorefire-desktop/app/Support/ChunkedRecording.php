@@ -140,8 +140,7 @@ class ChunkedRecording
             ];
         }
 
-        $abs = Storage::disk('local')->path($rel);
-        if ($stored === false || ! is_file($abs) || filesize($abs) === 0) {
+        if ($stored === false || ! Storage::disk('local')->exists($rel)) {
             return [
                 'ok' => false,
                 'error' => 'Could not write audio chunk to disk. Check free space (including /tmp).',

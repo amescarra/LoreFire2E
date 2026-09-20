@@ -90,7 +90,7 @@ interface AppLayoutProps {
 
 export default function AppLayout({ children, title, breadcrumbs }: AppLayoutProps) {
   const { url } = usePage()
-  const { isRecording, recordingSeconds, isUploading, uploadProgress, recordingError, recordingSaveFailed, activeLiveUrl, activeSessionId } = useRecording()
+  const { isRecording, recordingSeconds, isUploading, uploadProgress, recordingError, recordingSaveFailed, activeLiveUrl, activeSessionId, stopRecording } = useRecording()
 
   const fmtTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
@@ -223,19 +223,32 @@ export default function AppLayout({ children, title, breadcrumbs }: AppLayoutPro
 
             <div className="ml-auto flex items-center gap-3 min-w-0 flex-1 justify-end h-full">
               {isRecording && (
-                <Link
-                  href={activeLiveUrl ?? '#'}
-                  data-testid="live-recording-badge"
-                  className="no-drag flex items-center gap-2 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
-                  style={recordingSaveFailed
-                    ? { background: 'rgba(180,83,9,0.18)', color: '#fbbf24' }
-                    : { background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
-                >
-                  <div className={`w-1.5 h-1.5 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
-                  {recordingSaveFailed
-                    ? `Save failed · ${fmtTime(recordingSeconds)}`
-                    : `Recording · ${fmtTime(recordingSeconds)}`}
-                </Link>
+                <div className="no-drag flex items-center gap-2 min-w-0">
+                  <Link
+                    href={activeLiveUrl ?? '#'}
+                    data-testid="live-recording-badge"
+                    className="flex items-center gap-2 text-xs px-2 py-0.5 rounded transition-opacity hover:opacity-80"
+                    style={recordingSaveFailed
+                      ? { background: 'rgba(180,83,9,0.18)', color: '#fbbf24' }
+                      : { background: 'rgba(220,38,38,0.15)', color: '#f87171' }}
+                  >
+                    <div className={`w-1.5 h-1.5 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
+                    {recordingSaveFailed
+                      ? `Save failed · ${fmtTime(recordingSeconds)}`
+                      : `Recording · ${fmtTime(recordingSeconds)}`}
+                  </Link>
+                  <button
+                    type="button"
+                    data-testid="app-recording-stop"
+                    onClick={stopRecording}
+                    className="shrink-0 text-xs px-2 py-0.5 rounded font-heading tracking-widest uppercase transition-opacity hover:opacity-90"
+                    style={recordingSaveFailed
+                      ? { background: 'rgba(180,83,9,0.28)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.45)' }
+                      : { background: 'rgba(220,38,38,0.22)', color: '#f87171', border: '1px solid rgba(248,113,113,0.45)' }}
+                  >
+                    {recordingSaveFailed ? 'Save / Stop' : 'Stop'}
+                  </button>
+                </div>
               )}
               {recordingError && (
                 <div

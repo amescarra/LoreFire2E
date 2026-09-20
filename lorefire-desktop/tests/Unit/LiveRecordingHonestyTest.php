@@ -33,12 +33,67 @@ class LiveRecordingHonestyTest extends TestCase
         $this->assertStringContainsString('Save failed ·', $live);
         $this->assertStringContainsString('live-session-recording-error', $live);
         $this->assertStringContainsString('recordingSaveFailed', $live);
+        $this->assertStringContainsString('data-testid="live-recording-toolbar"', $live);
+        $this->assertStringContainsString('data-testid="live-toolbar-stop"', $live);
+        $this->assertStringContainsString('data-testid="live-toolbar-start"', $live);
+        $this->assertStringContainsString('data-testid="live-recording-elapsed"', $live);
+        $this->assertStringContainsString("recordingSaveFailed ? 'Save / Stop' : 'Stop'", $live);
+        $this->assertStringContainsString('startRecording', $live);
+        $this->assertStringContainsString('stopRecording', $live);
+        $this->assertStringContainsString('registerOnFinalized', $live);
+
+        $this->assertStringContainsString('data-testid="app-recording-stop"', $layout);
+        $this->assertStringContainsString('stopRecording', $layout);
+        $this->assertStringContainsString("recordingSaveFailed ? 'Save / Stop' : 'Stop'", $layout);
 
         $this->assertStringContainsString('session-recording-error', $show);
         $this->assertStringContainsString('The timer is frozen', $show);
         $this->assertStringContainsString('recoverable-takes', $show);
         $this->assertStringContainsString('Use as session audio', $show);
         $this->assertStringContainsString('/record/recover', $show);
+    }
+
+    public function test_live_page_exposes_always_visible_start_and_stop(): void
+    {
+        $root = dirname(__DIR__, 2);
+        $live = file_get_contents($root.'/resources/js/Pages/Sessions/Live.tsx');
+        $layout = file_get_contents($root.'/resources/js/Layouts/AppLayout.tsx');
+        $ctx = file_get_contents($root.'/resources/js/Contexts/RecordingContext.tsx');
+
+        $this->assertIsString($live);
+        $this->assertIsString($layout);
+        $this->assertIsString($ctx);
+
+        $mainPos = strpos($live, 'export default function Live');
+        $toolbarPos = strpos($live, 'data-testid="live-recording-toolbar"');
+        $stopPos = strpos($live, 'data-testid="live-toolbar-stop"');
+        $startPos = strpos($live, 'data-testid="live-toolbar-start"');
+        $sessionPanelPos = strpos($live, 'function SessionPanel');
+
+        $this->assertNotFalse($mainPos);
+        $this->assertNotFalse($toolbarPos);
+        $this->assertNotFalse($stopPos);
+        $this->assertNotFalse($startPos);
+        $this->assertNotFalse($sessionPanelPos);
+        $this->assertGreaterThan($mainPos, $toolbarPos, 'Stop/Record must live on the Live page header, not only the Session tab');
+        $this->assertGreaterThan($mainPos, $stopPos);
+        $this->assertGreaterThan($mainPos, $startPos);
+        $this->assertGreaterThan($sessionPanelPos, $toolbarPos);
+
+        $this->assertStringContainsString('onClick={stopRecording}', $live);
+        $this->assertStringContainsString('onClick={handleStartRecording}', $live);
+        $this->assertStringContainsString('Save / Stop', $live);
+        $this->assertStringContainsString('data-testid="live-toolbar-start"', $live);
+        $this->assertMatchesRegularExpression('/data-testid="live-toolbar-start"[\s\S]*?Record[\s\S]*?<\/Button>/', $live);
+
+        $this->assertStringContainsString('onClick={stopRecording}', $layout);
+        $this->assertStringContainsString('data-testid="app-recording-stop"', $layout);
+        $this->assertStringContainsString('data-testid="live-recording-badge"', $layout);
+        $this->assertStringContainsString('className="no-drag flex items-center gap-2 min-w-0"', $layout);
+
+        $this->assertStringContainsString('startRecording', $ctx);
+        $this->assertStringContainsString('stopRecording', $ctx);
+        $this->assertStringContainsString('openCaptureStream', $ctx);
     }
 
     public function test_whisperx_does_not_mkdtemp_lorefire_ffmpeg_per_slice(): void

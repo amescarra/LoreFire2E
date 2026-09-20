@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Head, router, Link } from '@inertiajs/react'
 import ReactMarkdown from 'react-markdown'
 import AppLayout from '@/Layouts/AppLayout'
@@ -678,8 +678,8 @@ function SessionPanel({ campaign, session, recoverableTakes = [] }: { campaign: 
                 {recordingSaveFailed ? `Save failed · ${fmtTime(recordingSeconds)}` : fmtTime(recordingSeconds)}
               </span>
             </div>
-            <Button variant="danger" size="sm" onClick={stopRecording}>
-              {recordingSaveFailed ? 'Save what reached disk' : 'Stop Recording'}
+            <Button variant="danger" size="sm" onClick={stopRecording} data-testid="live-session-stop">
+              {recordingSaveFailed ? 'Save / Stop' : 'Stop'}
             </Button>
           </div>
         )}
@@ -699,9 +699,9 @@ function SessionPanel({ campaign, session, recoverableTakes = [] }: { campaign: 
             <span className="text-xs" style={{ color: '#fbbf24' }}>{uploadProgress ?? 'Saving…'}</span>
           </div>
         )}
-        {!isThisSession && !isRecording && (
+        {!isRecording && (
           <p className="text-xs" style={{ color: 'var(--color-text-dim)' }}>
-            Recording controls are on the{' '}
+            Use <span className="font-heading tracking-widest uppercase">Record</span> on the Live toolbar to start a take, or the{' '}
             <Link href={sessionUrl} className="underline" style={{ color: 'var(--color-rune)' }}>session page</Link>.
           </p>
         )}
@@ -750,8 +750,41 @@ function SessionPanel({ campaign, session, recoverableTakes = [] }: { campaign: 
 export default function Live({ campaign, session, characters, hasLlm, campaignContext, recoverableTakes = [] }: Props) {
   const [tab, setTab] = useState<LiveTab>('characters')
   const [liveCharacters, setLiveCharacters] = useState(characters)
-  const { isRecording, recordingSaveFailed, activeSessionId } = useRecording()
+  const [showRerecordConfirm, setShowRerecordConfirm] = useState(false)
+  const {
+    isRecording,
+    recordingSeconds,
+    isUploading,
+    uploadProgress,
+    recordingSaveFailed,
+    startRecording,
+    stopRecording,
+    registerOnFinalized,
+    activeSessionId,
+  } = useRecording()
   const isThisSession = activeSessionId === session.id
+  const otherSessionRecording = activeSessionId !== null && activeSessionId !== session.id
+  const transcribing = session.transcription_status === 'processing' || session.transcription_status === 'pending'
+
+  const handleRecordingFinalized = useCallback((_audioPath: string | null) => {
+    router.reload({ only: ['session', 'recoverableTakes'], preserveScroll: true, preserveState: true })
+  }, [])
+
+  useEffect(() => {
+    registerOnFinalized(session.id, handleRecordingFinalized)
+  }, [session.id, registerOnFinalized, handleRecordingFinalized])
+
+  const beginRecording = () => {
+    void startRecording(session.id, campaign.id, handleRecordingFinalized)
+  }
+
+  const handleStartRecording = () => {
+    if (session.audio_path) {
+      setShowRerecordConfirm(true)
+      return
+    }
+    beginRecording()
+  }
 
   useEffect(() => {
     setLiveCharacters(characters)
@@ -774,6 +807,7 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
   }, [isThisSession, isRecording, campaign.id, session.id])
 
   return (
+    <>
     <AppLayout breadcrumbs={[
       { label: 'Campaigns', href: '/campaigns' },
       { label: campaign.name, href: `/campaigns/${campaign.id}` },
@@ -785,7 +819,7 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
       <div className="flex flex-col gap-0">
 
         {/* ── Top bar ───────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
             {isThisSession && isRecording && (
               <div className={`w-2 h-2 rounded-full ${recordingSaveFailed ? 'bg-amber-400' : 'bg-red-500 animate-pulse'}`} />
@@ -793,6 +827,45 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
             <h1 className="font-heading text-base tracking-widest uppercase" style={{ color: 'var(--color-text-white)' }}>
               Live — {session.title}
             </h1>
+          </div>
+
+          {/* Always-visible Start/Stop — do not bury recording controls on the Session tab */}
+          <div className="flex items-center gap-2" data-testid="live-recording-toolbar">
+            {isThisSession && isRecording ? (
+              <>
+                <span
+                  data-testid="live-recording-elapsed"
+                  className="text-sm font-mono"
+                  style={{ color: recordingSaveFailed ? '#fbbf24' : '#f87171' }}
+                >
+                  {recordingSaveFailed ? `Save failed · ${fmtTime(recordingSeconds)}` : fmtTime(recordingSeconds)}
+                </span>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={stopRecording}
+                  data-testid="live-toolbar-stop"
+                >
+                  {recordingSaveFailed ? 'Save / Stop' : 'Stop'}
+                </Button>
+              </>
+            ) : isThisSession && isUploading ? (
+              <span className="text-xs font-mono" style={{ color: '#fbbf24' }} data-testid="live-recording-saving">
+                {uploadProgress ?? 'Saving…'}
+              </span>
+            ) : (
+              <Button
+                variant="rune"
+                size="sm"
+                onClick={handleStartRecording}
+                disabled={isUploading || transcribing || otherSessionRecording}
+                data-testid="live-toolbar-start"
+                title={otherSessionRecording ? 'Another session is recording' : transcribing ? 'Wait for transcription to finish' : undefined}
+              >
+                <div className="w-2 h-2 rounded-full bg-[var(--color-danger)]" />
+                Record
+              </Button>
+            )}
           </div>
 
           {/* Tab switcher */}
@@ -865,5 +938,42 @@ export default function Live({ campaign, session, characters, hasLlm, campaignCo
 
       </div>
     </AppLayout>
+
+    {showRerecordConfirm && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+        <div
+          className="w-full max-w-sm mx-4 rounded border border-[var(--color-border)] p-6 flex flex-col gap-4"
+          style={{ background: 'var(--color-bg)' }}
+        >
+          <h2 className="font-heading text-lg text-[var(--color-text-white)] tracking-widest uppercase">
+            Replace Recording?
+          </h2>
+          <p className="text-sm text-[var(--color-text-dim)]">
+            This session already has a recording. Starting a new one will overwrite the current session audio after you stop. Unfinished chunk folders are archived as Recoverable takes instead of being discarded.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              type="button"
+              onClick={() => setShowRerecordConfirm(false)}
+              className="px-4 py-2 text-xs font-heading tracking-widest uppercase border border-[var(--color-border)] rounded text-[var(--color-text-dim)] hover:border-[var(--color-rune)] hover:text-[var(--color-rune)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              data-testid="live-rerecord-confirm"
+              onClick={() => {
+                setShowRerecordConfirm(false)
+                beginRecording()
+              }}
+              className="px-4 py-2 text-xs font-heading tracking-widest uppercase border border-[var(--color-danger)] rounded text-[var(--color-danger)] hover:bg-[var(--color-danger)]/10 transition-colors"
+            >
+              Yes, Re-record
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }

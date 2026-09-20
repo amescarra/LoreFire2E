@@ -331,6 +331,14 @@ bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
 
 `scripts/linux-5090-launch.sh` **cd**s to `lorefire-desktop` and runs `php artisan native:serve`. It prints the chrome-sandbox `chown`/`chmod` docs. If `chrome-sandbox` is not **root:root mode 4755**, it exports `ELECTRON_DISABLE_SANDBOX=1` so a menu click still opens a window (local-dev only).
 
+A GNOME/KDE `.desktop` click has **no TTY**. NativePHP’s Symfony Process then dies immediately:
+
+```
+TTY mode requires /dev/tty to be read/writable.
+```
+
+The launcher checks stdin: a real terminal still `exec php artisan native:serve`. When stdin is not a TTY it wraps the same command in util-linux `script -qefc "php artisan native:serve …" "$LOG"` so NativePHP gets a PTY. The typescript is `lorefire-desktop/storage/logs/native-serve.desktop.log` (override with `LOREFIRE_NATIVE_SERVE_LOG`). Windows ARM is untouched.
+
 ```bash
 # run now
 bash lorefire-desktop/scripts/linux-5090-launch.sh

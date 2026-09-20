@@ -3,6 +3,11 @@
 #
 # cds to lorefire-desktop and runs: php artisan native:serve
 #
+# A GNOME/KDE .desktop click has no TTY. NativePHP (Symfony Process setTty)
+# then dies: "TTY mode requires /dev/tty to be read/writable."
+# Non-TTY stdin → wrap native:serve in util-linux `script -qefc` (PTY).
+# Interactive terminal → exec php artisan native:serve (no wrapper).
+#
 # Usage (from anywhere in the clone):
 #   bash lorefire-desktop/scripts/linux-5090-launch.sh
 #   bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
@@ -153,7 +158,29 @@ fi
 echo "==> Starting Lorefire 2E"
 echo "    cwd     : $DESKTOP"
 echo "    icon    : $ICON"
-echo "    command : php artisan native:serve $*"
-echo ""
 
-exec php artisan native:serve "$@"
+# Interactive terminal: NativePHP can open /dev/tty itself.
+if [ -t 0 ]; then
+  echo "    command : php artisan native:serve $*"
+  echo ""
+  exec php artisan native:serve "$@"
+fi
+
+# Desktop/.desktop (and any other no-TTY launch): allocate a PTY so
+# Symfony Process::setTty() sees a writable /dev/tty.
+if ! command -v script >/dev/null 2>&1; then
+  echo "ERROR: no TTY (Desktop launcher) and util-linux script(1) is missing."
+  echo "  NativePHP: TTY mode requires /dev/tty to be read/writable."
+  echo "  sudo apt install bsdutils"
+  echo "  or run from a terminal: php artisan native:serve"
+  exit 1
+fi
+
+LOG="${LOREFIRE_NATIVE_SERVE_LOG:-$DESKTOP/storage/logs/native-serve.desktop.log}"
+mkdir -p "$(dirname "$LOG")"
+serve_cmd="php artisan native:serve$( [ "$#" -eq 0 ] || printf ' %q' "$@" )"
+echo "    no TTY  : wrapping native:serve in script -qefc (PTY)"
+echo "    log     : $LOG"
+echo "    command : script -qefc $serve_cmd"
+echo ""
+exec script -qefc "$serve_cmd" "$LOG"

@@ -368,6 +368,11 @@ class Linux5090Test extends TestCase
 
         $this->assertStringContainsString('cd "$DESKTOP"', $launch);
         $this->assertStringContainsString('php artisan native:serve', $launch);
+        $this->assertStringContainsString('exec php artisan native:serve', $launch);
+        $this->assertStringContainsString('[ -t 0 ]', $launch);
+        $this->assertStringContainsString('script -qefc', $launch);
+        $this->assertStringContainsString('native-serve.desktop.log', $launch);
+        $this->assertStringContainsString('/dev/tty', $launch);
         $this->assertStringContainsString('public/icon.png', $launch);
         $this->assertStringContainsString('ELECTRON_DISABLE_SANDBOX=1', $launch);
         $this->assertStringContainsString('chrome-sandbox', $launch);
@@ -385,6 +390,9 @@ class Linux5090Test extends TestCase
 
         $this->assertStringContainsString('linux-5090-launch.sh', $md);
         $this->assertStringContainsString('lorefire-2e.desktop', $md);
+        $this->assertStringContainsString('script -qefc', $md);
+        $this->assertStringContainsString('/dev/tty', $md);
+        $this->assertStringContainsString('exec php artisan native:serve', $md);
         $this->assertStringContainsString('public/icon.png', $md);
         $this->assertStringContainsString('public/icon.ico', $md);
         $this->assertStringContainsString('generate-app-icons.py', $md);
@@ -397,6 +405,8 @@ class Linux5090Test extends TestCase
         $this->assertStringNotContainsString('ELECTRON_DISABLE_SANDBOX', $arm);
         $this->assertStringNotContainsString('chrome-sandbox', $arm);
         $this->assertStringNotContainsString('linux-5090-launch.sh', $ps1);
+        $this->assertStringNotContainsString('script -qefc', $arm);
+        $this->assertStringNotContainsString('script -qefc', $ps1);
         $this->assertStringContainsString('php artisan native:serve', $ps1);
     }
 }

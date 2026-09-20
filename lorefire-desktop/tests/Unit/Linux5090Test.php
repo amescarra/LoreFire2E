@@ -385,8 +385,15 @@ class Linux5090Test extends TestCase
 
         $this->assertStringContainsString('Name=Lorefire 2E', $desktop);
         $this->assertStringContainsString('Icon=../public/icon.png', $desktop);
+        $this->assertStringContainsString('StartupWMClass=lorefire-2e-dev', $desktop);
         $this->assertStringContainsString('linux-5090-launch.sh', $desktop);
         $this->assertStringContainsString('Type=Application', $desktop);
+
+        $this->assertStringContainsString('lorefire:publish-native-icon', $launch);
+        $this->assertStringContainsString('APP_NAME="Lorefire 2E"', $launch);
+        $this->assertStringContainsString('publish_nativephp_icons', $launch);
+        $this->assertStringContainsString('resources/icon.png', $launch);
+        $this->assertStringContainsString('hicolor/512x512/apps', $launch);
 
         $this->assertStringContainsString('linux-5090-launch.sh', $md);
         $this->assertStringContainsString('lorefire-2e.desktop', $md);
@@ -395,6 +402,9 @@ class Linux5090Test extends TestCase
         $this->assertStringContainsString('exec php artisan native:serve', $md);
         $this->assertStringContainsString('public/icon.png', $md);
         $this->assertStringContainsString('public/icon.ico', $md);
+        $this->assertStringContainsString('NATIVEPHP_APP_ICON', $md);
+        $this->assertStringContainsString('lorefire-2e-dev', $md);
+        $this->assertStringContainsString('StartupWMClass', $md);
         $this->assertStringContainsString('generate-app-icons.py', $md);
         $this->assertStringContainsString('--install-desktop', $md);
 

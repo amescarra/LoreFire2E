@@ -287,6 +287,10 @@ On Ubuntu, use the **right-hand** close button (red on hover) if the window has 
 
 Design: fire / D&D book — split ash/lava, **LF** over **2E**, open tome with a flame (G3).
 
+`APP_NAME` must be **Lorefire 2E** (see `.env.example`). NativePHP slugs that and appends `-dev` on `native:serve`, so Electron’s Linux **WM_CLASS** is `lorefire-2e-dev` (not `lorefire-dev`, which GNOME showed as the default cog). Packaged / prod app-data is `~/.config/lorefire-2e/`; serve uses `~/.config/lorefire-2e-dev/`.
+
+Every `native:serve` republishes `public/icon.png` into Electron `resources/` + `build/` (and any stale `out/**/icon.png`). Electron also gets `NATIVEPHP_APP_ICON` pointing at `public/icon.png` so the running window/taskbar skips a cached NativePHP cog. `linux-5090-launch.sh` copies the same files again before artisan, and `php artisan lorefire:publish-native-icon` is the documented publish step. Windows ARM uses the same `installIcon` + `NATIVEPHP_APP_ICON` path (plus `public/icon.ico`).
+
 NativePHP `native:serve` / `native:build` copies these files into Electron (`vendor/nativephp/electron/resources/js/build/` and `…/resources/`):
 
 | File | Role |
@@ -347,7 +351,7 @@ bash lorefire-desktop/scripts/linux-5090-launch.sh
 bash lorefire-desktop/scripts/linux-5090-launch.sh --install-desktop
 ```
 
-The template is `scripts/lorefire-2e.desktop` (`Icon=../public/icon.png`). `--install-desktop` rewrites **Exec**, **Icon**, and **Path** to absolute paths under this clone. Windows ARM keeps `scripts/native-serve.ps1` — no `.desktop`, no `ELECTRON_DISABLE_SANDBOX`.
+The template is `scripts/lorefire-2e.desktop` (`Icon=../public/icon.png`, **StartupWMClass=lorefire-2e-dev**). `--install-desktop` rewrites **Exec**, **Icon**, and **Path** to absolute paths under this clone and copies `public/icons/512x512.png` to `~/.local/share/icons/hicolor/512x512/apps/lorefire-2e-dev.png` so GNOME’s dock uses this `.desktop` icon while the window is running. Windows ARM keeps `scripts/native-serve.ps1` — no `.desktop`, no `ELECTRON_DISABLE_SANDBOX`.
 
 Onboarding / Settings:
 
@@ -487,6 +491,6 @@ Windows ARM remains `powershell -File scripts/native-serve.ps1` and `setup.ps1` 
 |---|---|---|
 | `php artisan python:setup`, `migrate`, other CLI | `lorefire-desktop/database/database.sqlite` | still that file if you run artisan outside Electron |
 | `php artisan native:serve` (dev window) | `lorefire-desktop/database/nativephp.sqlite` | same (`nativephp.sqlite`) |
-| Packaged app | `~/.config/lorefire/` (prod) or `~/.config/lorefire-dev/` (dev) | OS app-data dir |
+| Packaged app | `~/.config/lorefire-2e/` (prod) or `~/.config/lorefire-2e-dev/` (dev) | OS app-data dir |
 
 `linux-5090-setup.sh` `touch`es both repo sqlite files and migrates them **before** WhisperX setup. A missing `database.sqlite` makes `AppSetting::set()` fail during `python:setup`. The packaged-app path is not the macOS `~/Library/Application Support` location in the main README.

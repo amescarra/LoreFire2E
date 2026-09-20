@@ -66,7 +66,9 @@ The NativePHP window is **frameless** (`titleBarHidden()`). Windows ARM has no O
 
 ## App icon
 
-NativePHP copies `public/icon.png` and `public/icon.ico` into Electron `build/` and `resources/` on `native:serve`. The ICO is **architecture-independent** — ARM64 uses the same `public/icon.ico` as x64. Do not add a `win/arm64` icon path. Use `scripts/native-serve.ps1` on this host; the Linux `.desktop` launcher is a different path.
+NativePHP copies `public/icon.png` and `public/icon.ico` into Electron `build/` and `resources/` on every `native:serve` (and refreshes electron-vite `out/**/icon.png`). Electron also receives `NATIVEPHP_APP_ICON` = `public/icon.png` so the window icon is the G3 art, not a stale cog. The ICO is **architecture-independent** — ARM64 uses the same `public/icon.ico` as x64. Do not add a `win/arm64` icon path.
+
+Set `APP_NAME=Lorefire 2E` in `.env` (see `.env.example`) so the Electron name is `lorefire-2e-dev`, not `lorefire-dev`. Use `scripts/native-serve.ps1` on this host; the Linux `.desktop` launcher is a different path.
 
 ## Packaging
 

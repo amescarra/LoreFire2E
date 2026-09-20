@@ -14,6 +14,10 @@
 #
 # --install-desktop writes ~/.local/share/applications/lorefire-2e.desktop
 # with absolute Exec / Path / Icon pointing at public/icon.png (the NativePHP icon).
+# StartupWMClass=lorefire-2e-dev (NativePHP slugs APP_NAME + "-dev").
+#
+# Before native:serve this script republishes public/icon.png into Electron
+# resources/ + build/ (+ out/) so the taskbar is the G3 icon, not a stale cog.
 #
 # Electron chrome-sandbox: Ubuntu needs that helper root:root mode 4755.
 # If it is missing or not setuid, this script documents the chown/chmod and
@@ -106,6 +110,14 @@ install_desktop() {
   echo "  Exec → $SCRIPT_DIR/linux-5090-launch.sh"
   echo "  Icon → $ICON"
   echo "  Path → $DESKTOP"
+  echo "  WM_CLASS → lorefire-2e-dev (StartupWMClass)"
+  # Named icon so GNOME can resolve lorefire-2e-dev even without an absolute Icon=
+  local hicolor="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/512x512/apps"
+  if [ -f "$DESKTOP/public/icons/512x512.png" ]; then
+    mkdir -p "$hicolor"
+    cp -f "$DESKTOP/public/icons/512x512.png" "$hicolor/lorefire-2e-dev.png"
+    echo "  hicolor → $hicolor/lorefire-2e-dev.png"
+  fi
   echo "Find \"Lorefire 2E\" in the application menu, or run this script without flags."
 }
 
@@ -140,6 +152,31 @@ sandbox_is_ok() {
 }
 
 cd "$DESKTOP"
+
+# Force 2E branding for this launcher so Electron is lorefire-2e-dev, not lorefire-dev.
+# dotenv will not override an already-exported APP_NAME.
+export APP_NAME="Lorefire 2E"
+export NATIVEPHP_APP_ID="${NATIVEPHP_APP_ID:-com.lorefire.lorefire2e}"
+
+publish_nativephp_icons() {
+  echo "==> Publishing G3 icon into NativePHP Electron paths"
+  if [ -f "$DESKTOP/artisan" ] && command -v php >/dev/null 2>&1; then
+    php artisan lorefire:publish-native-icon || true
+  fi
+  local js="$DESKTOP/vendor/nativephp/electron/resources/js"
+  if [ -f "$ICON" ]; then
+    mkdir -p "$js/resources" "$js/build"
+    cp -f "$ICON" "$js/resources/icon.png"
+    cp -f "$ICON" "$js/build/icon.png"
+    if [ -d "$js/out" ]; then
+      find "$js/out" -type f -iname 'icon.png' -exec cp -f "$ICON" {} \;
+    fi
+    echo "    resources/icon.png + build/icon.png ← $ICON"
+  fi
+}
+
+publish_nativephp_icons
+echo ""
 
 print_chrome_sandbox_help
 echo ""

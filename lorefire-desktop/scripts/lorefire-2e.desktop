@@ -13,4 +13,6 @@ Terminal=false
 Categories=Game;RolePlaying;
 StartupNotify=true
 Keywords=D&D;AD&D;2E;Lorefire;campaign;
-StartupWMClass=Electron
+# native:serve slugs APP_NAME ("Lorefire 2E") and appends -dev.
+# GNOME matches this to the running Electron WM_CLASS so the dock uses this Icon.
+StartupWMClass=lorefire-2e-dev

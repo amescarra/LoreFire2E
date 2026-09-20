@@ -8,6 +8,7 @@ use App\Support\CampaignVoiceprintPromoter;
 use App\Support\VoiceprintEmbeddingExtractor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -38,13 +39,13 @@ class CampaignVoiceprintController extends Controller
         $data = $this->validated($request);
         $audio = $request->file('audio');
 
-        if ($audio) {
+        if ($audio instanceof UploadedFile) {
             $voiceprint = $promoter->enrollAudio(
                 $campaign->id,
                 $data['display_name'],
                 (bool) ($data['is_dm'] ?? false),
                 $data['character_id'] ?? null,
-                $audio->getRealPath(),
+                $audio,
             );
 
             return back()->with($this->flashFor($voiceprint));
@@ -85,12 +86,17 @@ class CampaignVoiceprintController extends Controller
             'audio' => 'required|file|max:512000',
         ]);
 
+        $audio = $request->file('audio');
+        if (! $audio instanceof UploadedFile) {
+            return back()->withErrors(['audio' => 'Recording was empty. Read a few sentences, then Stop.']);
+        }
+
         $updated = $promoter->enrollAudio(
             $campaign->id,
             $voiceprint->display_name,
             (bool) $voiceprint->is_dm,
             $voiceprint->character_id,
-            $request->file('audio')->getRealPath(),
+            $audio,
             $voiceprint,
         );
 
@@ -136,11 +142,19 @@ class CampaignVoiceprintController extends Controller
             return ['success' => 'Voiceprint ready.'];
         }
 
-        if (! app(VoiceprintEmbeddingExtractor::class)->isSupported()) {
-            return ['info' => 'Audio saved. Embedding extraction is skipped on Windows ARM — auto-label needs Linux WhisperX + pyannote.'];
+        $message = is_string($voiceprint->extract_error) && $voiceprint->extract_error !== ''
+            ? $voiceprint->extract_error
+            : null;
+
+        if (! $voiceprint->hasEnrollmentAudio()) {
+            return ['error' => $message ?: 'Enrollment audio could not be stored. Try Record again or upload a file.'];
         }
 
-        return ['error' => 'Audio saved, but the voiceprint could not be extracted. Check the Hugging Face token and try again.'];
+        if (! app(VoiceprintEmbeddingExtractor::class)->isSupported()) {
+            return ['info' => $message ?: 'Audio saved. Embedding extraction is skipped on Windows ARM — auto-label needs Linux WhisperX + pyannote.'];
+        }
+
+        return ['error' => $message ?: 'Audio saved, but the voiceprint could not be extracted. Check the Hugging Face token and try again.'];
     }
 
     /**
@@ -155,6 +169,9 @@ class CampaignVoiceprintController extends Controller
             'character_id' => $voiceprint->character_id,
             'is_dm' => $voiceprint->is_dm,
             'has_embedding' => $voiceprint->hasEmbedding(),
+            'has_enrollment_audio' => $voiceprint->hasEnrollmentAudio(),
+            'extract_error' => $voiceprint->extract_error,
+            'enrollment_status' => $voiceprint->enrollmentStatus(),
             'embedding_model' => $voiceprint->embedding_model,
             'enrollment_audio_path' => $voiceprint->enrollment_audio_path,
             'enrolled_at' => $voiceprint->enrolled_at?->toIso8601String(),

@@ -300,8 +300,22 @@ class CampaignVoiceprintTest extends TestCase
 
         $voiceprint->refresh();
         $this->assertTrue($voiceprint->hasEmbedding());
+        $this->assertTrue($voiceprint->hasEnrollmentAudio());
+        $this->assertSame('ready', $voiceprint->enrollmentStatus());
+        $this->assertNull($voiceprint->extract_error);
         $this->assertNotNull($voiceprint->enrollment_audio_path);
+        $this->assertStringEndsWith('.webm', (string) $voiceprint->enrollment_audio_path);
         $this->assertNotNull($voiceprint->enrolled_at);
+
+        $this->get("/campaigns/{$campaign->id}/voices")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Campaigns/Voices')
+                ->where('voiceprints.0.has_embedding', true)
+                ->where('voiceprints.0.has_enrollment_audio', true)
+                ->where('voiceprints.0.enrollment_status', 'ready')
+                ->where('voiceprints.0.extract_error', null)
+            );
     }
 
     public function test_store_from_recording_creates_voiceprint(): void
@@ -345,7 +359,80 @@ class CampaignVoiceprintTest extends TestCase
             ->assertSessionHas('info');
 
         $this->assertStringContainsString('Windows ARM', session('info'));
-        $this->assertFalse($voiceprint->fresh()->hasEmbedding());
-        $this->assertNotNull($voiceprint->fresh()->enrollment_audio_path);
+        $fresh = $voiceprint->fresh();
+        $this->assertFalse($fresh->hasEmbedding());
+        $this->assertTrue($fresh->hasEnrollmentAudio());
+        $this->assertSame('audio_pending', $fresh->enrollmentStatus());
+        $this->assertNotNull($fresh->enrollment_audio_path);
+        $this->assertStringContainsString('Windows ARM', (string) $fresh->extract_error);
+
+        $this->get("/campaigns/{$campaign->id}/voices")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Campaigns/Voices')
+                ->where('voiceprints.0.has_embedding', false)
+                ->where('voiceprints.0.has_enrollment_audio', true)
+                ->where('voiceprints.0.enrollment_status', 'audio_pending')
+            );
+    }
+
+    public function test_enroll_keeps_audio_and_pending_status_when_extract_returns_empty(): void
+    {
+        [$campaign, $elayas] = $this->suorNoir();
+        $voiceprint = CampaignVoiceprint::factory()->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+        ]);
+
+        VoiceprintEmbeddingExtractor::$extractOverride = fn () => [
+            'speakers' => [],
+            'error' => 'No embedding model loaded (gated repo). Check the Hugging Face token.',
+        ];
+
+        $this->from("/campaigns/{$campaign->id}/voices")
+            ->post("/campaigns/{$campaign->id}/voiceprints/{$voiceprint->id}/enroll", [
+                'audio' => UploadedFile::fake()->create('enrollment.webm', 24, 'audio/webm'),
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertStringContainsString('Hugging Face', session('error'));
+
+        $fresh = $voiceprint->fresh();
+        $this->assertFalse($fresh->hasEmbedding());
+        $this->assertTrue($fresh->hasEnrollmentAudio());
+        $this->assertSame('audio_pending', $fresh->enrollmentStatus());
+        $this->assertStringEndsWith('.webm', (string) $fresh->enrollment_audio_path);
+        $this->assertStringContainsString('Hugging Face', (string) $fresh->extract_error);
+        $this->assertNull($fresh->enrolled_at);
+
+        $this->get("/campaigns/{$campaign->id}/voices")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Campaigns/Voices')
+                ->where('voiceprints.0.has_embedding', false)
+                ->where('voiceprints.0.has_enrollment_audio', true)
+                ->where('voiceprints.0.enrollment_status', 'audio_pending')
+                ->where('voiceprints.0.extract_error', $fresh->extract_error)
+            );
+    }
+
+    public function test_voices_page_needs_audio_only_when_nothing_was_recorded(): void
+    {
+        [$campaign] = $this->suorNoir();
+        CampaignVoiceprint::factory()->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => 'Elayas',
+        ]);
+
+        $this->get("/campaigns/{$campaign->id}/voices")
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Campaigns/Voices')
+                ->where('voiceprints.0.has_embedding', false)
+                ->where('voiceprints.0.has_enrollment_audio', false)
+                ->where('voiceprints.0.enrollment_status', 'needs_audio')
+            );
     }
 }

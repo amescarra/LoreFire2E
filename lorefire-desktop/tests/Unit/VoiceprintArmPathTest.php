@@ -38,7 +38,7 @@ class VoiceprintArmPathTest extends TestCase
 
         $this->assertIsString($live);
         $this->assertStringContainsString('shouldDiarizeLive()', $live);
-        $this->assertStringNotContainsString("transcribe(\$audioForWhisper, \$outAbs, true)", $live);
+        $this->assertStringNotContainsString('transcribe($audioForWhisper, $outAbs, true)', $live);
 
         $this->assertIsString($transcribe);
         $this->assertStringContainsString('VoiceprintResolver', $transcribe);
@@ -61,6 +61,8 @@ class VoiceprintArmPathTest extends TestCase
         $this->assertIsString($python);
         $this->assertStringContainsString('Windows ARM never depends on this script succeeding', $python);
         $this->assertStringContainsString('write_empty', $python);
+        $this->assertStringContainsString('prepare_wav', $python);
+        $this->assertStringContainsString('16 kHz mono WAV', $python);
     }
 
     public function test_session_and_campaign_ui_expose_save_and_elayas_rule(): void
@@ -83,6 +85,10 @@ class VoiceprintArmPathTest extends TestCase
         $this->assertStringContainsString('Record new voice', $voices);
         $this->assertStringContainsString('Stop', $voices);
         $this->assertStringContainsString('Voiceprint ready', $voices);
+        $this->assertStringContainsString('Needs enrollment audio', $voices);
+        $this->assertStringContainsString('Audio saved — voiceprint pending', $voices);
+        $this->assertStringContainsString('has_enrollment_audio', $voices);
+        $this->assertStringContainsString('extract_error', $voices);
         $this->assertStringContainsString('useEnrollmentCapture', $voices);
         $this->assertStringContainsString('openCaptureStream', file_get_contents($root.'/resources/js/hooks/useEnrollmentCapture.ts'));
         $this->assertStringContainsString('Windows ARM stores enrollment audio but skips embedding extract', $voices);
@@ -92,5 +98,13 @@ class VoiceprintArmPathTest extends TestCase
         $this->assertStringContainsString('Open Enrolled Voices', $campaign);
         $this->assertStringContainsString('href={`/campaigns/${campaign.id}/voices`}', $campaign);
         $this->assertGreaterThanOrEqual(3, substr_count($campaign, '/voices'));
+
+        $controller = file_get_contents($root.'/app/Http/Controllers/CampaignVoiceprintController.php');
+        $promoter = file_get_contents($root.'/app/Support/CampaignVoiceprintPromoter.php');
+        $this->assertIsString($controller);
+        $this->assertIsString($promoter);
+        $this->assertStringNotContainsString('getRealPath()', $controller);
+        $this->assertStringContainsString('UploadedFile', $promoter);
+        $this->assertStringContainsString('storeAs', $promoter);
     }
 }

@@ -23,7 +23,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,6 +88,42 @@ def write_empty(output: str, reason: str) -> int:
     with open(output, "w", encoding="utf-8") as handle:
         json.dump(payload, handle)
     return 0
+
+
+def ffmpeg_exe() -> str:
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+def prepare_wav(audio_path: str) -> tuple[str, str | None]:
+    """Decode MediaRecorder webm/ogg (and extensionless PHP temp files) to 16 kHz mono WAV.
+
+    pyannote/torchaudio often cannot load Chromium webm/opus or files with no
+    extension. WhisperX already uses ffmpeg for the same reason.
+    """
+    dest_fd, dest = tempfile.mkstemp(prefix="lorefire-enroll-", suffix=".wav")
+    os.close(dest_fd)
+    ffmpeg = ffmpeg_exe()
+    cmd = [
+        ffmpeg, "-y",
+        "-i", audio_path,
+        "-ac", "1", "-ar", "16000",
+        dest,
+    ]
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0 or not os.path.isfile(dest) or os.path.getsize(dest) < 64:
+        err = (result.stderr or b"").decode("utf-8", "replace").strip()
+        try:
+            os.unlink(dest)
+        except OSError:
+            pass
+        snippet = err[-400:] if err else "empty ffmpeg output"
+        raise RuntimeError(f"ffmpeg could not decode enrollment audio ({snippet})")
+    return dest, dest
 
 
 def load_inference(token: str | None):
@@ -163,13 +201,26 @@ def main() -> int:
     except Exception as exc:
         return write_empty(args.output, f"numpy unavailable ({exc})")
 
+    wav_path = args.audio
+    cleanup_wav = None
+    convert_error = None
+    try:
+        wav_path, cleanup_wav = prepare_wav(args.audio)
+    except Exception as exc:
+        convert_error = str(exc)
+        print(f"[voiceprint] wav convert failed, trying original file: {exc}", file=sys.stderr)
+        wav_path = args.audio
+
     try:
         inference, model_name = load_inference(args.hf_token)
     except Exception as exc:
+        if cleanup_wav and os.path.isfile(cleanup_wav):
+            os.unlink(cleanup_wav)
         return write_empty(args.output, str(exc))
 
     ranges = speaker_ranges(args.transcript, args.min_seconds)
     speakers: dict[str, dict] = {}
+    errors: list[str] = []
 
     if args.clips_dir:
         os.makedirs(args.clips_dir, exist_ok=True)
@@ -179,16 +230,18 @@ def main() -> int:
         used_windows = []
         if label == "enrollment" and windows == [(0.0, 0.0)]:
             try:
-                vectors.append(crop_embedding(inference, args.audio, 0.0, 0.0))
+                vectors.append(crop_embedding(inference, wav_path, 0.0, 0.0))
                 used_windows.append((0.0, 0.0))
             except Exception as exc:
+                errors.append(f"enrollment embed failed: {exc}")
                 print(f"[voiceprint] enrollment embed failed: {exc}", file=sys.stderr)
         else:
             for start, end in windows:
                 try:
-                    vectors.append(crop_embedding(inference, args.audio, start, end))
+                    vectors.append(crop_embedding(inference, wav_path, start, end))
                     used_windows.append((start, end))
                 except Exception as exc:
+                    errors.append(f"crop {label} {start}-{end} failed: {exc}")
                     print(f"[voiceprint] crop {label} {start}-{end} failed: {exc}", file=sys.stderr)
 
         if not vectors:
@@ -213,6 +266,17 @@ def main() -> int:
             "duration": float(sum(end - start for start, end in used_windows)),
             "clip": clip_path,
         }
+
+    if cleanup_wav and os.path.isfile(cleanup_wav):
+        os.unlink(cleanup_wav)
+
+    if not speakers:
+        parts = [p for p in [convert_error, *errors] if p]
+        reason = "; ".join(parts) if parts else (
+            "No speaker embedding was produced from this recording. "
+            "The take may be silent, too short, or pyannote could not load the audio."
+        )
+        return write_empty(args.output, reason)
 
     output_dir = os.path.dirname(args.output)
     if output_dir and not os.path.isdir(output_dir):

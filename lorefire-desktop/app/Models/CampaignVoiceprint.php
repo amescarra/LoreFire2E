@@ -19,6 +19,7 @@ class CampaignVoiceprint extends Model
         'embedding',
         'embedding_model',
         'enrollment_audio_path',
+        'extract_error',
         'enrolled_at',
     ];
 
@@ -34,11 +35,17 @@ class CampaignVoiceprint extends Model
 
     protected $appends = [
         'has_embedding',
+        'has_enrollment_audio',
     ];
 
     public function getHasEmbeddingAttribute(): bool
     {
         return $this->hasEmbedding();
+    }
+
+    public function getHasEnrollmentAudioAttribute(): bool
+    {
+        return $this->hasEnrollmentAudio();
     }
 
     public function campaign(): BelongsTo
@@ -59,6 +66,27 @@ class CampaignVoiceprint extends Model
     public function hasEmbedding(): bool
     {
         return is_array($this->embedding) && $this->embedding !== [];
+    }
+
+    public function hasEnrollmentAudio(): bool
+    {
+        return is_string($this->enrollment_audio_path) && $this->enrollment_audio_path !== '';
+    }
+
+    /**
+     * ready | audio_pending | needs_audio
+     */
+    public function enrollmentStatus(): string
+    {
+        if ($this->hasEmbedding()) {
+            return 'ready';
+        }
+
+        if ($this->hasEnrollmentAudio()) {
+            return 'audio_pending';
+        }
+
+        return 'needs_audio';
     }
 
     public function transcriptLabel(): string

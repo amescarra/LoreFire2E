@@ -1,18 +1,41 @@
 import React, { useRef, useState } from 'react'
-import { Head, router, useForm } from '@inertiajs/react'
+import { Head, router, useForm, usePage } from '@inertiajs/react'
 import AppLayout from '@/Layouts/AppLayout'
 import { Card, CardHeader } from '@/Components/Card'
 import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { useEnrollmentCapture, type EnrollmentCapture } from '@/hooks/useEnrollmentCapture'
-import { Campaign, CampaignVoiceprint, Character } from '@/types'
+import { Campaign, CampaignVoiceprint, Character, PageProps } from '@/types'
 
 interface Props {
   campaign: Campaign
   characters: Character[]
   voiceprints: CampaignVoiceprint[]
   embeddingExtractSupported?: boolean
+}
+
+function VoiceprintStatusBadge({ voiceprint }: { voiceprint: CampaignVoiceprint }) {
+  if (voiceprint.has_embedding) {
+    return <Badge variant="success">Voiceprint ready</Badge>
+  }
+  if (voiceprint.has_enrollment_audio || voiceprint.enrollment_status === 'audio_pending' || voiceprint.enrollment_audio_path) {
+    return <Badge variant="rune">Audio saved — voiceprint pending</Badge>
+  }
+  return <Badge variant="warning">Needs enrollment audio</Badge>
+}
+
+function enrollmentNoteClass(message: string): string {
+  return /Windows ARM/i.test(message)
+    ? 'text-[10px] text-[var(--color-warning)]'
+    : 'text-[10px] text-[var(--color-danger)]'
+}
+
+function firstFormError(errors: Record<string, string | string[]> | undefined, fallback: string): string {
+  if (!errors) return fallback
+  const first = errors.audio ?? Object.values(errors)[0]
+  if (Array.isArray(first)) return first[0] || fallback
+  return typeof first === 'string' && first !== '' ? first : fallback
 }
 
 function fmtTime(s: number): string {
@@ -39,6 +62,7 @@ export default function Voices({ campaign, characters, voiceprints, embeddingExt
   const capture = useEnrollmentCapture()
   const sessionRec = useRecording()
   const sessionBusy = sessionRec.isRecording
+  const { flash } = usePage<PageProps>().props
 
   return (
     <AppLayout breadcrumbs={[
@@ -73,6 +97,15 @@ export default function Voices({ campaign, characters, voiceprints, embeddingExt
             <p className="text-xs text-[var(--color-warning)] mt-2">
               A live session is recording. Stop it before enrolling a voice so the mic is free.
             </p>
+          )}
+          {flash?.error && (
+            <p className="text-xs text-[var(--color-danger)] mt-2 max-w-xl leading-relaxed">{flash.error}</p>
+          )}
+          {flash?.info && (
+            <p className="text-xs text-[var(--color-warning)] mt-2 max-w-xl leading-relaxed">{flash.info}</p>
+          )}
+          {flash?.success && (
+            <p className="text-xs text-[var(--color-success)] mt-2 max-w-xl leading-relaxed">{flash.success}</p>
           )}
         </div>
 
@@ -175,8 +208,8 @@ function NewVoiceCard({
         reset()
         if (audioRef.current) audioRef.current.value = ''
       },
-      onError: () => {
-        capture.setError('Could not save the recorded voiceprint.')
+      onError: (errors) => {
+        capture.setError(firstFormError(errors, 'Could not save the recorded voiceprint.'))
       },
     })
   }
@@ -298,12 +331,13 @@ function VoiceprintRow({
   }
 
   const enroll = (file: File) => {
+    setRowError(null)
     router.post(`/campaigns/${campaignId}/voiceprints/${voiceprint.id}/enroll`, {
       audio: file,
     }, {
       forceFormData: true,
       preserveScroll: true,
-      onError: () => setRowError('Could not enroll this recording.'),
+      onError: (errors) => setRowError(firstFormError(errors, 'Could not enroll this recording.')),
     })
   }
 
@@ -326,13 +360,13 @@ function VoiceprintRow({
                 {voiceprint.display_name}
               </span>
               {voiceprint.is_dm && <Badge variant="arcane">Dungeon Master</Badge>}
-              {voiceprint.has_embedding
-                ? <Badge variant="success">Voiceprint ready</Badge>
-                : <Badge variant="warning">Needs enrollment audio</Badge>}
+              <VoiceprintStatusBadge voiceprint={voiceprint} />
             </div>
             <p className="text-[10px] text-[var(--color-text-dim)] mt-1">
               {voiceprint.character?.name ? `Linked to ${voiceprint.character.name}` : 'No character link'}
-              {voiceprint.enrolled_at ? ` · enrolled ${new Date(voiceprint.enrolled_at).toLocaleDateString()}` : ''}
+              {voiceprint.enrolled_at
+                ? ` · enrolled ${new Date(voiceprint.enrolled_at).toLocaleDateString()}`
+                : (voiceprint.has_enrollment_audio || voiceprint.enrollment_audio_path ? ' · audio saved' : '')}
             </p>
           </div>
           <div className="flex gap-2 shrink-0 flex-wrap justify-end">
@@ -375,8 +409,10 @@ function VoiceprintRow({
         </div>
 
         {recording && <RecordingBar capture={capture} noun={voiceprint.display_name} />}
-        {(rowError || (capture.error && recording)) && (
-          <p className="text-[10px] text-[var(--color-danger)]">{rowError || capture.error}</p>
+        {(rowError || (capture.error && recording) || (!voiceprint.has_embedding && voiceprint.extract_error)) && (
+          <p className={enrollmentNoteClass(rowError || (recording ? capture.error : null) || voiceprint.extract_error || '')}>
+            {rowError || (recording ? capture.error : null) || voiceprint.extract_error}
+          </p>
         )}
 
         <input

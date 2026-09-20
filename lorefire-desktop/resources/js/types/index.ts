@@ -272,6 +272,9 @@ export interface CampaignVoiceprint {
   character_id: number | null
   is_dm: boolean
   has_embedding?: boolean
+  has_enrollment_audio?: boolean
+  extract_error?: string | null
+  enrollment_status?: 'ready' | 'audio_pending' | 'needs_audio'
   embedding_model?: string | null
   enrollment_audio_path?: string | null
   enrolled_at?: string | null

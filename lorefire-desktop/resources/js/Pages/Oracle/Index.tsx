@@ -172,7 +172,11 @@ export default function OracleIndex({ campaigns, hasLlm }: Props) {
             clearInterval(pollRef.current!)
             pollRef.current = null
             setLoading(false)
-            setError('The Oracle failed to respond. Check your LLM settings.')
+            const detail = typeof statusData.reply === 'string' && statusData.reply.trim() !== ''
+              ? statusData.reply
+              : 'The Oracle failed to respond. Check your LLM settings and application logs.'
+            setError(detail)
+            setMessages((prev) => [...prev, { role: 'assistant', content: detail }])
           }
           // 'pending' — keep polling
         } catch {
@@ -218,7 +222,7 @@ export default function OracleIndex({ campaigns, hasLlm }: Props) {
             </svg>
             <div>
               <p className="text-sm" style={{ color: 'var(--color-text-base)' }}>
-                No LLM provider is configured. The Oracle requires an AI model to function.
+                No LLM provider is configured. THAC0 and other 2E table questions still answer from the engine. Story questions need an AI model.
               </p>
               <Link href="/settings" className="text-sm underline mt-1 inline-block" style={{ color: 'var(--color-rune-bright)' }}>
                 Configure in Settings
@@ -289,7 +293,6 @@ export default function OracleIndex({ campaigns, hasLlm }: Props) {
                   <button
                     key={prompt}
                     onClick={() => sendMessage(prompt)}
-                    disabled={!hasLlm}
                     className="text-xs px-3 py-1.5 rounded border transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ color: 'var(--color-rune)', borderColor: 'var(--color-rune-dim)', background: 'var(--color-rune-glow)' }}
                   >
@@ -349,18 +352,18 @@ export default function OracleIndex({ campaigns, hasLlm }: Props) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            disabled={!hasLlm || loading}
-            placeholder={hasLlm ? 'Ask the Oracle… (Enter to send, Shift+Enter for newline)' : 'Configure an LLM provider in Settings to use the Oracle.'}
+            disabled={loading}
+            placeholder={hasLlm ? 'Ask the Oracle… (Enter to send, Shift+Enter for newline)' : 'Ask a 2E table question (THAC0, …) or configure an LLM in Settings.'}
             rows={1}
             className="flex-1 resize-none bg-transparent text-sm outline-none py-1.5 px-2 placeholder:text-[var(--color-text-dim)] disabled:opacity-50"
             style={{ color: 'var(--color-text-base)', maxHeight: '160px', overflowY: 'auto' }}
           />
           <button
             onClick={() => sendMessage(input)}
-            disabled={!hasLlm || loading || !input.trim()}
+            disabled={loading || !input.trim()}
             className="shrink-0 flex items-center justify-center w-8 h-8 rounded transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{
-              background: input.trim() && hasLlm && !loading ? 'var(--color-rune-glow)' : 'transparent',
+              background: input.trim() && !loading ? 'var(--color-rune-glow)' : 'transparent',
               border: '1px solid var(--color-rune-dim)',
               color: 'var(--color-rune-bright)',
             }}

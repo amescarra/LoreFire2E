@@ -148,11 +148,7 @@ class GenerateBardicSummary implements ShouldQueue
 
     protected function resolveSpeakerName(SpeakerProfile $sp): string
     {
-        if ($sp->is_dm) {
-            return 'DM';
-        }
-
-        return $sp->character?->name ?? $sp->display_name;
+        return $sp->transcriptLabel();
     }
 
     protected function formatTime(float $seconds): string

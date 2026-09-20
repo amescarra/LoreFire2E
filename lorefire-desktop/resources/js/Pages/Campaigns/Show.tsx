@@ -7,7 +7,7 @@ import { Badge } from '@/Components/Badge'
 import { Button } from '@/Components/Button'
 import { HpBar } from '@/Components/HpBar'
 import { RuneDivider } from '@/Components/RuneDivider'
-import { Campaign, Character, GameSession, Npc } from '@/types'
+import { Campaign, CampaignVoiceprint, Character, GameSession, Npc } from '@/types'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { ClassSummary, characterListSubtitle } from '@/Components/ClassSummary'
 import { ABILITY_ORDER } from '@/lib/adnd2e'
@@ -175,7 +175,10 @@ export default function Show({ campaign, imageGenProvider }: Props) {
                 <p className="text-sm text-[var(--color-text-dim)] mt-2 max-w-xl leading-relaxed">{campaign.description}</p>
               )}
             </div>
-            <div className="flex gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+              <Button variant="ghost" as="a" href={`/campaigns/${campaign.id}/voices`} size="sm">
+                Enrolled Voices
+              </Button>
               <Button variant="ghost" onClick={() => pdf.trigger()} disabled={pdf.status === 'pending'} size="sm">
                 {pdf.status === 'pending' ? 'Generating PDF…' : pdf.status === 'done' ? 'PDF Saved!' : pdf.status === 'preview' ? 'Opening print preview…' : pdf.status === 'failed' ? 'Export Failed' : 'Export PDF'}
               </Button>
@@ -228,6 +231,20 @@ export default function Show({ campaign, imageGenProvider }: Props) {
 
             <RuneDivider label="Sessions" />
 
+            <div className="runic-card px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="font-heading text-xs uppercase tracking-widest text-[var(--color-text-white)]">
+                  Enrolled Voices
+                </p>
+                <p className="text-[10px] text-[var(--color-text-dim)] mt-0.5">
+                  Persistent table voiceprints (Elayas, Dungeon Master, …) — not in the top nav.
+                </p>
+              </div>
+              <Button variant="ghost" size="sm" as="a" href={`/campaigns/${campaign.id}/voices`}>
+                Open Enrolled Voices
+              </Button>
+            </div>
+
             {/* Sessions */}
             <div className="flex items-center justify-between">
               <h2 className="font-heading text-xs uppercase tracking-widest text-[var(--color-text-dim)]">
@@ -263,6 +280,37 @@ export default function Show({ campaign, imageGenProvider }: Props) {
                 <InfoRow label="NPCs" value={campaign.npcs.length} />
                 <InfoRow label="Art Style" value={campaign.art_style} />
               </dl>
+            </Card>
+
+            {/* Enrolled voices */}
+            <Card>
+              <CardHeader
+                title="Enrolled Voices"
+                subtitle="Campaign-persistent voiceprints"
+                action={
+                  <Button variant="ghost" size="sm" as="a" href={`/campaigns/${campaign.id}/voices`}>
+                    Manage
+                  </Button>
+                }
+              />
+              {(campaign.voiceprints ?? []).length === 0 ? (
+                <p className="text-xs text-[var(--color-text-dim)]">
+                  Save speakers after a session — or enroll Elayas and Dungeon Master as two profiles for Shaun.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {(campaign.voiceprints as CampaignVoiceprint[]).map(vp => (
+                    <div key={vp.id} className="flex items-center justify-between gap-2 text-xs">
+                      <span className={vp.is_dm ? 'text-[var(--color-rune-bright)]' : 'text-[var(--color-text-base)]'}>
+                        {vp.display_name}
+                      </span>
+                      <span className="text-[10px] text-[var(--color-text-dim)] uppercase tracking-wide">
+                        {vp.is_dm ? 'DM' : (vp.character?.name ?? 'unlinked')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
             {/* NPCs */}

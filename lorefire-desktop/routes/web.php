@@ -19,6 +19,7 @@ use App\Http\Controllers\NpcController;
 use App\Http\Controllers\OnboardingController;
 use App\Http\Controllers\SceneImageController;
 use App\Http\Controllers\SpeakerProfileController;
+use App\Http\Controllers\CampaignVoiceprintController;
 use App\Http\Controllers\BatchSheetController;
 use App\Http\Controllers\StandaloneCharacterController;
 use App\Http\Controllers\StorageFileController;
@@ -157,8 +158,13 @@ Route::prefix('campaigns/{campaign}')->name('campaigns.')->group(function () {
         ->name('characters.class-features.update');
     // Speaker profiles (campaign-scoped)
     Route::post('speakers',                    [SpeakerProfileController::class, 'store'])->name('speakers.store');
-    Route::patch('speakers/{speaker}',         [SpeakerProfileController::class, 'update'])->name('speakers.update');
-    Route::delete('speakers/{speaker}',        [SpeakerProfileController::class, 'destroy'])->name('speakers.destroy');
+    Route::patch('speakers/{speaker}',         [SpeakerProfileController::class, 'updateForCampaign'])->name('speakers.update');
+    Route::delete('speakers/{speaker}',        [SpeakerProfileController::class, 'destroyForCampaign'])->name('speakers.destroy');
+    Route::get('voices', [CampaignVoiceprintController::class, 'index'])->name('voices.index');
+    Route::post('voiceprints', [CampaignVoiceprintController::class, 'store'])->name('voiceprints.store');
+    Route::patch('voiceprints/{voiceprint}', [CampaignVoiceprintController::class, 'update'])->name('voiceprints.update');
+    Route::delete('voiceprints/{voiceprint}', [CampaignVoiceprintController::class, 'destroy'])->name('voiceprints.destroy');
+    Route::post('voiceprints/{voiceprint}/enroll', [CampaignVoiceprintController::class, 'enroll'])->name('voiceprints.enroll');
 });
 
 // Encounters (accessible directly by id)
@@ -186,6 +192,7 @@ Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
     Route::get('extraction-status',      [TranscriptionController::class, 'extractionStatus'])->name('extraction-status');
     Route::post('live-sheet-updates',    [LiveSheetUpdateController::class, 'apply'])->name('live-sheet-updates');
     // Speaker profiles (session-scoped — WhisperX labels are per-session)
+    Route::post('speakers/promote',        [SpeakerProfileController::class, 'promote'])->name('speakers.promote');
     Route::post('speakers',                [SpeakerProfileController::class, 'storeForSession'])->name('speakers.store');
     Route::patch('speakers/{speaker}',     [SpeakerProfileController::class, 'update'])->name('speakers.update');
     Route::delete('speakers/{speaker}',    [SpeakerProfileController::class, 'destroy'])->name('speakers.destroy');

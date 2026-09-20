@@ -53,6 +53,7 @@ class CampaignController extends Controller
         $campaign->load([
             'npcs',
             'gameSessions' => fn ($q) => $q->orderByDesc('played_at'),
+            'voiceprints' => fn ($q) => $q->orderByDesc('is_dm')->orderBy('display_name'),
         ]);
 
         // Same character payload/order as Characters Index (class_levels, kit, XP).

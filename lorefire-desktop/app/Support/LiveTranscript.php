@@ -75,6 +75,10 @@ class LiveTranscript
                 'start' => (float) ($segment['start'] ?? 0),
                 'end' => (float) ($segment['end'] ?? 0),
                 'speaker' => $segment['speaker'] ?? null,
+                'speaker_label' => $segment['speaker_label'] ?? $segment['speaker'] ?? null,
+                'speaker_is_dm' => $segment['speaker_is_dm'] ?? false,
+                'voiceprint_id' => $segment['voiceprint_id'] ?? null,
+                'match_confidence' => $segment['match_confidence'] ?? null,
                 'chunk_index' => $segment['chunk_index'] ?? null,
             ];
         }

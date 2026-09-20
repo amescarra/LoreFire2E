@@ -90,7 +90,7 @@ class TranscribeLiveAudio implements ShouldQueue
             $audioForWhisper = $sliceAbs;
         }
 
-        $result = $runner->transcribe($audioForWhisper, $outAbs, false);
+        $result = $runner->transcribe($audioForWhisper, $outAbs, $runner->shouldDiarizeLive());
         $offset = $start;
         $segments = [];
 
@@ -101,13 +101,25 @@ class TranscribeLiveAudio implements ShouldQueue
             }
             $segStart = $offset + (float) ($segment['start'] ?? 0);
             $segEnd = $offset + (float) ($segment['end'] ?? 0);
+            $label = $segment['speaker'] ?? null;
             $segments[] = [
                 'text' => $text,
                 'start' => $segStart,
                 'end' => $segEnd,
-                'speaker' => $segment['speaker'] ?? null,
+                'speaker' => $label,
+                'speaker_label' => $label,
                 'chunk_index' => $this->chunkIndex,
             ];
+        }
+
+        if ($segments !== []) {
+            $campaign = $session->campaign;
+            if ($campaign) {
+                $embeddings = app(\App\Support\VoiceprintEmbeddingExtractor::class)
+                    ->extract($audioForWhisper, $outAbs);
+                $segments = app(\App\Support\VoiceprintResolver::class)
+                    ->resolveSegments($campaign, $segments, $embeddings);
+            }
         }
 
         if ($segments !== []) {

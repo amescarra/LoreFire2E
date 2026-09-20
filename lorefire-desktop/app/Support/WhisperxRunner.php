@@ -14,6 +14,22 @@ use Symfony\Component\Process\Process;
 class WhisperxRunner
 {
     /**
+     * Live diarization helps campaign voiceprints resolve SPEAKER_N labels.
+     * Windows ARM keeps the existing non-diarized live path.
+     */
+    public function shouldDiarizeLive(
+        ?string $osFamily = null,
+        ?string $processorArchitecture = null,
+        ?string $processorArchitectureW6432 = null
+    ): bool {
+        if (Linux5090::isWindowsArmPath($osFamily, $processorArchitecture, $processorArchitectureW6432)) {
+            return false;
+        }
+
+        return (string) AppSetting::get('huggingface_token', '') !== '';
+    }
+
+    /**
      * @return array{segments: array<int, array<string, mixed>>, language: string}|null
      */
     public function transcribe(string $audioPath, string $outputJson, bool $diarize = false): ?array

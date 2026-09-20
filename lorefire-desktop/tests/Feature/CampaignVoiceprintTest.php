@@ -19,6 +19,12 @@ class CampaignVoiceprintTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+    }
+
     protected function tearDown(): void
     {
         VoiceprintEmbeddingExtractor::resetOverride();

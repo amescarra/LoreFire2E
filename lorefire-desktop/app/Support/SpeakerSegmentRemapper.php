@@ -17,7 +17,8 @@ use InvalidArgumentException;
  * SPEAKER_N. This path is the explicit user edit after diarization mixes
  * people under one label: rewrite `speaker` on the chosen rows, keep the
  * original in `speaker_diarized`, and optionally attach a profile to the
- * destination label only.
+ * destination label only. Naming a selection that already exclusively
+ * owns a spare SPEAKER_N reuses that label instead of minting another.
  */
 class SpeakerSegmentRemapper
 {
@@ -42,7 +43,7 @@ class SpeakerSegmentRemapper
         }
 
         $createdLabel = false;
-        $targetLabel = $this->resolveTargetLabel($session, $segments, $options, $createdLabel);
+        $targetLabel = $this->resolveTargetLabel($session, $segments, $indexes, $options, $createdLabel);
         if (! SpeakerClipWindows::isValidLabel($targetLabel)) {
             throw new InvalidArgumentException('Destination speaker label is invalid.');
         }
@@ -134,11 +135,13 @@ class SpeakerSegmentRemapper
 
     /**
      * @param  list<array<string, mixed>>  $segments
+     * @param  list<int>  $indexes
      * @param  array<string, mixed>  $options
      */
     protected function resolveTargetLabel(
         GameSession $session,
         array $segments,
+        array $indexes,
         array $options,
         bool &$createdLabel,
     ): string {
@@ -173,12 +176,63 @@ class SpeakerSegmentRemapper
         }
 
         if ($forceNew || $this->wantsNamedDestination($options) || $voiceprintId) {
+            $owned = $this->labelOwnedBySelection($segments, $indexes);
+            if ($owned !== null) {
+                return $owned;
+            }
+
             $createdLabel = true;
 
             return $this->nextLabel($segments, $session);
         }
 
         throw new InvalidArgumentException('Choose a destination speaker for the selected lines.');
+    }
+
+    /**
+     * A selection owns a SPEAKER_N when every chosen line already shares
+     * that label and no unselected line still uses it — typically a spare
+     * minted by an earlier split. Naming should attach a profile to that
+     * spare instead of allocating SPEAKER_N+1.
+     *
+     * @param  list<array<string, mixed>>  $segments
+     * @param  list<int>  $indexes
+     */
+    protected function labelOwnedBySelection(array $segments, array $indexes): ?string
+    {
+        $owned = null;
+        $selected = array_fill_keys($indexes, true);
+
+        foreach ($indexes as $index) {
+            $seg = $segments[$index] ?? null;
+            if (! is_array($seg)) {
+                return null;
+            }
+            $current = $this->currentLabel($seg);
+            if ($current === null || ! SpeakerClipWindows::isValidLabel($current)) {
+                return null;
+            }
+            if ($owned === null) {
+                $owned = $current;
+            } elseif ($owned !== $current) {
+                return null;
+            }
+        }
+
+        if ($owned === null) {
+            return null;
+        }
+
+        foreach ($segments as $index => $seg) {
+            if (! is_array($seg) || isset($selected[$index])) {
+                continue;
+            }
+            if ($this->currentLabel($seg) === $owned) {
+                return null;
+            }
+        }
+
+        return $owned;
     }
 
     /**

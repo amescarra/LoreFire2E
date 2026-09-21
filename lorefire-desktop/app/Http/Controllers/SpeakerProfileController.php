@@ -83,9 +83,14 @@ class SpeakerProfileController extends Controller
 
         $count = $result['remapped'];
         $label = $result['target_label'];
-        $message = $count === 1
-            ? "Moved 1 line to {$label}."
-            : "Moved {$count} lines to {$label}.";
+        $profile = $result['profile'];
+        if ($count === 0 && $profile) {
+            $message = "Named {$label} as {$profile->display_name}.";
+        } elseif ($count === 1) {
+            $message = "Moved 1 line to {$label}.";
+        } else {
+            $message = "Moved {$count} lines to {$label}.";
+        }
 
         return back()->with('success', $message);
     }

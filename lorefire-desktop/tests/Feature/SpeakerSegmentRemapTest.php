@@ -202,6 +202,124 @@ class SpeakerSegmentRemapTest extends TestCase
         $this->assertSame('SPEAKER_00', $segments[2]['speaker']);
     }
 
+    public function test_naming_an_already_split_line_reuses_that_spare_label(): void
+    {
+        [, $session, $elayas] = $this->sessionWithMixedLabel();
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [1, 2],
+            'create_new_label' => 1,
+        ])->assertRedirect();
+
+        $this->assertSame('SPEAKER_02', $this->rawSegments($session->fresh())[1]['speaker']);
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [1, 2],
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+            'is_dm' => 0,
+            'create_new_label' => 1,
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Named SPEAKER_02 as Elayas.');
+
+        $segments = $this->rawSegments($session->fresh());
+        $this->assertSame('SPEAKER_00', $segments[0]['speaker']);
+        $this->assertSame('SPEAKER_02', $segments[1]['speaker']);
+        $this->assertSame('SPEAKER_02', $segments[2]['speaker']);
+        $this->assertSame('SPEAKER_01', $segments[3]['speaker']);
+        $this->assertSame('SPEAKER_00', $segments[1]['speaker_diarized']);
+        $this->assertSame('SPEAKER_00', $segments[2]['speaker_diarized']);
+
+        $this->assertNull(
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_03')
+                ->first()
+        );
+
+        $named = SpeakerProfile::query()
+            ->where('game_session_id', $session->id)
+            ->where('speaker_label', 'SPEAKER_02')
+            ->firstOrFail();
+        $this->assertSame('Elayas', $named->display_name);
+        $this->assertSame($elayas->id, $named->character_id);
+        $this->assertSame(1, SpeakerProfile::query()->where('game_session_id', $session->id)->count());
+    }
+
+    public function test_naming_a_subset_of_a_split_label_still_allocates_a_spare(): void
+    {
+        [, $session, $elayas] = $this->sessionWithMixedLabel();
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [1, 2],
+            'create_new_label' => 1,
+        ])->assertRedirect();
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [2],
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+        ])->assertRedirect();
+
+        $segments = $this->rawSegments($session->fresh());
+        $this->assertSame('SPEAKER_02', $segments[1]['speaker']);
+        $this->assertSame('SPEAKER_03', $segments[2]['speaker']);
+        $this->assertSame('SPEAKER_00', $segments[2]['speaker_diarized']);
+
+        $this->assertNull(
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_02')
+                ->first()
+        );
+        $this->assertSame(
+            'Elayas',
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_03')
+                ->value('display_name')
+        );
+    }
+
+    public function test_naming_owned_spare_via_voiceprint_stays_on_that_label(): void
+    {
+        [$campaign, $session, $elayas] = $this->sessionWithMixedLabel();
+
+        $voiceprint = CampaignVoiceprint::factory()->withEmbedding([1, 0, 0])->create([
+            'campaign_id' => $campaign->id,
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+        ]);
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [1],
+            'create_new_label' => 1,
+        ])->assertRedirect();
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [1],
+            'campaign_voiceprint_id' => $voiceprint->id,
+        ])->assertRedirect();
+
+        $segments = $this->rawSegments($session->fresh());
+        $this->assertSame('SPEAKER_02', $segments[1]['speaker']);
+        $this->assertSame('SPEAKER_00', $segments[0]['speaker']);
+        $this->assertSame(
+            $voiceprint->id,
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_02')
+                ->value('campaign_voiceprint_id')
+        );
+        $this->assertNull(
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_03')
+                ->first()
+        );
+    }
+
     public function test_remap_to_campaign_voiceprint_reuses_existing_session_label(): void
     {
         [$campaign, $session, $elayas] = $this->sessionWithMixedLabel();

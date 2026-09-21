@@ -6,6 +6,7 @@ use App\Models\AppSetting;
 use App\Models\Character;
 use App\Models\GameSession;
 use App\Models\SceneArtPrompt;
+use App\Support\CharacterArtBrief;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -52,7 +53,7 @@ class GenerateArtPrompts implements ShouldQueue
 
         $artStyle = $this->session->campaign->art_style ?? 'lifelike';
         $provider = AppSetting::get('llm_provider', 'none');
-        $characters = $this->session->campaign->characters()->get();
+        $characters = $this->session->campaign->characters()->with('inventoryItems')->get();
 
         // Delete existing prompts + any generated images for this session
         SceneArtPrompt::where('game_session_id', $this->session->id)
@@ -167,10 +168,11 @@ class GenerateArtPrompts implements ShouldQueue
 
     protected function extractScenesViaLlm(string $source, string $provider): array
     {
-        $characters = $this->session->campaign->characters()->get();
+        $characters = $this->session->campaign->characters()->with('inventoryItems')->get();
         $artStyle = $this->session->campaign->art_style ?? 'lifelike';
         $styleGuide = $this->styleGuide($artStyle);
         $charContext = $this->buildCharacterContext($characters);
+        $gearRules = CharacterArtBrief::artDirectorInstructions();
 
         // Extract ## headings from the source so the LLM can use them verbatim as titles
         $headings = [];
@@ -204,18 +206,8 @@ For each scene return:
 - "description": 1-2 sentences describing the setting, action, and mood of the scene itself — focus on environment, objects, creatures, and events, not just who is present
 - "characters": array of character names visibly present in this scene
 - "prompt": a single flowing image-generation prompt (3-6 sentences) structured as follows:
-    1. SCENE FIRST: Open with the environment, key objects, creatures, weather, and lighting that define this specific scene (e.g. rotting horse carcasses, a cave mouth screened by briars, a burning bush on a forest trail). Make this vivid and specific to what actually happened.
-    2. CHARACTERS: For every character present, you MUST describe them with exhaustive physical specificity so an artist could reconstruct them exactly with no other reference. Include every single one of the following — omitting any is an error:
-       - Sex and gender presentation (e.g. "a woman", "a man") — this is mandatory, never omit it
-       - Exact species/race with any distinguishing racial features (e.g. "a female Firbolg — a towering humanoid standing 7 feet tall with large pointed ears and pale blue-grey skin")
-       - Precise skin tone (e.g. "deep brown", "pale blue-grey", "warm olive") — never use vague terms like "dark" or "light"
-       - Height and build (e.g. "towering at 7 feet", "petite at under 5 feet", "lean and athletic")
-       - Hair: exact colour, length, texture, and style (e.g. "long straight olive-brown hair", "short sandy-blonde hair", "messy voluminous curly brunette hair with a gold streak in the bangs")
-       - Eyes: colour and shape
-       - Every piece of clothing and armour, named specifically (e.g. "a silver chainmail hauberk, steel greaves and vambraces, and a bright blue travel cloak")
-       - Weapons and carried items, described visually (e.g. "a lance with a blue swallowtail banner bearing a white eye-and-arrows sigil")
-       - Any distinguishing features: scars, tattoos, markings, accessories
-       Draw all of these details directly from the PARTY MEMBERS block above. Do not invent details not listed there.
+    1. SCENE FIRST: Open with the environment, key objects, creatures, weather, and lighting that define this specific scene (e.g. rotting horse carcasses, a cave mouth screened by briars, a burning bush on a forest trail). Make this vivid and specific to what actually happened. Scene dressing comes from the session text, not from invented character gear.
+{$gearRules}
     3. STYLE: End with the style guide keywords.
 
 Return ONLY a valid JSON array, no other text:
@@ -248,8 +240,8 @@ PROMPT;
     }
 
     /**
-     * Build a character reference block for the LLM prompt.
-     * Includes only fields useful for visual description.
+     * Sheet-truth party block for the art-director prompt.
+     * Appearance is copied verbatim. Only equipped inventory is listed.
      */
     protected function buildCharacterContext($characters): string
     {
@@ -257,21 +249,9 @@ PROMPT;
             return '';
         }
 
-        $lines = ['PARTY MEMBERS (use these descriptions when characters appear in a scene):'];
+        $lines = ['PARTY MEMBERS (sheet truth only: appearance text and equipped gear. Do not invent clothing, armor, weapons, magic items, or physical traits):'];
         foreach ($characters as $c) {
-            $attrs = array_filter([
-                $c->race && $c->subrace ? "{$c->race} ({$c->subrace})" : $c->race,
-                $c->class && $c->subclass ? "{$c->class} ({$c->subclass})" : $c->class,
-                $c->level ? "level {$c->level}" : null,
-            ]);
-            $summary = implode(', ', $attrs);
-            $lines[] = "- {$c->name}".($summary ? " — {$summary}" : '');
-            if ($c->appearance_description) {
-                $lines[] = '  Appearance: '.trim($c->appearance_description);
-            }
-            if ($c->mannerisms) {
-                $lines[] = '  Mannerisms: '.trim($c->mannerisms);
-            }
+            $lines[] = CharacterArtBrief::from($c)->contextBlock();
         }
 
         return implode("\n", $lines);
@@ -317,21 +297,11 @@ PROMPT;
             })->values();
 
             if ($sceneCharacters->isNotEmpty()) {
-                $blocks = $sceneCharacters->map(function (Character $c) {
-                    $parts = [trim($c->name)];
-                    if ($c->race) {
-                        $parts[] = $c->race;
-                    }
-                    if ($c->class) {
-                        $parts[] = $c->class;
-                    }
-                    if ($c->appearance_description) {
-                        $parts[] = trim($c->appearance_description);
-                    }
+                $characterSection = $sceneCharacters->map(function (Character $c) {
+                    $brief = CharacterArtBrief::from($c);
 
-                    return implode(', ', $parts);
-                })->implode('. ');
-                $characterSection = $blocks;
+                    return trim($brief->name).', '.$brief->raceAndClassPhrase().'. '.$brief->imagePromptBlock();
+                })->implode(' ');
             }
         }
 
@@ -342,7 +312,9 @@ PROMPT;
 
     protected function negativePrompt(string $artStyle): string
     {
-        return 'blurry, low quality, bad anatomy, extra limbs, modern elements, text, watermark, signature';
+        return CharacterArtBrief::withGearNegative(
+            'blurry, low quality, bad anatomy, extra limbs, modern elements, text, watermark, signature'
+        );
     }
 
     protected function loadTranscriptText(): string

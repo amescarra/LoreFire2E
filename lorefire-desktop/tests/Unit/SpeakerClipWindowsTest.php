@@ -55,6 +55,25 @@ class SpeakerClipWindowsTest extends TestCase
         $this->assertSame([], SpeakerClipWindows::fromTranscriptJson((string) $json, 'SPEAKER_09'));
     }
 
+    public function test_ignores_segments_remapped_off_the_label(): void
+    {
+        $windows = SpeakerClipWindows::forLabel([
+            ['speaker' => 'SPEAKER_02', 'speaker_diarized' => 'SPEAKER_00', 'start' => 1.0, 'end' => 3.0],
+            ['speaker' => 'SPEAKER_00', 'start' => 5.0, 'end' => 7.0],
+        ], 'SPEAKER_00');
+
+        $this->assertCount(1, $windows);
+        $this->assertSame(5.0, $windows[0]['start']);
+        $this->assertSame(7.0, $windows[0]['end']);
+
+        $split = SpeakerClipWindows::forLabel([
+            ['speaker' => 'SPEAKER_02', 'speaker_diarized' => 'SPEAKER_00', 'start' => 1.0, 'end' => 3.0],
+            ['speaker' => 'SPEAKER_00', 'start' => 5.0, 'end' => 7.0],
+        ], 'SPEAKER_02');
+        $this->assertCount(1, $split);
+        $this->assertSame(1.0, $split[0]['start']);
+    }
+
     public function test_label_validation(): void
     {
         $this->assertTrue(SpeakerClipWindows::isValidLabel('SPEAKER_00'));

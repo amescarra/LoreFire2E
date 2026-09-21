@@ -77,15 +77,21 @@ class GameSessionController extends Controller
                 $decoded = json_decode($raw, true);
                 $segments = $decoded['segments'] ?? null;
                 if ($segments) {
-                    $transcriptSegments = array_map(function ($seg) use ($speakerMap) {
-                        if (isset($seg['speaker'])) {
-                            $profile = $speakerMap->get($seg['speaker']);
-                            $seg['speaker_label'] = $seg['speaker']; // keep raw label
-                            $seg['speaker']       = $profile ? $profile['display_name'] : $seg['speaker'];
+                    $transcriptSegments = [];
+                    foreach (array_values($segments) as $index => $seg) {
+                        if (! is_array($seg)) {
+                            continue;
+                        }
+                        $seg['segment_index'] = $index;
+                        $raw = $seg['speaker'] ?? $seg['speaker_label'] ?? null;
+                        if (is_string($raw) && $raw !== '') {
+                            $profile = $speakerMap->get($raw);
+                            $seg['speaker_label'] = $raw;
+                            $seg['speaker']       = $profile ? $profile['display_name'] : $raw;
                             $seg['speaker_is_dm'] = $profile ? $profile['is_dm'] : false;
                         }
-                        return $seg;
-                    }, $segments);
+                        $transcriptSegments[] = $seg;
+                    }
                 }
             }
         }

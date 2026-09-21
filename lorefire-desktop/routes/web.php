@@ -199,6 +199,7 @@ Route::prefix('sessions/{session}')->name('sessions.')->group(function () {
     Route::post('live-sheet-updates',    [LiveSheetUpdateController::class, 'apply'])->name('live-sheet-updates');
     // Speaker profiles (session-scoped — WhisperX labels are per-session)
     Route::post('speakers/promote',        [SpeakerProfileController::class, 'promote'])->name('speakers.promote');
+    Route::post('speakers/remap',          [SpeakerProfileController::class, 'remap'])->name('speakers.remap');
     Route::post('speakers',                [SpeakerProfileController::class, 'storeForSession'])->name('speakers.store');
     Route::patch('speakers/{speaker}',     [SpeakerProfileController::class, 'update'])->name('speakers.update');
     Route::delete('speakers/{speaker}',    [SpeakerProfileController::class, 'destroy'])->name('speakers.destroy');

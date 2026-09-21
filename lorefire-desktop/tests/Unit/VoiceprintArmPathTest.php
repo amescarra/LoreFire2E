@@ -69,14 +69,17 @@ class VoiceprintArmPathTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $session = file_get_contents($root.'/resources/js/Pages/Sessions/Show.tsx');
+        $ident = file_get_contents($root.'/resources/js/Pages/Sessions/SpeakerIdentification.tsx');
         $voices = file_get_contents($root.'/resources/js/Pages/Campaigns/Voices.tsx');
         $campaign = file_get_contents($root.'/resources/js/Pages/Campaigns/Show.tsx');
 
         $this->assertIsString($session);
-        $this->assertStringContainsString('Save voices for this campaign', $session);
-        $this->assertStringContainsString('save_to_campaign', $session);
-        $this->assertStringContainsString('update_voiceprint', $session);
-        $this->assertStringContainsString('Update campaign voiceprint', $session);
+        $this->assertIsString($ident);
+        $this->assertStringContainsString('Save voices for this campaign', $ident);
+        $this->assertStringContainsString('save_to_campaign', $ident);
+        $this->assertStringContainsString('update_voiceprint', $ident);
+        $this->assertStringContainsString('Update campaign voiceprint', $ident);
+        $this->assertStringContainsString('SpeakerIdentificationPanel', $session);
 
         $this->assertIsString($voices);
         $this->assertStringContainsString('Elayas', $voices);

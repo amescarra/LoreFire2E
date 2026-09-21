@@ -120,6 +120,7 @@ class LiveRecordingHonestyTest extends TestCase
     {
         $root = dirname(__DIR__, 2);
         $show = file_get_contents($root.'/resources/js/Pages/Sessions/Show.tsx');
+        $ident = file_get_contents($root.'/resources/js/Pages/Sessions/SpeakerIdentification.tsx');
         $routes = file_get_contents($root.'/routes/web.php');
         $controller = file_get_contents($root.'/app/Http/Controllers/ChunkedAudioController.php');
         $extractor = file_get_contents($root.'/app/Support/SpeakerClipExtractor.php');
@@ -127,26 +128,31 @@ class LiveRecordingHonestyTest extends TestCase
         $resolver = file_get_contents($root.'/app/Support/VoiceprintResolver.php');
 
         $this->assertIsString($show);
+        $this->assertIsString($ident);
         $this->assertIsString($routes);
         $this->assertIsString($controller);
         $this->assertIsString($extractor);
         $this->assertIsString($windows);
         $this->assertIsString($resolver);
 
-        $this->assertStringContainsString('function SpeakerIdentificationPanel', $show);
-        $this->assertStringContainsString('function SpeakerClipPlayer', $show);
-        $this->assertStringContainsString('data-testid="speaker-clip-player"', $show);
-        $this->assertStringContainsString('data-testid="speaker-clip-play"', $show);
-        $this->assertStringContainsString('data-testid="speaker-clip-scrub"', $show);
-        $this->assertStringContainsString("playing ? 'Stop' : 'Play'", $show);
-        $this->assertStringContainsString('/speakers/${encodeURIComponent(label)}/clip', $show);
+        $this->assertStringContainsString('function SpeakerIdentificationPanel', $ident);
+        $this->assertStringContainsString('function SpeakerClipPlayer', $ident);
+        $this->assertStringContainsString('data-testid="speaker-clip-player"', $ident);
+        $this->assertStringContainsString('data-testid="speaker-clip-play"', $ident);
+        $this->assertStringContainsString('data-testid="speaker-clip-scrub"', $ident);
+        $this->assertStringContainsString("playing ? 'Stop' : 'Play'", $ident);
+        $this->assertStringContainsString('/speakers/${encodeURIComponent(label)}/clip', $ident);
         $this->assertStringContainsString('hasAudio={!!liveAudioPath}', $show);
-        $this->assertStringContainsString('clipWindowsForLabel', $show);
-        $this->assertStringContainsString('CLIP_MAX_SECONDS = 25', $show);
-        $this->assertStringContainsString('type="range"', $show);
-        $this->assertStringContainsString('new Audio()', $show);
+        $this->assertStringContainsString('clipWindowsForLabel', $ident);
+        $this->assertStringContainsString('CLIP_MAX_SECONDS = 25', $ident);
+        $this->assertStringContainsString('type="range"', $ident);
+        $this->assertStringContainsString('new Audio()', $ident);
+        $this->assertStringContainsString('speakers/remap', $ident);
+        $this->assertStringContainsString('Change speaker', $ident);
+        $this->assertStringContainsString('Split selected', $ident);
 
         $this->assertStringContainsString("speakers/{label}/clip", $routes);
+        $this->assertStringContainsString("speakers/remap", $routes);
         $this->assertStringContainsString('speakerClip', $routes);
         $this->assertStringContainsString("where('label', 'SPEAKER_[0-9]+')", $routes);
 

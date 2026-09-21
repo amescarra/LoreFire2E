@@ -256,18 +256,18 @@ export function SpellsTab({ characterId, characterClass, spells, memorization = 
         const copiesAtLevel = spells
           .filter(s => s.level === level)
           .reduce((sum, s) => sum + timesMemorizedOf(s), 0)
-        const slots = slotCapacityAtLevel(memorization, level)
-        const overSlots = slots > 0 && copiesAtLevel > slots
+        const capacity = slotCapacityAtLevel(memorization, level)
+        const overCapacity = capacity > 0 && copiesAtLevel > capacity
         return (
         <div key={level} className="flex flex-col gap-1">
           <p
             className="text-[10px] uppercase tracking-widest font-heading mb-1"
-            style={{ color: overSlots ? 'var(--color-danger)' : 'var(--color-text-dim)' }}
+            style={{ color: overCapacity ? 'var(--color-danger)' : 'var(--color-text-dim)' }}
             data-testid={`spell-level-copies-${level}`}
           >
             {SPELL_LEVEL_LABELS[level] ?? `Level ${level}`}
-            {slots > 0
-              ? ` · ${copiesAtLevel} / ${slots} slots`
+            {capacity > 0
+              ? ` · ${copiesAtLevel} / ${capacity} memorized`
               : copiesAtLevel > 0
                 ? ` · ${copiesAtLevel} ${copiesAtLevel === 1 ? 'copy' : 'copies'}`
                 : ''}

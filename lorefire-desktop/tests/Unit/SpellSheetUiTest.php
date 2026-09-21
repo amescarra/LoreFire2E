@@ -30,7 +30,7 @@ class SpellSheetUiTest extends TestCase
         $this->assertStringContainsString('memorized copies', $tab);
         $this->assertStringContainsString('memorizedCopyTotal', $tab);
         $this->assertStringContainsString('slotCapacityAtLevel', $tab);
-        $this->assertStringContainsString('/ ${slots} slots', $tab);
+        $this->assertStringContainsString('/ ${capacity} memorized', $tab);
         $this->assertStringContainsString('spell-filter-${key}', $tab);
         $this->assertStringContainsString("'memorized'", $tab);
         $this->assertStringContainsString('All known', $tab);

@@ -34,7 +34,7 @@ return new class extends Migration
             $table->unsignedTinyInteger('intelligence')->default(10);
             $table->unsignedTinyInteger('wisdom')->default(10);
             $table->unsignedTinyInteger('charisma')->default(10);
-            // HP — current may drop to -10 (death)
+            // HP — current is 0 when slain (PHB 1989). The old DMG optional survival to -10 is not used.
             $table->unsignedSmallInteger('max_hp')->default(0);
             $table->smallInteger('current_hp')->default(0);
             // Combat (descending AC, THAC0)

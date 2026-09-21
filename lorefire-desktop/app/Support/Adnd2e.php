@@ -52,21 +52,25 @@ class Adnd2e
         'Psionicist' => 'PSI',
     ];
 
-    /** House dual-class: original class must be this level before a new class may begin. */
-    public const HOUSE_DUAL_MIN_ORIGINAL_LEVEL = 6;
+    /**
+     * TABLE LAW dual-class house switch: original class must be this level
+     * before a new class may begin. Not 1989 PHB core. See TableLaw.
+     */
+    public const HOUSE_DUAL_MIN_ORIGINAL_LEVEL = TableLaw::DUAL_CLASS_HOUSE_SWITCH_MIN_ORIGINAL_LEVEL;
 
     /**
-     * This table switches at 6th. Resume is that switch level minus one (5th
-     * in the new class). Do not use the original class's later level.
+     * TABLE LAW: this table switches at 6th. Resume is that switch level minus
+     * one (5th in the new class). Do not use the original class's later level.
+     * Not 1989 PHB core.
      */
-    public const HOUSE_DUAL_RESUME_NEW_LEVEL = 5;
+    public const HOUSE_DUAL_RESUME_NEW_LEVEL = TableLaw::DUAL_CLASS_HOUSE_SWITCH_RESUME_NEW_LEVEL;
 
     /** Copies of one known spell that may be marked memorized (2E Vancian). */
     public const MAX_TIMES_MEMORIZED = 12;
 
     /**
      * Discipline name labels for the typed-power datalist only.
-     * Not kits, specialist schools, or subclass suggestions.
+     * Not kits or specialist school suggestions.
      */
     public const PSIONIC_DISCIPLINES = [
         'Clairsentience',
@@ -226,7 +230,12 @@ class Adnd2e
         'Berserk',
     ];
 
-    public const DEATH_THRESHOLD = -10;
+    /** Live death_mode. The old DMG optional survival to -10 is not used. */
+    public const DEATH_MODE = TableLaw::DEATH_MODE;
+
+    public const HP_MIN = 0;
+
+    public const MASSIVE_DAMAGE_THRESHOLD = RuleKernel::MASSIVE_DAMAGE_THRESHOLD;
 
     /**
      * Map a class onto a PHB combat group used by this engine.
@@ -521,22 +530,24 @@ class Adnd2e
     }
 
     /**
-     * House dual-class (not PHB human-only dual-class).
+     * TABLE LAW dual-class house switch (not 1989 PHB core, not human-only).
      * A character may begin a new class only after the original is at least 6th.
+     * Mechanical values are unchanged so existing dual-class sheets keep working.
      */
     public static function canBeginNewClass(int $originalLevel): bool
     {
-        return $originalLevel >= self::HOUSE_DUAL_MIN_ORIGINAL_LEVEL;
+        return $originalLevel >= TableLaw::DUAL_CLASS_HOUSE_SWITCH_MIN_ORIGINAL_LEVEL;
     }
 
     /**
-     * Resume the original class when the new class is 5th.
+     * TABLE LAW: resume the original class when the new class is 5th.
      * originalLevelAtSwitch is 6 on this table; resume is 6 − 1 = 5.
      * Do not pass the original class's current (later) level.
+     * Not 1989 PHB core.
      */
     public static function canResumeOriginalClass(int $newLevel): bool
     {
-        return $newLevel >= self::HOUSE_DUAL_RESUME_NEW_LEVEL;
+        return $newLevel >= TableLaw::DUAL_CLASS_HOUSE_SWITCH_RESUME_NEW_LEVEL;
     }
 
     /**
@@ -852,6 +863,22 @@ class Adnd2e
         }
 
         return null;
+    }
+
+    /**
+     * User-facing kind for the stored subclass column: kit or specialist school.
+     */
+    public static function kitFieldKind(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        if (in_array($value, self::SPECIALIST_SCHOOLS, true)) {
+            return 'specialist school';
+        }
+
+        return 'kit';
     }
 
     public static function isWizard(string $class): bool
@@ -1706,33 +1733,65 @@ class Adnd2e
         ];
     }
 
+    /**
+     * PHB 1989: at 0 hit points the character is slain.
+     * The old DMG optional survival to -10 is not used.
+     *
+     * @param  array<string, mixed>  $tableLaw
+     */
+    public static function dyingState(int $hp, string $deathMode = 'phb_zero', array $tableLaw = []): string
+    {
+        return RuleKernel::dying_state($hp, $deathMode, $tableLaw);
+    }
+
+    /** @param  array<string, mixed>  $table_law */
+    public static function dying_state(int $hp, string $death_mode = 'phb_zero', array $table_law = []): string
+    {
+        return self::dyingState($hp, $death_mode, $table_law);
+    }
+
     public static function vitalityState(int $currentHp): string
     {
-        if ($currentHp <= self::DEATH_THRESHOLD) {
-            return 'dead';
-        }
-        if ($currentHp < 0) {
-            return 'dying';
-        }
-        if ($currentHp === 0) {
-            return 'unconscious';
-        }
+        return self::dyingState($currentHp);
+    }
 
-        return 'ok';
+    /**
+     * 50 or more from one attack: save versus death or die.
+     *
+     * @return array{applies: bool, save_required: bool, saved: bool|null, slain: bool, save_roll: int}
+     */
+    public static function massiveDamageCheck(int $damage, int $saveRoll): array
+    {
+        return RuleKernel::massive_damage_check($damage, $saveRoll);
+    }
+
+    /**
+     * @return array{applies: bool, save_required: bool, saved: bool|null, slain: bool, save_roll: int}
+     */
+    public static function massive_damage_check(int $damage, int $save_roll): array
+    {
+        return self::massiveDamageCheck($damage, $save_roll);
+    }
+
+    public static function clampCurrentHp(int $currentHp, int $maxHp): int
+    {
+        $max = max(0, $maxHp);
+
+        return max(self::HP_MIN, min($max, $currentHp));
     }
 
     /**
      * Overnight rest: recover 1 hit point (natural healing) and rememorize.
+     * Slain characters (0 hit points) do not heal.
      *
      * @param  array<string, mixed>  $classFeatures
      * @return array{current_hp: int, memorization_used: null, class_features: array<string, mixed>}
      */
     public static function overnightRest(int $currentHp, int $maxHp, string $class, int $level, array $classFeatures = []): array
     {
-        $healed = min($maxHp, max(self::DEATH_THRESHOLD, $currentHp) + 1);
-        if ($currentHp > 0) {
-            $healed = min($maxHp, $currentHp + 1);
-        }
+        $healed = $currentHp <= 0
+            ? self::HP_MIN
+            : min($maxHp, $currentHp + 1);
 
         $cf = $classFeatures;
         $normalized = self::normalizeClass($class);
@@ -1835,7 +1894,7 @@ class Adnd2e
     }
 
     /**
-     * Copies fill slots, not distinct spell names.
+     * Copies fill memorization capacity, not distinct spell names.
      *
      * @param  array<int, array<string, mixed>>  $spells
      */

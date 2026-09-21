@@ -38,7 +38,7 @@ trait ValidatesAdnd2eCharacter
             'wisdom' => 'integer|min:1|max:25',
             'charisma' => 'integer|min:1|max:25',
             'max_hp' => 'integer|min:0',
-            'current_hp' => 'integer|min:'.Adnd2e::DEATH_THRESHOLD,
+            'current_hp' => 'integer|min:'.Adnd2e::HP_MIN,
             'armor_class' => 'integer|min:-20|max:15',
             'speed' => 'integer|min:0',
             'portrait' => 'nullable|file|image|max:10240',
@@ -106,6 +106,12 @@ trait ValidatesAdnd2eCharacter
         if (! isset($data['current_hp']) && isset($data['max_hp'])) {
             $data['current_hp'] = $data['max_hp'];
         }
+        if (isset($data['current_hp'])) {
+            $data['current_hp'] = Adnd2e::clampCurrentHp(
+                (int) $data['current_hp'],
+                (int) ($data['max_hp'] ?? $data['current_hp']),
+            );
+        }
 
         return $this->normalizePsionicSheet($data);
     }
@@ -144,6 +150,7 @@ trait ValidatesAdnd2eCharacter
 
     /**
      * Reject beginning a second class when the original is below 6th.
+     * TABLE LAW dual-class house switch, not 1989 PHB core.
      * Existing stored dual sheets that already violate the gate are kept.
      *
      * @param  array<string, mixed>  $data
@@ -171,7 +178,7 @@ trait ValidatesAdnd2eCharacter
         }
 
         throw ValidationException::withMessages([
-            'class_levels.0.level' => 'A new class may begin only after the original class is at least 6th level (house dual-class).',
+            'class_levels.0.level' => 'A new class may begin only after the original class is at least 6th level (TABLE LAW).',
         ]);
     }
 

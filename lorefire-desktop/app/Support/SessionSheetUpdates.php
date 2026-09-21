@@ -272,7 +272,7 @@ class SessionSheetUpdates
 
     protected static function setHp(Character $character, int $value): bool
     {
-        $next = max(Adnd2e::DEATH_THRESHOLD, min((int) $character->max_hp, $value));
+        $next = Adnd2e::clampCurrentHp($value, (int) $character->max_hp);
         if ($next === (int) $character->current_hp) {
             return false;
         }
@@ -286,8 +286,10 @@ class SessionSheetUpdates
         if ($delta === 0) {
             return false;
         }
-        $next = (int) $character->current_hp + $delta;
-        $next = max(Adnd2e::DEATH_THRESHOLD, min((int) $character->max_hp, $next));
+        $next = Adnd2e::clampCurrentHp(
+            (int) $character->current_hp + $delta,
+            (int) $character->max_hp,
+        );
         if ($next === (int) $character->current_hp) {
             return false;
         }

@@ -18,7 +18,6 @@ class Adnd2eOracleBriefing
 
     public static function markdown(): string
     {
-        $death = Adnd2e::DEATH_THRESHOLD;
         $warriorHd = Adnd2e::hitDie('Fighter');
         $priestHd = Adnd2e::hitDie('Cleric');
         $rogueHd = Adnd2e::hitDie('Thief');
@@ -52,6 +51,8 @@ class Adnd2eOracleBriefing
         $longSword = Adnd2e::weaponStats('long sword');
         $clericSpheres = Adnd2e::priestSpheres('Cleric');
         $str10enc = Adnd2e::encumbranceThresholds(10);
+        $dualMin = TableLaw::DUAL_CLASS_HOUSE_SWITCH_MIN_ORIGINAL_LEVEL;
+        $dualResume = TableLaw::DUAL_CLASS_HOUSE_SWITCH_RESUME_NEW_LEVEL;
 
         $lines = [
             '## Lorefire 2E procedures (app engine)',
@@ -68,12 +69,13 @@ class Adnd2eOracleBriefing
             '',
             '### Saves, rest, vitality',
             '- Five save categories (roll d20 >= target): '.$saves.'.',
-            '- Overnight rest only: recover 1 hit point if above '.$death.', rememorize, reset daily class abilities. No short/long-rest cycle.',
-            '- Vitality: 0 unconscious; negative is dying; dead at '.$death.'.',
+            '- Overnight rest only: recover 1 hit point if above 0, rememorize, reset daily class abilities. No short/long-rest cycle. Slain characters at 0 do not heal.',
+            '- Vitality: at 0 hit points the character is slain (death_mode phb_zero). There is no dying band below 0.',
+            '- Massive damage is separate: 50 or more from one attack, save versus death or die (Adnd2e::massiveDamageCheck).',
             '- During a recorded live session, clearly spoken sheet changes (HP, gold, XP, inventory names, named memorized spells) are applied as play happens. You may also confirm a sheet write if asked (for example, mark a named memorized spell cast). Do not invent unknown spells.',
             '',
             '### Magic',
-            '- Vancian memorization (counts by spell level). A 1st-level generalist Mage memorizes '.$mageL1.' first-level spell. A specialist (school recorded as kit) memorizes '.$specL1.' at that level (one extra per school level they can already memorize). Priests may gain extra first- and second-level capacity from high Wisdom.',
+            '- Vancian memorization (counts by spell level). A 1st-level generalist Mage memorizes '.$mageL1.' first-level spell. A specialist (school recorded as specialist school) memorizes '.$specL1.' at that level (one extra per school level they can already memorize). Priests may gain extra first- and second-level capacity from high Wisdom.',
             '- Cleric sphere tags major: '.implode(', ', $clericSpheres['major']).'; minor: '.implode(', ', $clericSpheres['minor']).'. Names only.',
             '- Spell headers (name/class/level/tag/components/time/range/duration; optional M names) are Adnd2eSpellCatalog. Example: Fireball Mage L3 invocation. No effect prose.',
             '- Gear weight and magical bonus are Adnd2eEquipmentCatalog (plate mail +1 AC 2; long sword +2 bonus +2). Artifacts are name + tags only.',
@@ -83,11 +85,11 @@ class Adnd2eOracleBriefing
             '',
             '### Advancement and the kit field',
             '- Single-class: one class. Multi-class: classes advance together; combined THAC0 is the best (lowest); saves take the best (lowest) per category.',
-            '- Dual-class on this table is the house switch (humans and others): original class first, then the new class. Begin a new class at 6th in the original; switch back when the new class is 5th. Until then the new class is active; original abilities stay on the sheet. Do not apply PHB dual-class XP penalties.',
-            '- Kit / specialist is one optional free-text field for every class, including Psionicist. Suggestions are names only, filtered by race and required class(es). Specialist schools ('.$schools.') appear for Mages. Racial-handbook kit names (for example Bladesinger) appear only when race and class path match — Bladesinger is Elf + Fighter/Mage, not a generic Mage/wizard-handbook kit. Do not invent kit benefit tables. Discipline names are not kits.',
+            '- '.TableLaw::ORACLE_LABEL.': dual-class house switch (humans and others). Not 1989 PHB core. Original class first, then the new class. Begin a new class at '.$dualMin.'th in the original; switch back when the new class is '.$dualResume.'th. Until then the new class is active; original abilities stay on the sheet. Do not apply PHB dual-class XP penalties.',
+            '- Kit and specialist school share one stored field. User-facing text says kit when it is a kit and specialist school when it is a specialist school. Suggestions are names only, filtered by race and required class(es). Specialist schools ('.$schools.') appear for Mages. Racial-handbook kit names (for example Bladesinger) appear only when race and class path match. Do not invent kit benefit tables. Discipline names are not kits.',
             '- Weapon and non-weapon proficiencies on the sheet are names only.',
             '',
-            'When campaign or character rows are provided, use the sheet\'s stored THAC0, descending AC, HP, class_path, kit, backstory, and campaign notes. Do not invent those numbers or origin stories.',
+            'When campaign or character rows are provided, use the sheet\'s stored THAC0, descending AC, HP, class_path, kit or specialist school, backstory, and campaign notes. Do not invent those numbers or origin stories.',
         ];
 
         return implode("\n", $lines);
@@ -205,7 +207,8 @@ class Adnd2eOracleBriefing
             $line .= ' ['.$c['class_path'].']';
         }
         if (! empty($c['subclass'])) {
-            $line .= ' kit: '.$c['subclass'];
+            $kind = Adnd2e::kitFieldKind((string) $c['subclass']) ?? 'kit';
+            $line .= ' '.$kind.': '.$c['subclass'];
         }
         if (($c['current_hp'] ?? null) !== null) {
             $line .= ' | HP: '.$c['current_hp'].'/'.($c['max_hp'] ?? '?');

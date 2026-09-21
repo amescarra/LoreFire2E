@@ -113,8 +113,21 @@ class Adnd2eOracleRulesLookupTest extends TestCase
         $this->assertFalse(Adnd2e::canBeginNewClass(5));
         $this->assertTrue(Adnd2e::canBeginNewClass(6));
         $this->assertStringContainsString('canBeginNewClass(5): no', $result['markdown']);
+        $this->assertStringContainsString('TABLE LAW', $result['markdown']);
         $this->assertStringContainsString((string) Adnd2e::HOUSE_DUAL_MIN_ORIGINAL_LEVEL, $result['markdown']);
         $this->assertStringContainsString((string) Adnd2e::HOUSE_DUAL_RESUME_NEW_LEVEL, $result['markdown']);
+    }
+
+    public function test_vitality_lookup_teaches_phb_zero_slain(): void
+    {
+        $result = Adnd2eOracleRulesLookup::lookup('What happens at 0 hit points? Vitality and dying?');
+
+        $this->assertTrue($result['resolved']);
+        $this->assertStringContainsString('slain', $result['markdown']);
+        $this->assertStringContainsString('phb_zero', $result['markdown']);
+        $this->assertStringContainsString('massive damage', strtolower($result['markdown']));
+        $this->assertStringNotContainsString('unconscious', $result['markdown']);
+        $this->assertStringNotContainsString('negative dying', $result['markdown']);
     }
 
     public function test_thac0_versus_ac_uses_number_needed_to_hit(): void

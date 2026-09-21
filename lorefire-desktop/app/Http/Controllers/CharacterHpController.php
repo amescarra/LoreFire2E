@@ -15,17 +15,23 @@ class CharacterHpController extends Controller
     /**
      * PATCH /characters/{character}/hp
      *
-     * Accepts { current_hp } and persists it. Current HP may drop to −10 (death).
+     * Accepts { current_hp } and persists it. Current HP is clamped at 0 (slain).
+     * The old DMG optional survival to -10 is not used.
      * Returns JSON so the client can confirm the saved values.
      */
     public function update(Request $request, Character $character): JsonResponse
     {
         $validated = $request->validate([
-            'current_hp' => ['required', 'integer', 'min:'.\App\Support\Adnd2e::DEATH_THRESHOLD],
+            'current_hp' => ['required', 'integer'],
         ]);
 
+        $next = \App\Support\Adnd2e::clampCurrentHp(
+            (int) $validated['current_hp'],
+            (int) $character->max_hp,
+        );
+
         $character->update([
-            'current_hp' => $validated['current_hp'],
+            'current_hp' => $next,
         ]);
 
         return response()->json([

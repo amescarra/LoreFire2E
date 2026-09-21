@@ -913,10 +913,10 @@ class Adnd2eOracleRulesLookup
             return;
         }
 
-        $min = Adnd2e::HOUSE_DUAL_MIN_ORIGINAL_LEVEL;
-        $resume = Adnd2e::HOUSE_DUAL_RESUME_NEW_LEVEL;
-        $facts[] = 'House dual-class: original class must be '.$min.'th before a new class may begin (Adnd2e::canBeginNewClass / HOUSE_DUAL_MIN_ORIGINAL_LEVEL).';
-        $facts[] = 'Resume the original class when the new class is '.$resume.'th (Adnd2e::canResumeOriginalClass / HOUSE_DUAL_RESUME_NEW_LEVEL). Do not apply PHB dual-class XP penalties.';
+        $min = TableLaw::DUAL_CLASS_HOUSE_SWITCH_MIN_ORIGINAL_LEVEL;
+        $resume = TableLaw::DUAL_CLASS_HOUSE_SWITCH_RESUME_NEW_LEVEL;
+        $facts[] = TableLaw::ORACLE_LABEL.': dual-class house switch (not 1989 PHB core). Original class must be '.$min.'th before a new class may begin (Adnd2e::canBeginNewClass / TableLaw::DUAL_CLASS_HOUSE_SWITCH_MIN_ORIGINAL_LEVEL).';
+        $facts[] = TableLaw::ORACLE_LABEL.': resume the original class when the new class is '.$resume.'th (Adnd2e::canResumeOriginalClass / TableLaw::DUAL_CLASS_HOUSE_SWITCH_RESUME_NEW_LEVEL). Do not apply PHB dual-class XP penalties.';
 
         $levels = self::parseLevels($question, self::parseClass($question));
         if ($levels !== []) {
@@ -954,11 +954,12 @@ class Adnd2eOracleRulesLookup
         }
 
         if (self::mentions($question, 'overnight rest|natural healing')) {
-            $facts[] = 'Overnight rest only: recover 1 hit point if above '.Adnd2e::DEATH_THRESHOLD.', rememorize, reset daily class abilities (Adnd2e::overnightRest).';
+            $facts[] = 'Overnight rest only: recover 1 hit point if above 0, rememorize, reset daily class abilities. Slain characters at 0 do not heal (Adnd2e::overnightRest).';
         }
 
-        if (self::mentions($question, 'vitality|death threshold|unconscious|dying')) {
-            $facts[] = 'Vitality: 0 unconscious; negative dying; dead at '.Adnd2e::DEATH_THRESHOLD.' (Adnd2e::vitalityState).';
+        if (self::mentions($question, 'vitality|death threshold|unconscious|dying|slain|hit points at 0|0 hp|massive damage')) {
+            $facts[] = 'Vitality: at 0 hit points the character is slain (death_mode phb_zero, Adnd2e::dyingState). There is no dying band below 0.';
+            $facts[] = 'Massive damage is separate: 50 or more from one attack, save versus death or die (Adnd2e::massiveDamageCheck).';
         }
 
         if (self::mentions($question, 'weapon proficiency|non-?weapon proficiency')) {
@@ -1050,7 +1051,7 @@ class Adnd2eOracleRulesLookup
             }
             if (isset($character['current_hp']) && self::mentions($question, '\bhp\b|hit points|vitality')) {
                 $hp = (int) $character['current_hp'];
-                $facts[] = $character['name'].' HP '.$hp.'/'.($character['max_hp'] ?? '?').' vitality '.Adnd2e::vitalityState($hp).' (Adnd2e::vitalityState)';
+                $facts[] = $character['name'].' HP '.$hp.'/'.($character['max_hp'] ?? '?').' vitality '.Adnd2e::dyingState($hp).' (Adnd2e::dyingState)';
             }
         }
     }

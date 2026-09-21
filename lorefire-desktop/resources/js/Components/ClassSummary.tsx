@@ -5,6 +5,7 @@ import {
   backfillClassLevelsXp,
   formatClassLevelsLine,
   formatClassXpLine,
+  kitFieldKind,
   normalizeClassLevels,
   resolveClassPath,
 } from '@/lib/adnd2e'
@@ -32,11 +33,12 @@ export function characterClassDisplay(character: Character) {
   }
 }
 
-/** Same subtitle Characters Index uses: race class — kit · player · XP. */
+/** Same subtitle Characters Index uses: race class · kit or specialist school · player · XP. */
 export function characterListSubtitle(character: Character): string {
   const { xpLine } = characterClassDisplay(character)
   let line = `${character.race} ${character.class}`
-  if (character.subclass) line += ` — ${character.subclass}`
+  const kitKind = kitFieldKind(character.subclass)
+  if (kitKind && character.subclass) line += ` · ${kitKind}: ${character.subclass}`
   if (character.player_name) line += ` · ${character.player_name}`
   if (xpLine) line += ` · ${xpLine}`
   return line

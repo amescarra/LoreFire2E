@@ -59,6 +59,8 @@ class KitFieldUiTest extends TestCase
         $this->assertStringNotContainsString('Psionic disciplines', $tsx);
         $this->assertStringNotContainsString('hasPsionicist', $tsx);
         $this->assertStringContainsString("placeholder=\"Optional kit\"", $tsx);
+        $this->assertStringNotContainsString('subclass', $tsx);
+        $this->assertStringNotContainsString('subclass', strtolower($tsx));
 
         $options = Adnd2e::suggestedSubclassOptions('Human', [
             ['class' => 'Psionicist', 'level' => 9],
@@ -111,7 +113,7 @@ class KitFieldUiTest extends TestCase
         $tsx = file_get_contents(dirname(__DIR__, 2).'/resources/js/Components/ClassPathFields.tsx');
         $this->assertIsString($tsx);
         $this->assertStringContainsString('CLASSES.map', $tsx);
-        $this->assertStringContainsString('House dual-class', $tsx);
+        $this->assertStringContainsString('House dual-class is TABLE LAW', $tsx);
         $this->assertStringContainsString('when the new class is 5th', $tsx);
         $this->assertStringNotContainsString('typically human', $tsx);
 

@@ -38,7 +38,7 @@ export function KitField({ race, entries, value, onChange }: Props) {
   return (
     <div className="flex flex-col gap-3">
       <Select
-        label="Kit / specialist"
+        label="Kit or specialist school"
         value={selectValue}
         onChange={e => {
           const next = e.target.value

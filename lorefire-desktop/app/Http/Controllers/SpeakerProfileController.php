@@ -6,9 +6,11 @@ use App\Models\Campaign;
 use App\Models\GameSession;
 use App\Models\SpeakerProfile;
 use App\Support\CampaignVoiceprintPromoter;
+use App\Support\SpeakerSegmentRemapper;
 use App\Support\VoiceprintEmbeddingExtractor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class SpeakerProfileController extends Controller
 {
@@ -51,6 +53,41 @@ class SpeakerProfileController extends Controller
         }
 
         return back()->with('success', 'Speaker profile saved.');
+    }
+
+    /**
+     * Reassign selected transcript lines to another SPEAKER_N / identity
+     * without stamping that name onto every line of the source label.
+     */
+    public function remap(Request $request, GameSession $session, SpeakerSegmentRemapper $remapper): RedirectResponse
+    {
+        $data = $request->validate([
+            'segment_indexes' => 'required|array|min:1|max:5000',
+            'segment_indexes.*' => 'integer|min:0',
+            'speaker_label' => 'nullable|string|max:100',
+            'create_new_label' => 'sometimes|boolean',
+            'speaker_profile_id' => 'nullable|integer|exists:speaker_profiles,id',
+            'display_name' => 'nullable|string|max:255',
+            'character_id' => 'nullable|exists:characters,id',
+            'is_dm' => 'sometimes|boolean',
+            'save_to_campaign' => 'sometimes|boolean',
+            'update_voiceprint' => 'sometimes|boolean',
+            'campaign_voiceprint_id' => 'nullable|exists:campaign_voiceprints,id',
+        ]);
+
+        try {
+            $result = $remapper->remap($session, $data['segment_indexes'], $data);
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $count = $result['remapped'];
+        $label = $result['target_label'];
+        $message = $count === 1
+            ? "Moved 1 line to {$label}."
+            : "Moved {$count} lines to {$label}.";
+
+        return back()->with('success', $message);
     }
 
     public function update(Request $request, GameSession $session, SpeakerProfile $speaker): RedirectResponse

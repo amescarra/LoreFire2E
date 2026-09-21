@@ -558,6 +558,16 @@ export default function Index({ settings, whisperx_languages, audio_capture }: P
           </div>
         </form>
 
+        <div className="mt-10 mb-4">
+          <RuneDivider label="Table Law and Sources" />
+        </div>
+        <p className="text-xs text-[var(--color-text-dim)] leading-relaxed mb-3">
+          Browse the 2E source catalog, enable an extra pack, enter cards and citations, and view table law. Official prose is not ingested.
+        </p>
+        <Button as="a" href="/settings/rules" variant="ghost" size="sm">
+          Open Table Law and Sources
+        </Button>
+
         {/* ── Attribution ───────────────────────────────────────────── */}
         <div className="mt-12 mb-6">
           <RuneDivider label="About Lorefire" />

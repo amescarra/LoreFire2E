@@ -234,7 +234,7 @@ Lorefire submits generation jobs via the ComfyUI API. The active checkpoint in C
 - **No account required.** Nothing is synced to a server. Your campaigns stay on your machine.
 - **Other hardware:** Tested on Apple Silicon. Windows ARM is a supported CPU path ([WINDOWS-ARM.md](lorefire-desktop/WINDOWS-ARM.md)). Ubuntu x86_64 + RTX 5090 is a supported CUDA path ([LINUX-5090.md](lorefire-desktop/LINUX-5090.md)). WhisperX is significantly slower without a dedicated neural engine or GPU.
 - **Transcription is CPU/ANE-bound.** On Apple Silicon, WhisperX uses the `mps` backend. Large audio files may take a few minutes even on `base` model.
-- **Rules text.** This project implements original UI wording and mechanical tables only. It does not include TSR/WotC copyrighted rulebook prose.
+- **Rules text.** This project implements original UI wording and mechanical tables only. It does not include TSR/WotC copyrighted rulebook prose. 2E source catalog, cards, and ingest lock: [lorefire-desktop/README.md](lorefire-desktop/README.md).
 
 ---
 

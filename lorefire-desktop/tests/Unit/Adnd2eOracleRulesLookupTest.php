@@ -361,4 +361,43 @@ class Adnd2eOracleRulesLookupTest extends TestCase
         $this->assertSame('narrative', $result['intent']);
         $this->assertSame('', $result['markdown']);
     }
+
+    public function test_lookup_names_1989_phb_with_pages_unknown(): void
+    {
+        $result = Adnd2eOracleRulesLookup::lookup('LOOKUP the 1989 PHB for surprise. Pages?');
+
+        $this->assertTrue($result['resolved']);
+        $this->assertStringContainsString('LOOKUP:', $result['markdown']);
+        $this->assertStringContainsString('KERNEL:', $result['markdown']);
+        $this->assertStringContainsString('TSR 2101', $result['markdown']);
+        $this->assertStringContainsString('PHB_1989', $result['markdown']);
+        $this->assertStringContainsString('pages unknown', $result['markdown']);
+        $this->assertStringContainsString('surprise_segments', $result['markdown']);
+        $this->assertStringNotContainsString('PHB_1995', $result['markdown']);
+        $this->assertStringNotContainsString('page 145', $result['markdown']);
+        $this->assertStringNotContainsString('2159', $result['markdown']);
+    }
+
+    public function test_lookup_does_not_use_1995_pagination(): void
+    {
+        $result = Adnd2eOracleRulesLookup::lookup('Where is surprise in the 1995 Player\'s Handbook?');
+
+        $this->assertStringContainsString('LOOKUP:', $result['markdown']);
+        $this->assertStringContainsString('later 2E', $result['markdown']);
+        $this->assertStringContainsString('Do not use 1995 pagination', $result['markdown']);
+        $this->assertStringContainsString('TSR 2101', $result['markdown']);
+        $this->assertStringNotContainsString('page 145', $result['markdown']);
+    }
+
+    public function test_official_quote_stays_unresolved_but_can_name_live_core_book(): void
+    {
+        $result = Adnd2eOracleRulesLookup::lookup('Quote the official Fireball spell text from the PHB page 145.');
+
+        $this->assertFalse($result['resolved']);
+        $this->assertStringContainsString('LOOKUP:', $result['markdown']);
+        $this->assertStringContainsString('PHB_1989', $result['markdown']);
+        $this->assertStringContainsString('pages unknown', $result['markdown']);
+        $this->assertStringContainsString('does not ingest PHB', $result['markdown']);
+        $this->assertStringNotContainsString('Fireball: Mage L3', $result['markdown']);
+    }
 }

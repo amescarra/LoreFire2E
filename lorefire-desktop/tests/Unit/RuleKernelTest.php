@@ -42,6 +42,76 @@ class RuleKernelTest extends TestCase
         $this->assertTrue($made['saved']);
     }
 
+    public function test_attack_hits_uses_thac0_minus_ac_and_modifiers(): void
+    {
+        $this->assertTrue(RuleKernel::attack_hits(20, 4, 16, 0));
+        $this->assertFalse(RuleKernel::attack_hits(20, 4, 15, 0));
+        $this->assertTrue(RuleKernel::attack_hits(20, 4, 15, 1));
+        $this->assertFalse(RuleKernel::attack_hits(20, 0, 1, 20));
+        $this->assertTrue(RuleKernel::attack_hits(20, 0, 20, -20));
+        $this->assertTrue(Adnd2e::resolveAttack(20, 4, 15, 1)['hit']);
+    }
+
+    public function test_save_succeeds_is_roll_plus_modifiers_versus_target(): void
+    {
+        $this->assertTrue(RuleKernel::save_succeeds(14, 14, 0));
+        $this->assertFalse(RuleKernel::save_succeeds(14, 13, 0));
+        $this->assertTrue(RuleKernel::save_succeeds(14, 13, 1));
+        $this->assertFalse(RuleKernel::save_succeeds(20, 1, 20));
+        $this->assertTrue(RuleKernel::save_succeeds(20, 20, -20));
+    }
+
+    public function test_initiative_order_is_lower_total_first(): void
+    {
+        $order = RuleKernel::initiative_order([
+            ['name' => 'A', 'roll' => 7, 'modifiers' => 0],
+            ['name' => 'B', 'roll' => 3, 'modifiers' => 0],
+            ['name' => 'C', 'roll' => 3, 'modifiers' => 1],
+        ]);
+        $this->assertSame(['B', 'C', 'A'], array_column($order, 'name'));
+        $this->assertSame(3, $order[0]['total']);
+        $this->assertSame(1, $order[0]['order']);
+        $this->assertSame(4, $order[1]['total']);
+        $this->assertSame(7, $order[2]['total']);
+    }
+
+    public function test_surprise_segments_use_the_surprised_sides_roll(): void
+    {
+        $a = RuleKernel::surprise_segments(3, 7);
+        $this->assertTrue($a['a_surprised']);
+        $this->assertFalse($a['b_surprised']);
+        $this->assertSame(3, $a['segments']);
+        $this->assertSame('a', $a['surprised_side']);
+
+        $both = RuleKernel::surprise_segments(2, 1);
+        $this->assertSame(0, $both['segments']);
+        $this->assertNull($both['surprised_side']);
+
+        $none = RuleKernel::surprise_segments(8, 9);
+        $this->assertSame(0, $none['segments']);
+
+        $b = RuleKernel::surprise_segments(6, 2);
+        $this->assertSame(2, $b['segments']);
+        $this->assertSame('b', $b['surprised_side']);
+    }
+
+    public function test_morale_check_fails_when_roll_exceeds_morale(): void
+    {
+        $pass = RuleKernel::morale_check(12, 11, 0);
+        $this->assertTrue($pass['passed']);
+        $this->assertSame(11, $pass['total']);
+
+        $tie = RuleKernel::morale_check(12, 12, 0);
+        $this->assertTrue($tie['passed']);
+
+        $fail = RuleKernel::morale_check(12, 13, 0);
+        $this->assertFalse($fail['passed']);
+
+        $modFail = RuleKernel::morale_check(12, 11, 2);
+        $this->assertFalse($modFail['passed']);
+        $this->assertSame(13, $modFail['total']);
+    }
+
     public function test_hp_clamp_does_not_store_a_dying_band_below_zero(): void
     {
         $this->assertSame(0, Adnd2e::clampCurrentHp(-10, 12));

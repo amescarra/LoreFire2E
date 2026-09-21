@@ -14,6 +14,10 @@ class Adnd2eOracleBriefingTest extends TestCase
         $this->assertStringContainsString('You are the Oracle', $prompt);
         $this->assertStringContainsString('do not quote copyrighted rulebook text', $prompt);
         $this->assertStringContainsString('Never invent official spell text', $prompt);
+        $this->assertStringContainsString('KERNEL', $prompt);
+        $this->assertStringContainsString('LOOKUP', $prompt);
+        $this->assertStringContainsString('FG&G', $prompt);
+        $this->assertStringContainsString('CARD', $prompt);
         $this->assertStringContainsString('Do not answer as if the table were using 5th Edition', $prompt);
         $this->assertStringNotContainsString('## Engine lookup', $prompt);
         $this->assertStringContainsString('Lorefire 2E procedures', $prompt);

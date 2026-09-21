@@ -1699,19 +1699,20 @@ class Adnd2e
      *
      * Convention used by this app: 1 always misses, 20 always hits.
      *
-     * @return array{hit: bool, needed: int, roll: int, automatic: bool}
+     * @return array{hit: bool, needed: int, roll: int, automatic: bool, modifiers: int}
      */
-    public static function resolveAttack(int $thac0, int $armorClass, int $roll): array
+    public static function resolveAttack(int $thac0, int $armorClass, int $roll, int $modifiers = 0): array
     {
         $needed = self::numberNeededToHit($thac0, $armorClass);
         $automatic = $roll === 1 || $roll === 20;
-        $hit = $roll === 20 || ($roll !== 1 && $roll >= $needed);
+        $hit = RuleKernel::attack_hits($thac0, $armorClass, $roll, $modifiers);
 
         return [
             'hit' => $hit,
             'needed' => $needed,
             'roll' => $roll,
             'automatic' => $automatic,
+            'modifiers' => $modifiers,
         ];
     }
 

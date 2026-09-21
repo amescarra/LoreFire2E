@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\RuleSettingsController;
 use App\Http\Controllers\WindowChromeController;
 use App\Http\Controllers\OracleController;
 use App\Http\Controllers\CampaignController;
@@ -231,6 +232,11 @@ Route::get('oracle/replies/{reply}', [OracleController::class, 'replyStatus'])->
 Route::get('settings', [AppSettingController::class, 'index'])->name('settings.index');
 Route::post('settings', [AppSettingController::class, 'update'])->name('settings.update');
 Route::get('settings/audio-capture', [AppSettingController::class, 'audioCapture'])->name('settings.audio-capture');
+Route::get('settings/rules', [RuleSettingsController::class, 'index'])->name('settings.rules');
+Route::post('settings/rules/sources/{code}', [RuleSettingsController::class, 'toggleSource'])->name('settings.rules.sources.toggle');
+Route::post('settings/rules/cards', [RuleSettingsController::class, 'storeCard'])->name('settings.rules.cards.store');
+Route::post('settings/rules/citations', [RuleSettingsController::class, 'storeCitation'])->name('settings.rules.citations.store');
+Route::post('settings/rules/fgg', [RuleSettingsController::class, 'optInFgg'])->name('settings.rules.fgg');
 
 // Serve files stored on the local disk (portraits, party photos, etc.)
 Route::get('storage-file/{path}', [StorageFileController::class, 'serve'])

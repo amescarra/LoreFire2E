@@ -47,14 +47,13 @@ class Adnd2eOracleRulesLookup
         self::collectCombatMiscFacts($question, $facts);
         self::collectMaterialFacts($question, $context, $facts);
         self::collectCharacterSheetFacts($question, $context, $facts);
+        self::collectCardFacts($question, $facts);
+        self::collectLookupFacts($question, $facts);
+        self::collectFggFacts($question, $facts);
 
         $facts = array_values(array_unique($facts));
-        $resolved = $facts !== [];
         $wantsOfficialText = self::asksForOfficialBookText($question);
-
-        if ($wantsOfficialText && ! $resolved) {
-            $resolved = false;
-        }
+        $resolved = $facts !== [] && ! $wantsOfficialText;
 
         return [
             'intent' => 'rules',
@@ -122,7 +121,7 @@ class Adnd2eOracleRulesLookup
         }
 
         return (bool) preg_match(
-            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|spell slots?|memorization slots?|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|weapon damage|damage dice|speed factor|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|move rate|encumbrance|weight allow|max press|carried|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|loyalty|priest spheres?|major sphere|minor sphere|specialist|saving-throw|descending|unarmored|leather|studded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|padded|brigandine|splint|banded|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic)|\bspells\b|casting time|spell level|what level is|\+\s*[1-5]\b|artifact|stat stub/i',
+            '/thac0|thaco|\barmor class\b|\bac\b|saving throw|saves?\s+vs|save against|vancian|memoriz|spell capacity|spell slots?|memorization slots?|material component|components? for|open doors?|bend bars?|lift gates?|dual-?class|begin a new class|resume (the )?original|missile|reaction adj|defensive adj|ability (score|table|adj)|exceptional strength|\b18\s*\/\s*(00|\d{1,2})\b|hit dice|hit die|initiative|weapon speed|weapon damage|damage dice|speed factor|needed to hit|number needed|to-hit|\bthaco\b|non-?weapon proficiency|weapon proficiency|movement rate|move rate|encumbrance|weight allow|max press|carried|vitality|death threshold|overnight rest|system shock|resurrection|chance to learn|bonus spells|spell failure|henchmen|loyalty|priest spheres?|major sphere|minor sphere|specialist|saving-throw|descending|unarmored|leather|studded|chain mail|plate mail|full plate|field plate|scale mail|ring mail|padded|brigandine|splint|banded|\bstr(?:ength)?\b|\bdex(?:terity)?\b|\bcon(?:stitution)?\b|\bint(?:elligence)?\b|\bwis(?:dom)?\b|\bcha(?:risma)?\b|spell text|phb|dungeon master.?s guide|\bdmg\b|complete (wizard|priest|fighter|thief|psionic|bard|ranger|paladin|druid|barbarian|ninja)|phbr|\blookup\b|morale|surprise|monstrous|\bmc\d|\bspells\b|casting time|spell level|what level is|\+\s*[1-5]\b|artifact|stat stub/i',
             $question
         );
     }
@@ -163,7 +162,7 @@ class Adnd2eOracleRulesLookup
     private static function asksForOfficialBookText(string $question): bool
     {
         return (bool) preg_match(
-            '/spell text|official wording|quote (the )?(rules|book|phb|dmg)|phb page|complete (wizard|priest|fighter|thief|psionic).{0,20}handbook|\bdmg\b.{0,20}(text|wording|page)/i',
+            '/spell text|official wording|quote (the )?(official |rules |book |phb|dmg)|official (spell|monster|rule) text|quote .{0,40}(handbook|phb|dmg)/i',
             $question
         );
     }
@@ -176,17 +175,29 @@ class Adnd2eOracleRulesLookup
         $lines = [
             '## Engine lookup (authoritative)',
             '',
-            'These values come from `App\Support\Adnd2e` and related 2E helpers (SpellMaterialComponents inspect on sheet records). Use them for numeric/table answers. Do not invent PHB/DMG/Complete Handbook prose, page numbers, or extra table entries.',
+            'Prefix claims with KERNEL, CARD, TABLE LAW, LOOKUP, or FG&G. These values come from `App\Support\Adnd2e`, RuleKernel, user cards, table law, and bibliographic LOOKUP. Use them for numeric/table answers. Do not invent PHB/DMG/Complete Handbook prose, page numbers, or extra table entries. LOOKUP names 1989 core / kit / race / Forgotten Realms MC first. Pages unknown unless a citation row exists. No 1995 pagination. No 1E.',
             '',
         ];
 
+        $labeled = array_map([self::class, 'labelFact'], $facts);
+        $lookupFacts = array_values(array_filter(
+            $labeled,
+            fn (string $fact) => str_starts_with($fact, 'LOOKUP:')
+        ));
+
         if ($resolved) {
-            foreach ($facts as $fact) {
+            foreach ($labeled as $fact) {
                 $lines[] = '- '.$fact;
             }
             $lines[] = '';
             $lines[] = 'If the player asked for something not listed here (official spell text, unpublished tables), say the Lorefire 2E engine does not have that.';
         } else {
+            foreach ($lookupFacts as $fact) {
+                $lines[] = '- '.$fact;
+            }
+            if ($lookupFacts !== []) {
+                $lines[] = '';
+            }
             $lines[] = 'The Lorefire 2E engine could not resolve a numeric or table answer for this question.';
             $lines[] = 'Say you do not have that in the engine. Do not invent official spell text, PHB pages, or handbook tables.';
             if ($wantsOfficialText) {
@@ -196,6 +207,15 @@ class Adnd2eOracleRulesLookup
         }
 
         return implode("\n", $lines);
+    }
+
+    private static function labelFact(string $fact): string
+    {
+        if (preg_match('/^(KERNEL|CARD|TABLE LAW|LOOKUP|FG&G):/', $fact)) {
+            return $fact;
+        }
+
+        return RuleKernel::ORACLE_LABEL.': '.$fact;
     }
 
     /**
@@ -950,7 +970,35 @@ class Adnd2eOracleRulesLookup
                 $d10 = (int) $match[1];
             }
             $row = Adnd2e::resolveInitiative($d10, $dex);
-            $facts[] = 'Initiative is d10 (lower first). DEX '.$dex.' reaction '.Adnd2e::formatSigned(Adnd2e::dexterityAdjustments($dex)['reaction']).'; example d10 '.$d10.' total '.$row['total'].' (Adnd2e::resolveInitiative).';
+            $order = RuleKernel::initiative_order([
+                ['name' => 'A', 'roll' => 7, 'modifiers' => 0],
+                ['name' => 'B', 'roll' => 3, 'modifiers' => 0],
+            ]);
+            $facts[] = RuleKernel::ORACLE_LABEL.': Initiative is d10 (lower first). DEX '.$dex.' reaction '.Adnd2e::formatSigned(Adnd2e::dexterityAdjustments($dex)['reaction']).'; example d10 '.$d10.' total '.$row['total'].' (Adnd2e::resolveInitiative). RuleKernel::initiative_order example 7 vs 3: first '.$order[0]['name'].' total '.$order[0]['total'].'.';
+        }
+
+        if (self::mentions($question, 'surprise')) {
+            $rollA = 3;
+            $rollB = 7;
+            if (preg_match('/\b(\d)\s*(?:vs|versus|and)\s*(\d)\b/i', $question, $match)) {
+                $rollA = (int) $match[1];
+                $rollB = (int) $match[2];
+            }
+            $row = RuleKernel::surprise_segments($rollA, $rollB);
+            $facts[] = RuleKernel::ORACLE_LABEL.': surprise_segments d10, default surprised on 1-3. Example '.$rollA.' vs '.$rollB.': segments '.$row['segments'].', surprised_side '.($row['surprised_side'] ?? 'none').' (RuleKernel::surprise_segments).';
+        }
+
+        if (self::mentions($question, 'morale')) {
+            $morale = 12;
+            $roll = 11;
+            if (preg_match('/morale\s*(\d{1,2})/i', $question, $match)) {
+                $morale = (int) $match[1];
+            }
+            if (preg_match('/\broll(?:ed|ing)?\s+(\d{1,2})\b/i', $question, $match)) {
+                $roll = (int) $match[1];
+            }
+            $row = RuleKernel::morale_check($morale, $roll);
+            $facts[] = RuleKernel::ORACLE_LABEL.': morale_check morale '.$morale.' roll '.$roll.': '.($row['passed'] ? 'pass' : 'fail').' (RuleKernel::morale_check).';
         }
 
         if (self::mentions($question, 'overnight rest|natural healing')) {
@@ -1054,6 +1102,100 @@ class Adnd2eOracleRulesLookup
                 $facts[] = $character['name'].' HP '.$hp.'/'.($character['max_hp'] ?? '?').' vitality '.Adnd2e::dyingState($hp).' (Adnd2e::dyingState)';
             }
         }
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectCardFacts(string $question, array &$facts): void
+    {
+        if (self::asksForOfficialBookText($question)) {
+            return;
+        }
+        foreach (RuleCards::search($question) as $card) {
+            $pages = $card['citation_pages'] ? 'pages '.$card['citation_pages'] : 'pages unknown';
+            $facts[] = RuleCards::ORACLE_LABEL.': '.$card['kind'].' '.$card['name'].' ('.($card['source_code'] ?? 'no source').', '.$pages.'). '.$card['effect_summary'].' User summary, not book text.';
+        }
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectLookupFacts(string $question, array &$facts): void
+    {
+        if (! self::mentions($question, 'phb|dmg|handbook|phbr|monstrous|\bmc\d|\blookup\b|tsr|tome of magic|legends|player.?s option|complete (fighter|thief|priest|wizard|psionic|bard|ranger|paladin|druid|barbarian|ninja)|dwarf|elf|gnome|humanoid|necromancer')) {
+            return;
+        }
+
+        $hits = RuleSources::matchQuestion($question);
+        if ($hits === []) {
+            $phb = RuleSources::find('PHB_1989');
+            if ($phb !== null && self::mentions($question, 'phb|player.?s handbook|lookup')) {
+                $hits[] = $phb;
+            }
+        }
+
+        if ($hits === []) {
+            return;
+        }
+
+        $row = $hits[0];
+        if (self::mentions($question, '\bphb\b|player.?s handbook') && ! self::mentions($question, '1995')) {
+            $phb = RuleSources::find('PHB_1989');
+            if ($phb !== null) {
+                $row = $phb;
+            }
+        }
+
+        $pages = 'pages unknown';
+        foreach (RuleCards::citationsFor((string) $row['title']) as $citation) {
+            if (! empty($citation['pages'])) {
+                $pages = 'pages '.$citation['pages'];
+                break;
+            }
+        }
+
+        $laterHit = null;
+        foreach ($hits as $hit) {
+            if ((string) $hit['era'] === RuleSources::ERA_LATER_2E
+                || in_array((string) $hit['code'], ['PHB_1995', 'DMG_1995'], true)) {
+                $laterHit = $hit;
+                break;
+            }
+        }
+
+        if ($laterHit !== null || self::mentions($question, '1995 revised|phb 1995|1995 phb|1995 player')) {
+            $core = RuleSources::find('PHB_1989');
+            if ($laterHit !== null) {
+                $facts[] = 'LOOKUP: '.$laterHit['title'].' (TSR '.$laterHit['tsr_number'].', '.$laterHit['year'].') is later 2E. Do not use 1995 pagination.';
+            } else {
+                $facts[] = 'LOOKUP: 1995 revised books are later 2E. Do not use 1995 pagination.';
+            }
+            if ($core !== null) {
+                $facts[] = 'LOOKUP: Prefer '.$core['title'].' '.$core['year'].' TSR '.$core['tsr_number'].' ('.$core['code'].'). Pages unknown. This app does not ingest official prose.';
+            }
+
+            return;
+        }
+
+        $state = (bool) $row['enabled'] ? 'enabled live-core' : 'seeded off';
+        $facts[] = 'LOOKUP: '.$row['title'].' '.$row['year'].' TSR '.$row['tsr_number'].' ('.$row['code'].') is '.$state.'. '.$pages.'. This app does not ingest official prose.';
+    }
+
+    /**
+     * @param  list<string>  $facts
+     */
+    private static function collectFggFacts(string $question, array &$facts): void
+    {
+        if (! self::mentions($question, 'fg&g|fan-generated|ogl')) {
+            return;
+        }
+        if (! IngestLock::fggAllowed()) {
+            $facts[] = IngestLock::ORACLE_LABEL_FGG.': off. Opt in under Table Law and Sources. Official handbook prose is never ingested.';
+
+            return;
+        }
+        $facts[] = IngestLock::ORACLE_LABEL_FGG.': opted in. Use fan-generated or OGL notes only. Still do not invent official spell or monster text.';
     }
 
     private static function parseSaveCategory(string $question): ?string

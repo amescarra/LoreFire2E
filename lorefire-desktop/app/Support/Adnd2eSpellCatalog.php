@@ -14,17 +14,75 @@ class Adnd2eSpellCatalog
      */
     public static function find(string $name): ?array
     {
+        return self::findBest($name);
+    }
+
+    /**
+     * Prefer a class match, then a spell-level match, when the same name
+     * exists more than once (Hold Person is Mage L3 and Cleric L2).
+     *
+     * @return array{name: string, classes: list<string>, level: int, tag: string, components: string, casting_time: string, range: string, duration: string, materials: list<string>}|null
+     */
+    public static function findBest(string $name, ?string $class = null, ?int $level = null): ?array
+    {
         $want = self::norm($name);
         if ($want === '') {
             return null;
         }
+
+        $matches = [];
         foreach (self::rows() as $row) {
             if (self::norm($row['name']) === $want) {
-                return $row;
+                $matches[] = $row;
+            }
+        }
+        if ($matches === []) {
+            return null;
+        }
+        if (count($matches) === 1) {
+            return $matches[0];
+        }
+
+        $class = $class !== null && trim($class) !== '' ? Adnd2e::normalizeClass($class) : null;
+        $best = $matches[0];
+        $bestScore = -1;
+        foreach ($matches as $row) {
+            $score = 0;
+            if ($class !== null && in_array($class, $row['classes'], true)) {
+                $score += 2;
+            }
+            if ($level !== null && $row['level'] === $level) {
+                $score += 1;
+            }
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $best = $row;
             }
         }
 
-        return null;
+        return $best;
+    }
+
+    /**
+     * Header codes plus optional parenthetical catalog material names.
+     *
+     * @param  array{components: string, materials: list<string>}  $row
+     */
+    public static function componentsWithMaterials(array $row, ?string $existingComponents = null): string
+    {
+        $codes = trim((string) ($existingComponents ?? ''));
+        if ($codes === '') {
+            $codes = trim((string) ($row['components'] ?? ''));
+        }
+        $materials = array_values(array_filter(
+            $row['materials'] ?? [],
+            fn ($name) => trim((string) $name) !== '',
+        ));
+        if ($materials === []) {
+            return $codes;
+        }
+
+        return trim($codes.' ('.implode(', ', $materials).')');
     }
 
     /**

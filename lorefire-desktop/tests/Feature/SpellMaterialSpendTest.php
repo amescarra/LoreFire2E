@@ -73,11 +73,11 @@ class SpellMaterialSpendTest extends TestCase
         $this->assertSame(1, $spell->fresh()->times_cast);
     }
 
-    public function test_bare_vsm_with_no_item_names_does_not_require_inventory(): void
+    public function test_bare_vsm_with_no_catalog_names_does_not_require_inventory(): void
     {
         $character = Character::factory()->create(['class' => 'Mage']);
         $spell = $character->spells()->create([
-            'name' => 'Sleep',
+            'name' => 'Custom Charm',
             'level' => 1,
             'components' => 'V, S, M',
             'times_memorized' => 1,
@@ -89,6 +89,128 @@ class SpellMaterialSpendTest extends TestCase
         ])->assertRedirect()->assertSessionMissing('error');
 
         $this->assertSame(1, $spell->fresh()->times_cast);
+    }
+
+    public function test_catalog_materials_are_spent_when_sheet_components_are_empty(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $spell = $character->spells()->create([
+            'name' => 'Fireball',
+            'level' => 3,
+            'components' => null,
+            'times_memorized' => 1,
+            'times_cast' => 0,
+        ]);
+        $guano = $character->inventoryItems()->create([
+            'name' => 'Bat Guano',
+            'quantity' => 2,
+        ]);
+        $sulfur = $character->inventoryItems()->create([
+            'name' => 'Sulfur',
+            'quantity' => 4,
+        ]);
+
+        $this->patch(route('characters.spells.cast', [$character, $spell]), [
+            'action' => 'use',
+        ])->assertRedirect()->assertSessionMissing('error');
+
+        $this->assertSame(1, $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $guano->fresh()->quantity);
+        $this->assertSame(3, (int) $sulfur->fresh()->quantity);
+    }
+
+    public function test_catalog_materials_are_spent_when_sheet_has_only_vsm_codes(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $spell = $character->spells()->create([
+            'name' => 'Sleep',
+            'level' => 1,
+            'components' => 'V, S, M',
+            'times_memorized' => 1,
+            'times_cast' => 0,
+        ]);
+        $sand = $character->inventoryItems()->create([
+            'name' => 'Sand',
+            'quantity' => 2,
+        ]);
+
+        $this->patch(route('characters.spells.cast', [$character, $spell]), [
+            'action' => 'use',
+        ])->assertRedirect()->assertSessionMissing('error');
+
+        $this->assertSame(1, $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $sand->fresh()->quantity);
+    }
+
+    public function test_missing_catalog_materials_block_cast_and_do_not_burn(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $spell = $character->spells()->create([
+            'name' => 'Fireball',
+            'level' => 3,
+            'times_memorized' => 1,
+            'times_cast' => 0,
+        ]);
+
+        $this->patch(route('characters.spells.cast', [$character, $spell]), [
+            'action' => 'use',
+        ])->assertRedirect()->assertSessionHas('error');
+
+        $error = (string) session('error');
+        $this->assertStringContainsString('bat guano', $error);
+        $this->assertStringContainsString('sulfur', $error);
+        $this->assertSame(0, $spell->fresh()->times_cast);
+        $this->assertSame(0, $character->inventoryItems()->count());
+    }
+
+    public function test_sheet_named_items_win_over_catalog_and_do_not_spend_extra(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $spell = $character->spells()->create([
+            'name' => 'Fireball',
+            'level' => 3,
+            'components' => 'V, S, M (sulfur)',
+            'times_memorized' => 1,
+            'times_cast' => 0,
+        ]);
+        $sulfur = $character->inventoryItems()->create([
+            'name' => 'Sulfur',
+            'quantity' => 2,
+        ]);
+        $guano = $character->inventoryItems()->create([
+            'name' => 'Bat Guano',
+            'quantity' => 3,
+        ]);
+
+        $this->patch(route('characters.spells.cast', [$character, $spell]), [
+            'action' => 'use',
+        ])->assertRedirect()->assertSessionMissing('error');
+
+        $this->assertSame(1, $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $sulfur->fresh()->quantity);
+        $this->assertSame(3, (int) $guano->fresh()->quantity);
+    }
+
+    public function test_catalog_focus_is_required_but_not_consumed(): void
+    {
+        $character = Character::factory()->create(['class' => 'Cleric']);
+        $spell = $character->spells()->create([
+            'name' => 'Hold Person',
+            'level' => 2,
+            'times_memorized' => 1,
+            'times_cast' => 0,
+        ]);
+        $symbol = $character->inventoryItems()->create([
+            'name' => 'Wooden Holy Symbol',
+            'quantity' => 1,
+        ]);
+
+        $this->patch(route('characters.spells.cast', [$character, $spell]), [
+            'action' => 'use',
+        ])->assertRedirect()->assertSessionMissing('error');
+
+        $this->assertSame(1, $spell->fresh()->times_cast);
+        $this->assertSame(1, (int) $symbol->fresh()->quantity);
     }
 
     public function test_named_focus_is_required_but_not_consumed(): void
@@ -216,5 +338,43 @@ class SpellMaterialSpendTest extends TestCase
                 ->where('character.spells.0.material_requirements.0.consumed', true)
                 ->where('character.spells.0.material_requirements.0.focus', false)
             );
+    }
+
+    public function test_empty_sheet_components_expose_catalog_materials_on_the_sheet(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+        $character->spells()->create([
+            'name' => 'Fireball',
+            'level' => 3,
+            'times_memorized' => 1,
+        ]);
+
+        $this->get(route('characters.show', $character))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Characters/Show')
+                ->where('character.spells.0.material_requirements.0.name', 'bat guano')
+                ->where('character.spells.0.material_requirements.1.name', 'sulfur')
+                ->where('character.spells.0.material_requirements.0.consumed', true)
+            );
+    }
+
+    public function test_adding_a_catalog_spell_persists_named_materials(): void
+    {
+        $character = Character::factory()->create(['class' => 'Mage']);
+
+        $this->post(route('characters.spells.store', $character), [
+            'name' => 'Fireball',
+            'level' => 3,
+            'components' => 'V, S, M',
+            'times_memorized' => 1,
+        ])->assertRedirect();
+
+        $spell = $character->spells()->firstOrFail();
+        $this->assertSame('V, S, M (bat guano, sulfur)', $spell->components);
+        $this->assertEqualsCanonicalizing(
+            ['bat guano', 'sulfur'],
+            array_column($spell->material_requirements, 'name'),
+        );
     }
 }

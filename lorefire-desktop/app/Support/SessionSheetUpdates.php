@@ -244,12 +244,12 @@ class SessionSheetUpdates
             return false;
         }
 
-        $character->spells()->create([
+        $character->spells()->create(SpellMaterialComponents::enrichPayloadFromCatalog([
             'name' => $name,
             'level' => $level,
             'times_memorized' => 0,
             'times_cast' => 0,
-        ]);
+        ], $character));
 
         return true;
     }

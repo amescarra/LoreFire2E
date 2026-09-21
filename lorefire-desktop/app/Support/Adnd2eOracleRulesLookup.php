@@ -1014,16 +1014,18 @@ class Adnd2eOracleRulesLookup
         }
 
         $plan = SpellMaterialComponents::inspect($character, $spell);
-        $reqs = SpellMaterialComponents::parse($spell->components, $spell->description);
+        $sheetReqs = SpellMaterialComponents::parse($spell->components, $spell->description);
+        $reqs = SpellMaterialComponents::requirementsFor($spell, $character);
         if ($reqs === []) {
-            $facts[] = $character->name.' / '.$spell->name.': no named material or focus items on the sheet record (SpellMaterialComponents::parse). Codes such as V/S/M alone do not invent PHB items.';
+            $facts[] = $character->name.' / '.$spell->name.': no named material or focus items on the sheet record or Adnd2eSpellCatalog. Codes such as V/S/M alone do not invent PHB items.';
         } else {
             $parts = [];
             foreach ($reqs as $req) {
                 $kind = $req['focus'] ? 'focus' : 'material';
                 $parts[] = $req['name'].' ×'.$req['quantity'].' ('.$kind.')';
             }
-            $facts[] = $character->name.' / '.$spell->name.' sheet requirements: '.implode('; ', $parts).' (SpellMaterialComponents::parse)';
+            $source = $sheetReqs === [] ? 'Adnd2eSpellCatalog' : 'sheet (SpellMaterialComponents::parse)';
+            $facts[] = $character->name.' / '.$spell->name.' '.$source.' requirements: '.implode('; ', $parts);
         }
 
         if ($plan['ok']) {

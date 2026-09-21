@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Parse named material/focus items from a spell's own records and spend
- * matching inventory on cast. Does not invent PHB component lists.
+ * matching inventory on cast. When the sheet record has no named items,
+ * Adnd2eSpellCatalog material names are used. Does not invent PHB lists.
  */
 class SpellMaterialComponents
 {
@@ -41,6 +42,103 @@ class SpellMaterialComponents
         }
 
         return array_values($reqs);
+    }
+
+    /**
+     * Named items from the sheet record, or catalog material names when the
+     * sheet has none. Does not invent PHB lists the catalog does not carry.
+     *
+     * @return list<array{name: string, quantity: int, consumed: bool, focus: bool}>
+     */
+    public static function namedRequirements(
+        ?string $components,
+        ?string $description = null,
+        ?string $spellName = null,
+        ?string $class = null,
+        ?int $level = null,
+    ): array {
+        $fromSheet = self::parse($components, $description);
+        if ($fromSheet !== []) {
+            return $fromSheet;
+        }
+
+        $spellName = trim((string) $spellName);
+        if ($spellName === '') {
+            return [];
+        }
+
+        $row = Adnd2eSpellCatalog::findBest($spellName, $class, $level);
+        if ($row === null || ($row['materials'] ?? []) === []) {
+            return [];
+        }
+
+        return self::parse(Adnd2eSpellCatalog::componentsWithMaterials($row), null);
+    }
+
+    /**
+     * @return list<array{name: string, quantity: int, consumed: bool, focus: bool}>
+     */
+    public static function requirementsFor(CharacterSpell $spell, ?Character $character = null): array
+    {
+        $character ??= $spell->relationLoaded('character') ? $spell->character : null;
+
+        return self::namedRequirements(
+            $spell->components,
+            $spell->description,
+            (string) $spell->name,
+            $character?->class !== null ? (string) $character->class : null,
+            (int) $spell->level,
+        );
+    }
+
+    /**
+     * When adding/editing a catalogued spell whose sheet text has no named
+     * items, persist the catalog names onto `components`.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function enrichPayloadFromCatalog(array $data, Character $character): array
+    {
+        $name = trim((string) ($data['name'] ?? ''));
+        if ($name === '') {
+            return $data;
+        }
+
+        $level = array_key_exists('level', $data) && $data['level'] !== null
+            ? (int) $data['level']
+            : null;
+        $enriched = self::enrichComponentsFromCatalog(
+            isset($data['components']) ? (string) $data['components'] : null,
+            isset($data['description']) ? (string) $data['description'] : null,
+            $name,
+            (string) $character->class,
+            $level,
+        );
+        if ($enriched !== null && $enriched !== '') {
+            $data['components'] = $enriched;
+        }
+
+        return $data;
+    }
+
+    public static function enrichComponentsFromCatalog(
+        ?string $components,
+        ?string $description,
+        string $spellName,
+        ?string $class = null,
+        ?int $level = null,
+    ): ?string {
+        if (self::parse($components, $description) !== []) {
+            return $components;
+        }
+
+        $row = Adnd2eSpellCatalog::findBest($spellName, $class, $level);
+        if ($row === null || ($row['materials'] ?? []) === []) {
+            return $components;
+        }
+
+        return Adnd2eSpellCatalog::componentsWithMaterials($row, $components);
     }
 
     /**
@@ -81,7 +179,7 @@ class SpellMaterialComponents
     public static function inspect(Character $character, CharacterSpell $spell): array
     {
         $character->loadMissing('inventoryItems');
-        $reqs = self::parse($spell->components, $spell->description);
+        $reqs = self::requirementsFor($spell, $character);
         if ($reqs === []) {
             return ['ok' => true, 'error' => null, 'spends' => [], 'missing' => []];
         }

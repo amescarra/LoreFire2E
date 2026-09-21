@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Jobs\Concerns\GeneratesViaComfyUI;
 use App\Models\AppSetting;
 use App\Models\Character;
+use App\Support\CharacterArtBrief;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
@@ -13,7 +14,7 @@ use Illuminate\Support\Facades\Storage;
 
 class GeneratePortrait implements ShouldQueue
 {
-    use Queueable, GeneratesViaComfyUI;
+    use GeneratesViaComfyUI, Queueable;
 
     public int $timeout = 660;
 
@@ -25,10 +26,11 @@ class GeneratePortrait implements ShouldQueue
 
         try {
             $provider = AppSetting::get('image_gen_provider', 'none');
-            $model    = AppSetting::get('image_gen_model', '');
+            $model = AppSetting::get('image_gen_model', '');
 
             if ($provider === 'none') {
                 $this->character->update(['portrait_generation_status' => 'failed']);
+
                 return;
             }
 
@@ -41,9 +43,9 @@ class GeneratePortrait implements ShouldQueue
                 $imageBytes = $this->callComfyUI($baseUrl, $prompt, 512, 768);
             } else {
                 $imageUrl = match ($provider) {
-                    'zai'    => $this->callZai($prompt, $model ?: 'glm-image'),
+                    'zai' => $this->callZai($prompt, $model ?: 'glm-image'),
                     'openai' => $this->callOpenAI($prompt, $model ?: 'dall-e-3'),
-                    default  => null,
+                    default => null,
                 };
 
                 if ($imageUrl) {
@@ -54,6 +56,7 @@ class GeneratePortrait implements ShouldQueue
 
             if (! $imageBytes) {
                 $this->character->update(['portrait_generation_status' => 'failed']);
+
                 return;
             }
 
@@ -67,7 +70,7 @@ class GeneratePortrait implements ShouldQueue
             Storage::disk('local')->put($path, $imageBytes);
 
             $this->character->update([
-                'portrait_path'              => $path,
+                'portrait_path' => $path,
                 'portrait_generation_status' => 'done',
             ]);
         } catch (\Throwable $e) {
@@ -78,39 +81,38 @@ class GeneratePortrait implements ShouldQueue
 
     protected function buildPrompt(): string
     {
-        $name       = $this->character->name;
-        $race       = $this->character->race ?? 'human';
-        $class      = $this->character->class ?? 'adventurer';
-        $appearance = $this->character->appearance_description ?? '';
-        $style      = $this->character->portrait_style ?? 'lifelike';
+        $brief = CharacterArtBrief::from($this->character);
+        $style = $this->character->portrait_style ?? 'lifelike';
 
         $styleKeywords = match ($style) {
             'renaissance' => 'renaissance oil painting style, old masters technique, chiaroscuro lighting, sfumato, Rembrandt lighting, classical portrait',
-            'comic'       => 'TTRPG sourcebook illustration. Characters rendered semi-realistically with clean ink outlines and smooth cel shading that gives them strong volume and 3D form. Muted earthy palette — desaturated greens, warm browns, dusty taupes, cool grays, one or two sparse accent colors. Soft dual lighting on characters: warm fill from below, cool diffuse from above, smooth shading transitions, no harsh shadows. Hazy softened background with atmospheric depth. No photorealism, no painterly texture, no anime, no oversaturation.',
-            default       => 'realistic fantasy art, detailed oil painting, cinematic lighting, highly detailed, 8k, photorealistic',
+            'comic' => 'TTRPG sourcebook illustration. Characters rendered semi-realistically with clean ink outlines and smooth cel shading that gives them strong volume and 3D form. Muted earthy palette — desaturated greens, warm browns, dusty taupes, cool grays, one or two sparse accent colors. Soft dual lighting on characters: warm fill from below, cool diffuse from above, smooth shading transitions, no harsh shadows. Hazy softened background with atmospheric depth. No photorealism, no painterly texture, no anime, no oversaturation.',
+            default => 'realistic fantasy art, detailed oil painting, cinematic lighting, highly detailed, 8k, photorealistic',
         };
 
-        $base = "A detailed fantasy portrait of {$name}, a {$race} {$class}.";
-        if ($appearance) {
-            $base .= " {$appearance}";
-        }
-        $base .= " Upper body shot, dramatic lighting, detailed face. {$styleKeywords}.";
-        return $base;
+        $who = $brief->raceAndClassPhrase();
+        $article = preg_match('/^[aeiou]/i', $who) ? 'an' : 'a';
+        $sheet = $brief->imagePromptBlock();
+
+        return "A fantasy portrait of {$brief->name}, {$article} {$who}.\n{$sheet}\nUpper body shot, dramatic lighting. {$styleKeywords}.";
     }
 
     protected function callZai(string $prompt, string $model): ?string
     {
         $key = AppSetting::get('image_gen_zai_api_key') ?: AppSetting::get('zai_api_key');
-        if (! $key) return null;
+        if (! $key) {
+            return null;
+        }
 
-        $r = Http::withToken($key)->timeout(90)->post(AppSetting::ZAI_STANDARD_URL . '/images/generations', [
-            'model'  => $model,
+        $r = Http::withToken($key)->timeout(90)->post(AppSetting::ZAI_STANDARD_URL.'/images/generations', [
+            'model' => $model,
             'prompt' => $prompt,
-            'size'   => '1280x1280',
+            'size' => '1280x1280',
         ]);
 
         if (! $r->successful()) {
             Log::error('z.ai image generation error', ['status' => $r->status(), 'body' => $r->body()]);
+
             return null;
         }
 
@@ -120,17 +122,20 @@ class GeneratePortrait implements ShouldQueue
     protected function callOpenAI(string $prompt, string $model): ?string
     {
         $key = AppSetting::get('openai_api_key');
-        if (! $key) return null;
+        if (! $key) {
+            return null;
+        }
 
         $r = Http::withToken($key)->timeout(90)->post('https://api.openai.com/v1/images/generations', [
-            'model'  => $model,
+            'model' => $model,
             'prompt' => $prompt,
-            'n'      => 1,
-            'size'   => '1024x1024',
+            'n' => 1,
+            'size' => '1024x1024',
         ]);
 
         if (! $r->successful()) {
             Log::error('OpenAI image generation error', ['status' => $r->status(), 'body' => $r->body()]);
+
             return null;
         }
 

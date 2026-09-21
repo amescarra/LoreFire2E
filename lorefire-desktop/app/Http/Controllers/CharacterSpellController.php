@@ -14,6 +14,7 @@ class CharacterSpellController extends Controller
     public function store(Request $request, Character $character): RedirectResponse
     {
         $data = $this->withMemorizationCounts($request->validate($this->spellRules()));
+        $data = SpellMaterialComponents::enrichPayloadFromCatalog($data, $character);
 
         $character->spells()->create($data);
 
@@ -25,6 +26,7 @@ class CharacterSpellController extends Controller
         abort_if($spell->character_id !== $character->id, 403);
 
         $data = $this->withMemorizationCounts($request->validate($this->spellRules()), $spell);
+        $data = SpellMaterialComponents::enrichPayloadFromCatalog($data, $character);
 
         $spell->update($data);
 

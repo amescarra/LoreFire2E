@@ -123,4 +123,62 @@ class SpellMaterialComponentsTest extends TestCase
             SpellMaterialComponents::errorMessage('Hold Person', [], ['holy symbol']),
         );
     }
+
+    public function test_catalog_fills_named_materials_when_sheet_has_only_codes(): void
+    {
+        $reqs = SpellMaterialComponents::namedRequirements('V, S, M', null, 'Fireball', 'Mage', 3);
+        $this->assertEqualsCanonicalizing(['bat guano', 'sulfur'], array_column($reqs, 'name'));
+        foreach ($reqs as $req) {
+            $this->assertTrue($req['consumed']);
+            $this->assertFalse($req['focus']);
+        }
+    }
+
+    public function test_empty_sheet_components_use_catalog_names(): void
+    {
+        $reqs = SpellMaterialComponents::namedRequirements(null, null, 'Fireball', 'Mage', 3);
+        $this->assertEqualsCanonicalizing(['bat guano', 'sulfur'], array_column($reqs, 'name'));
+    }
+
+    public function test_sheet_named_items_are_not_merged_with_catalog(): void
+    {
+        $reqs = SpellMaterialComponents::namedRequirements('V, S, M (sulfur)', null, 'Fireball', 'Mage', 3);
+        $this->assertSame(['sulfur'], array_column($reqs, 'name'));
+    }
+
+    public function test_unknown_spell_bare_vsm_still_invents_nothing(): void
+    {
+        $this->assertSame(
+            [],
+            SpellMaterialComponents::namedRequirements('V, S, M', null, 'Custom Charm', 'Mage', 1),
+        );
+    }
+
+    public function test_catalog_cleric_hold_person_is_a_focus(): void
+    {
+        $reqs = SpellMaterialComponents::namedRequirements(null, null, 'Hold Person', 'Cleric', 2);
+        $this->assertCount(1, $reqs);
+        $this->assertSame('holy symbol', $reqs[0]['name']);
+        $this->assertTrue($reqs[0]['focus']);
+        $this->assertFalse($reqs[0]['consumed']);
+    }
+
+    public function test_enrich_persists_catalog_names_when_sheet_has_none(): void
+    {
+        $this->assertSame(
+            'V, S, M (bat guano, sulfur)',
+            SpellMaterialComponents::enrichComponentsFromCatalog('V, S, M', null, 'Fireball', 'Mage', 3),
+        );
+        $this->assertSame(
+            'V, S, M (sulfur)',
+            SpellMaterialComponents::enrichComponentsFromCatalog('V, S, M (sulfur)', null, 'Fireball', 'Mage', 3),
+        );
+        $this->assertSame(
+            'V, S',
+            SpellMaterialComponents::enrichComponentsFromCatalog('V, S', null, 'Magic Missile', 'Mage', 1),
+        );
+        $this->assertNull(
+            SpellMaterialComponents::enrichComponentsFromCatalog(null, null, 'Custom Charm', 'Mage', 1),
+        );
+    }
 }

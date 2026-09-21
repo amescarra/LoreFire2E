@@ -56,13 +56,14 @@ class CharacterSpell extends Model
     }
 
     /**
-     * Named materials/foci parsed from this spell's own components/description.
+     * Named materials/foci from this spell's components/description, or from
+     * Adnd2eSpellCatalog when the sheet record has no named items.
      *
      * @return list<array{name: string, quantity: int, consumed: bool, focus: bool}>
      */
     public function getMaterialRequirementsAttribute(): array
     {
-        return SpellMaterialComponents::parse($this->components, $this->description);
+        return SpellMaterialComponents::requirementsFor($this);
     }
 
     public function character(): BelongsTo

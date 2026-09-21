@@ -41,4 +41,33 @@ class Adnd2eSpellCatalogTest extends TestCase
         $this->assertContains('Sleep', $names);
         $this->assertNotContains('Fireball', $names);
     }
+
+    public function test_find_best_disambiguates_hold_person_by_class_and_level(): void
+    {
+        $mage = Adnd2eSpellCatalog::findBest('Hold Person', 'Mage', 3);
+        $this->assertNotNull($mage);
+        $this->assertSame(['iron'], $mage['materials']);
+        $this->assertSame('V, S, M', $mage['components']);
+
+        $cleric = Adnd2eSpellCatalog::findBest('Hold Person', 'Cleric', 2);
+        $this->assertNotNull($cleric);
+        $this->assertSame(['holy symbol'], $cleric['materials']);
+        $this->assertSame('V, S, F', $cleric['components']);
+
+        $byLevel = Adnd2eSpellCatalog::findBest('Hold Person', null, 2);
+        $this->assertSame(['holy symbol'], $byLevel['materials']);
+    }
+
+    public function test_components_with_materials_appends_catalog_names(): void
+    {
+        $row = Adnd2eSpellCatalog::find('Fireball');
+        $this->assertSame('V, S, M (bat guano, sulfur)', Adnd2eSpellCatalog::componentsWithMaterials($row));
+        $this->assertSame(
+            'V, S, M (bat guano, sulfur)',
+            Adnd2eSpellCatalog::componentsWithMaterials($row, 'V, S, M'),
+        );
+
+        $missile = Adnd2eSpellCatalog::find('Magic Missile');
+        $this->assertSame('V, S', Adnd2eSpellCatalog::componentsWithMaterials($missile));
+    }
 }

@@ -158,46 +158,72 @@ export default function Show({ campaign, session, characters, transcriptSegments
     session.art_prompts_status === 'generating'
   )
   const [liveSceneArtPrompts, setLiveSceneArtPrompts] = useState(session.scene_art_prompts ?? [])
-  const [artPromptsError, setArtPromptsError] = useState(false)
+  const [artPromptsError, setArtPromptsError] = useState<string | null>(null)
   const artPromptsPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const startArtPromptsPolling = () => {
-    if (artPromptsPollRef.current) return
-    artPromptsPollRef.current = setInterval(async () => {
-      try {
-        const res = await fetch(`/sessions/${session.id}/art-prompts-status`)
-        const data = await res.json()
-        if (data.status === 'done') {
-          clearInterval(artPromptsPollRef.current!)
-          artPromptsPollRef.current = null
-          setGeneratingArtPrompts(false)
-          setLiveSceneArtPrompts(data.scene_art_prompts ?? [])
-        } else if (data.status === 'failed' || data.status === 'cancelled') {
-          clearInterval(artPromptsPollRef.current!)
-          artPromptsPollRef.current = null
-          setGeneratingArtPrompts(false)
-          if (data.status === 'failed') setArtPromptsError(true)
-        }
-      } catch {
-        // network hiccup — keep polling
-      }
-    }, 2500)
-  }
-
-  const handleCancelArtPrompts = async () => {
-    // Optimistically update UI first so the spinner disappears immediately
-    setGeneratingArtPrompts(false)
+  const stopArtPromptsPolling = () => {
     if (artPromptsPollRef.current) {
       clearInterval(artPromptsPollRef.current)
       artPromptsPollRef.current = null
     }
+  }
+
+  // `generating` is the only in-progress status. `idle` must stop the spinner:
+  // a 419/network failure never flips the row, and polling only done/failed/cancelled
+  // used to leave "Generating scene prompts…" up for as long as the page stayed open.
+  const applyArtPromptsStatus = (data: { status?: string; scene_art_prompts?: SceneArtPrompt[] }) => {
+    const status = data.status
+    if (status === 'generating' || !status) return
+    if (status !== 'done' && status !== 'failed' && status !== 'cancelled' && status !== 'idle') return
+
+    stopArtPromptsPolling()
+    setGeneratingArtPrompts(false)
+    if (status === 'done') {
+      setArtPromptsError(null)
+      setLiveSceneArtPrompts(data.scene_art_prompts ?? [])
+    } else if (status === 'failed') {
+      setArtPromptsError('Scene prompt generation failed. Try again.')
+    } else if (status === 'idle') {
+      setArtPromptsError('Scene prompt generation is not running. Try again.')
+    }
+  }
+
+  const pollArtPromptsOnce = async () => {
     try {
-      await fetch(`/sessions/${session.id}/art-prompts`, {
-        method: 'DELETE',
-        headers: { 'X-CSRF-TOKEN': CSRF() },
+      const res = await fetch(`/sessions/${session.id}/art-prompts-status`, {
+        headers: { Accept: 'application/json' },
       })
+      if (!res.ok) return
+      applyArtPromptsStatus(await res.json())
     } catch {
-      // Best-effort — job will check status on next iteration
+      // network hiccup — keep polling
+    }
+  }
+
+  const startArtPromptsPolling = () => {
+    if (artPromptsPollRef.current) return
+    void pollArtPromptsOnce()
+    artPromptsPollRef.current = setInterval(() => {
+      void pollArtPromptsOnce()
+    }, 2500)
+  }
+
+  const handleCancelArtPrompts = async () => {
+    // Optimistically update UI first so the spinner disappears immediately,
+    // including when the database is already idle and only React was stuck.
+    setGeneratingArtPrompts(false)
+    setArtPromptsError(null)
+    stopArtPromptsPolling()
+    try {
+      const res = await fetch(`/sessions/${session.id}/art-prompts`, {
+        method: 'DELETE',
+        headers: csrfHeaders(),
+      })
+      if (!res.ok) {
+        setArtPromptsError(await artPromptsHttpError(res, 'cancel'))
+      }
+    } catch {
+      setArtPromptsError('Cancel did not reach the app. Reload if the spinner comes back.')
     }
   }
 
@@ -237,6 +263,35 @@ export default function Show({ campaign, session, characters, transcriptSegments
   // Defined before the mount useEffect so it can be passed to registerOnFinalized.
   const CSRF = () =>
     (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? ''
+
+  // Inertia visits refresh the XSRF-TOKEN cookie but not the blade <meta> tag.
+  // Laravel prefers X-CSRF-TOKEN, so a stale meta value 419s even when the cookie
+  // is current — Generate then left the spinner up while art_prompts_status stayed idle.
+  const csrfHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'X-Requested-With': 'XMLHttpRequest',
+    }
+    const match = document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)
+    if (match?.[1]) {
+      headers['X-XSRF-TOKEN'] = decodeURIComponent(match[1])
+      return headers
+    }
+    const meta = CSRF()
+    if (meta) headers['X-CSRF-TOKEN'] = meta
+    return headers
+  }
+
+  const artPromptsHttpError = async (res: Response, action: 'start' | 'cancel'): Promise<string> => {
+    if (res.status === 419) {
+      return 'Session expired (CSRF token mismatch). Reload the page, then try again.'
+    }
+    const err = await res.json().catch(() => ({} as { message?: string; error?: string }))
+    const detail = err.message || err.error
+    if (detail) return detail
+    const verb = action === 'start' ? 'start' : 'cancel'
+    return `Could not ${verb} scene prompts (HTTP ${res.status}).`
+  }
 
   /** Called by the context after finalize succeeds or fails. */
   const handleRecordingFinalized = (audioPath: string | null) => {
@@ -957,15 +1012,25 @@ export default function Show({ campaign, session, characters, transcriptSegments
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => {
+                      onClick={async () => {
+                        setArtPromptsError(null)
                         setGeneratingArtPrompts(true)
-                        setArtPromptsError(false)
-                        setLiveSceneArtPrompts([])
-                        fetch(`/sessions/${session.id}/generate-art-prompts`, {
-                          method: 'POST',
-                          headers: { 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '' },
-                        })
-                        startArtPromptsPolling()
+                        try {
+                          const res = await fetch(`/sessions/${session.id}/generate-art-prompts`, {
+                            method: 'POST',
+                            headers: csrfHeaders(),
+                          })
+                          if (!res.ok) {
+                            setGeneratingArtPrompts(false)
+                            setArtPromptsError(await artPromptsHttpError(res, 'start'))
+                            return
+                          }
+                          setLiveSceneArtPrompts([])
+                          startArtPromptsPolling()
+                        } catch {
+                          setGeneratingArtPrompts(false)
+                          setArtPromptsError('Could not reach the app to start scene prompts. Check your connection and try again.')
+                        }
                       }}
                     >
                       {liveSceneArtPrompts.length > 0 ? 'Regenerate' : 'Generate'}
@@ -990,15 +1055,20 @@ export default function Show({ campaign, session, characters, transcriptSegments
                     Cancel
                   </button>
                 </div>
-              ) : artPromptsError ? (
-                <p className="text-xs text-red-400 italic">Scene prompt generation failed. Try again.</p>
-              ) : liveSceneArtPrompts.length === 0 ? (
-                <p className="text-xs text-[var(--color-text-dim)] italic">No scenes generated yet.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {liveSceneArtPrompts.map(scene => (
-                    <SceneCard key={scene.id} scene={scene} imageGenProvider={imageGenProvider} />
-                  ))}
+                  {artPromptsError && (
+                    <p className="text-xs text-red-400 italic">{artPromptsError}</p>
+                  )}
+                  {liveSceneArtPrompts.length === 0 ? (
+                    artPromptsError ? null : (
+                      <p className="text-xs text-[var(--color-text-dim)] italic">No scenes generated yet.</p>
+                    )
+                  ) : (
+                    liveSceneArtPrompts.map(scene => (
+                      <SceneCard key={scene.id} scene={scene} imageGenProvider={imageGenProvider} />
+                    ))
+                  )}
                 </div>
               )}
             </Card>

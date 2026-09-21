@@ -10,7 +10,10 @@ use App\Models\GameSession;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class TranscriptionController extends Controller
@@ -146,9 +149,13 @@ class TranscriptionController extends Controller
     /**
      * Dispatch art prompt generation job.
      */
-    public function generateArtPrompts(Request $request, GameSession $session): RedirectResponse
+    public function generateArtPrompts(Request $request, GameSession $session): JsonResponse|RedirectResponse
     {
         if (! $session->transcript_path && ! $session->summary) {
+            if ($request->expectsJson()) {
+                return response()->json(['error' => 'No transcript or summary found.'], 422);
+            }
+
             return back()->withErrors(['transcript' => 'No transcript or summary found.']);
         }
 
@@ -156,44 +163,54 @@ class TranscriptionController extends Controller
 
         GenerateArtPrompts::dispatch($session);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'queued' => true,
+                'status' => $session->art_prompts_status,
+            ]);
+        }
+
         return back()->with('success', 'Art prompt generation queued.');
     }
 
     /**
-     * Cancel a pending or in-progress art prompt generation.
+     * Cancel art prompt generation, including recovery from a stuck spinner.
      *
-     * For a pending job: delete it from the queue before it is picked up.
-     * For a running job: set status to 'cancelled' so the job cooperatively bails
-     * after the current LLM HTTP call returns (mid-HTTP cannot be interrupted).
+     * Always returns 200. If the row is still "generating", it becomes
+     * "cancelled" and matching queue rows are removed. If the UI was spinning
+     * while the database was already idle, this is a no-op success so Cancel
+     * can clear that state without a 422.
      */
     public function cancelArtPrompts(GameSession $session): JsonResponse
     {
         $session->refresh();
 
-        $status = $session->art_prompts_status;
+        // Drop queued and reserved rows so a killed worker cannot revive the
+        // job after retry_after (4000s) and wipe prompts. A process that is
+        // still inside handle() sees status=cancelled and bails.
+        $this->deleteArtPromptJobs($session);
 
-        if (! in_array($status, ['generating'])) {
-            return response()->json(['error' => 'No active art prompt generation to cancel.'], 422);
+        if ($session->art_prompts_status === 'generating') {
+            $session->update(['art_prompts_status' => 'cancelled']);
         }
 
-        // Remove any pending (not yet reserved) GenerateArtPrompts jobs for this session.
-        DB::table('jobs')
-            ->whereNull('reserved_at')
-            ->where('payload', 'like', '%"GenerateArtPrompts"%')
-            ->where('payload', 'like', '%"id":' . $session->id . '%')
-            ->delete();
-
-        // Mark as cancelled — the job checks this after its LLM call returns.
-        $session->update(['art_prompts_status' => 'cancelled']);
-
-        return response()->json(['cancelled' => true]);
+        return response()->json([
+            'cancelled' => true,
+            'status' => $session->fresh()->art_prompts_status,
+        ]);
     }
 
     /**
      * Return current art prompts generation status + fresh prompts when done.
+     *
+     * A database-queue row reserved longer than the job timeout means the
+     * NativePHP worker died without failed() (SIGKILL). retry_after is 4000s,
+     * so leaving that row would pin the spinner for over an hour. Settle it.
      */
     public function artPromptsStatus(GameSession $session): JsonResponse
     {
+        $session->refresh();
+        $this->settleStaleArtPromptGeneration($session);
         $session->refresh();
 
         $data = ['status' => $session->art_prompts_status];
@@ -206,6 +223,99 @@ class TranscriptionController extends Controller
         }
 
         return response()->json($data);
+    }
+
+    /**
+     * Seconds a reserved GenerateArtPrompts row may sit before we treat the
+     * worker as dead. The job timeout is 300s and the only LLM call is 120s.
+     */
+    private const ART_PROMPT_STALE_SECONDS = 360;
+
+    private function settleStaleArtPromptGeneration(GameSession $session): void
+    {
+        if ($session->art_prompts_status !== 'generating') {
+            return;
+        }
+
+        if (config('queue.default') !== 'database') {
+            return;
+        }
+
+        $jobs = $this->artPromptJobsFor($session);
+        $staleBefore = now()->subSeconds(self::ART_PROMPT_STALE_SECONDS)->getTimestamp();
+
+        $hasLiveJob = $jobs->contains(function ($row) use ($staleBefore) {
+            if ($row->reserved_at === null) {
+                return true;
+            }
+
+            return (int) $row->reserved_at >= $staleBefore;
+        });
+
+        if ($hasLiveJob) {
+            return;
+        }
+
+        // Dispatch writes the row after flipping status. Don't fail a request
+        // that has only just queued.
+        if ($jobs->isEmpty() && $session->updated_at && $session->updated_at->gt(now()->subSeconds(15))) {
+            return;
+        }
+
+        Log::warning('GenerateArtPrompts stale; resetting art_prompts_status', [
+            'session_id' => $session->id,
+            'jobs' => $jobs->count(),
+        ]);
+
+        $this->deleteArtPromptJobs($session, $jobs);
+        $session->update(['art_prompts_status' => 'failed']);
+    }
+
+    private function deleteArtPromptJobs(GameSession $session, ?Collection $jobs = null): void
+    {
+        $jobs ??= $this->artPromptJobsFor($session);
+
+        foreach ($jobs as $row) {
+            DB::table('jobs')->where('id', $row->id)->delete();
+        }
+    }
+
+    private function artPromptJobsFor(GameSession $session): Collection
+    {
+        if (config('queue.default') !== 'database' || ! Schema::hasTable('jobs')) {
+            return collect();
+        }
+
+        return DB::table('jobs')
+            ->where('payload', 'like', '%GenerateArtPrompts%')
+            ->get()
+            ->filter(fn ($row) => $this->jobPayloadIsArtPromptsForSession((string) $row->payload, (int) $session->id))
+            ->values();
+    }
+
+    private function jobPayloadIsArtPromptsForSession(string $payload, int $sessionId): bool
+    {
+        $decoded = json_decode($payload, true);
+        $command = is_array($decoded) ? ($decoded['data']['command'] ?? null) : null;
+        if (! is_string($command) || ! str_contains($command, 'GenerateArtPrompts')) {
+            return false;
+        }
+
+        try {
+            $job = unserialize($command, ['allowed_classes' => true]);
+        } catch (\Throwable) {
+            $job = false;
+        }
+
+        if ($job instanceof GenerateArtPrompts) {
+            try {
+                return (int) $job->session->id === $sessionId;
+            } catch (\Throwable) {
+                return false;
+            }
+        }
+
+        return preg_match('/s:2:"id";i:'.$sessionId.';/', $command) === 1;
     }
 
     /**

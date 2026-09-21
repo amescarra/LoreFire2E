@@ -9,7 +9,9 @@ use App\Models\SceneArtPrompt;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Throwable;
 
 class GenerateArtPrompts implements ShouldQueue
 {
@@ -17,12 +19,39 @@ class GenerateArtPrompts implements ShouldQueue
 
     public int $timeout = 300;
 
+    /** One attempt. A retry would delete scene rows again and can outlive the UI. */
+    public int $tries = 1;
+
+    /**
+     * Worker timeouts SIGKILL the process. Without this flag Laravel does not
+     * call failed(), so art_prompts_status stays "generating". The database
+     * queue retry_after is 4000s, which is the hour-long stuck spinner.
+     */
+    public bool $failOnTimeout = true;
+
+    /**
+     * Transcript-only scene extraction cap (characters).
+     *
+     * Summaries are preferred and are not capped. A raw multi-hour Whisper
+     * transcript is hundreds of kilobytes; Ollama tokenizes the whole prompt
+     * before it can answer (/api/generate, 120s HTTP timeout, 300s job timeout).
+     * That is long enough for NativePHP's queue:work --once worker to be killed
+     * without settling status. ~6k characters is about 1.5k tokens, which leaves
+     * room for the instruction block inside a 4096–8192 context window.
+     */
+    public const TRANSCRIPT_SOURCE_CHAR_CAP = 6000;
+
     public function __construct(public GameSession $session) {}
 
     public function handle(): void
     {
-        $artStyle   = $this->session->campaign->art_style ?? 'lifelike';
-        $provider   = AppSetting::get('llm_provider', 'none');
+        $this->session->refresh();
+        if ($this->session->art_prompts_status === 'cancelled') {
+            return;
+        }
+
+        $artStyle = $this->session->campaign->art_style ?? 'lifelike';
+        $provider = AppSetting::get('llm_provider', 'none');
         $characters = $this->session->campaign->characters()->get();
 
         // Delete existing prompts + any generated images for this session
@@ -54,32 +83,64 @@ class GenerateArtPrompts implements ShouldQueue
                 $prompt = $this->buildArtPrompt($scene, $artStyle, $characters);
 
                 SceneArtPrompt::create([
-                    'game_session_id'   => $this->session->id,
-                    'scene_title'       => $scene['title'],
+                    'game_session_id' => $this->session->id,
+                    'scene_title' => $scene['title'],
                     'scene_description' => $scene['description'],
-                    'prompt'            => $prompt,
-                    'negative_prompt'   => $this->negativePrompt($artStyle),
-                    'art_style'         => $artStyle,
-                    'character_refs'    => $characters->map(fn (Character $c) => [
+                    'prompt' => $prompt,
+                    'negative_prompt' => $this->negativePrompt($artStyle),
+                    'art_style' => $artStyle,
+                    'character_refs' => $characters->map(fn (Character $c) => [
                         'character_id' => $c->id,
-                        'name'         => $c->name,
-                        'image_path'   => $c->portrait_path,
+                        'name' => $c->name,
+                        'image_path' => $c->portrait_path,
                     ])->values()->toArray(),
-                    'status'            => 'generated',
+                    'status' => 'generated',
                 ]);
             }
 
             $this->session->update(['art_prompts_status' => 'done']);
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('GenerateArtPrompts failed', ['error' => $e->getMessage()]);
-            $this->session->update(['art_prompts_status' => 'failed']);
+        } catch (Throwable $e) {
+            // Settle here so a sync dispatch (and any worker that dies before
+            // failed()) cannot leave the row on "generating". failed() repeats
+            // this and no-ops once the status is already terminal.
+            $this->markArtPromptsFailed($e);
             throw $e;
         }
     }
 
+    /**
+     * Queue worker timeout / max-attempts path. The process may be killed
+     * immediately after this returns, so the status write has to happen here.
+     */
+    public function failed(Throwable $e): void
+    {
+        $this->markArtPromptsFailed($e);
+    }
+
+    protected function markArtPromptsFailed(Throwable $e): void
+    {
+        $this->session->refresh();
+
+        if (in_array($this->session->art_prompts_status, ['cancelled', 'done', 'failed'], true)) {
+            return;
+        }
+
+        Log::error('GenerateArtPrompts failed', [
+            'session_id' => $this->session->id,
+            'error' => $e->getMessage(),
+        ]);
+
+        $this->session->update(['art_prompts_status' => 'failed']);
+    }
+
     protected function extractScenes(string $provider): array
     {
-        $source = $this->session->summary ?? $this->loadTranscriptText();
+        // Prefer the chronicle summary. It is already scene-shaped and short.
+        // The raw transcript is only used when no summary has been saved, and
+        // loadTranscriptText() soft-caps that input so Ollama cannot sit on a
+        // multi-hour transcript until the worker is killed.
+        $summary = trim((string) ($this->session->summary ?? ''));
+        $source = $summary !== '' ? $summary : $this->loadTranscriptText();
         if (! $source) {
             return [];
         }
@@ -96,9 +157,9 @@ class GenerateArtPrompts implements ShouldQueue
             ->filter()
             ->take(5)
             ->map(fn ($paragraph, $i) => [
-                'title'       => 'Scene ' . ($i + 1),
+                'title' => 'Scene '.($i + 1),
                 'description' => trim($paragraph),
-                'characters'  => [],
+                'characters' => [],
             ])
             ->values()
             ->toArray();
@@ -106,9 +167,9 @@ class GenerateArtPrompts implements ShouldQueue
 
     protected function extractScenesViaLlm(string $source, string $provider): array
     {
-        $characters  = $this->session->campaign->characters()->get();
-        $artStyle    = $this->session->campaign->art_style ?? 'lifelike';
-        $styleGuide  = $this->styleGuide($artStyle);
+        $characters = $this->session->campaign->characters()->get();
+        $artStyle = $this->session->campaign->art_style ?? 'lifelike';
+        $styleGuide = $this->styleGuide($artStyle);
         $charContext = $this->buildCharacterContext($characters);
 
         // Extract ## headings from the source so the LLM can use them verbatim as titles
@@ -122,8 +183,8 @@ class GenerateArtPrompts implements ShouldQueue
             }
         }
         $headingList = $headings
-            ? "The session has these section headings (use them verbatim as scene titles, one scene per heading):\n" .
-              implode("\n", array_map(fn ($h) => "  - {$h}", $headings)) . "\n"
+            ? "The session has these section headings (use them verbatim as scene titles, one scene per heading):\n".
+              implode("\n", array_map(fn ($h) => "  - {$h}", $headings))."\n"
             : '';
 
         $prompt = <<<PROMPT
@@ -167,11 +228,11 @@ JSON:
 PROMPT;
 
         $text = match ($provider) {
-            'openai'    => $this->callOpenAI($prompt),
+            'openai' => $this->callOpenAI($prompt),
             'anthropic' => $this->callAnthropic($prompt),
-            'ollama'    => $this->callOllama($prompt),
-            'zai'       => $this->callZai($prompt),
-            default     => null,
+            'ollama' => $this->callOllama($prompt),
+            'zai' => $this->callZai($prompt),
+            default => null,
         };
 
         if (! $text) {
@@ -196,7 +257,7 @@ PROMPT;
             return '';
         }
 
-        $lines = ["PARTY MEMBERS (use these descriptions when characters appear in a scene):"];
+        $lines = ['PARTY MEMBERS (use these descriptions when characters appear in a scene):'];
         foreach ($characters as $c) {
             $attrs = array_filter([
                 $c->race && $c->subrace ? "{$c->race} ({$c->subrace})" : $c->race,
@@ -204,12 +265,12 @@ PROMPT;
                 $c->level ? "level {$c->level}" : null,
             ]);
             $summary = implode(', ', $attrs);
-            $lines[] = "- {$c->name}" . ($summary ? " — {$summary}" : '');
+            $lines[] = "- {$c->name}".($summary ? " — {$summary}" : '');
             if ($c->appearance_description) {
-                $lines[] = "  Appearance: " . trim($c->appearance_description);
+                $lines[] = '  Appearance: '.trim($c->appearance_description);
             }
             if ($c->mannerisms) {
-                $lines[] = "  Mannerisms: " . trim($c->mannerisms);
+                $lines[] = '  Mannerisms: '.trim($c->mannerisms);
             }
         }
 
@@ -235,7 +296,7 @@ PROMPT;
     protected function buildArtPrompt(array $scene, string $artStyle, $allCharacters): string
     {
         // If the LLM already wrote a prompt, just return it (style already embedded)
-        if (!empty($scene['prompt'])) {
+        if (! empty($scene['prompt'])) {
             return trim($scene['prompt']);
         }
 
@@ -258,9 +319,16 @@ PROMPT;
             if ($sceneCharacters->isNotEmpty()) {
                 $blocks = $sceneCharacters->map(function (Character $c) {
                     $parts = [trim($c->name)];
-                    if ($c->race)  $parts[] = $c->race;
-                    if ($c->class) $parts[] = $c->class;
-                    if ($c->appearance_description) $parts[] = trim($c->appearance_description);
+                    if ($c->race) {
+                        $parts[] = $c->race;
+                    }
+                    if ($c->class) {
+                        $parts[] = $c->class;
+                    }
+                    if ($c->appearance_description) {
+                        $parts[] = trim($c->appearance_description);
+                    }
+
                     return implode(', ', $parts);
                 })->implode('. ');
                 $characterSection = $blocks;
@@ -282,11 +350,28 @@ PROMPT;
         if (! $this->session->transcript_path) {
             return '';
         }
-        $raw  = Storage::get($this->session->transcript_path);
+        $raw = Storage::get($this->session->transcript_path);
         $data = json_decode($raw ?? '{}', true);
-        return collect($data['segments'] ?? [])
+        $text = collect($data['segments'] ?? [])
             ->map(fn ($s) => $s['text'] ?? '')
             ->implode(' ');
+
+        return $this->capTranscriptSource($text);
+    }
+
+    /**
+     * Keep the start of the transcript (scenes are chronological) and tell the
+     * model the rest was omitted. See TRANSCRIPT_SOURCE_CHAR_CAP.
+     */
+    protected function capTranscriptSource(string $text): string
+    {
+        if (mb_strlen($text) <= self::TRANSCRIPT_SOURCE_CHAR_CAP) {
+            return $text;
+        }
+
+        $clipped = rtrim(mb_substr($text, 0, self::TRANSCRIPT_SOURCE_CHAR_CAP));
+
+        return $clipped."\n\n[Transcript truncated for scene extraction. Later dialogue was omitted so local model generation can finish within the job timeout.]";
     }
 
     protected function callOpenAI(string $prompt): ?string
@@ -296,10 +381,11 @@ PROMPT;
             return null;
         }
         $r = Http::withToken($key)->timeout(60)->post('https://api.openai.com/v1/chat/completions', [
-            'model'      => 'gpt-4o-mini',
-            'messages'   => [['role' => 'user', 'content' => $prompt]],
+            'model' => 'gpt-4o-mini',
+            'messages' => [['role' => 'user', 'content' => $prompt]],
             'max_tokens' => 1600,
         ]);
+
         return $r->json('choices.0.message.content');
     }
 
@@ -311,50 +397,54 @@ PROMPT;
         }
         $r = Http::withHeaders(['x-api-key' => $key, 'anthropic-version' => '2023-06-01'])->timeout(60)
             ->post('https://api.anthropic.com/v1/messages', [
-                'model'      => 'claude-3-haiku-20240307',
+                'model' => 'claude-3-haiku-20240307',
                 'max_tokens' => 1600,
-                'messages'   => [['role' => 'user', 'content' => $prompt]],
+                'messages' => [['role' => 'user', 'content' => $prompt]],
             ]);
+
         return $r->json('content.0.text');
     }
 
     protected function callOllama(string $prompt): ?string
     {
         $baseUrl = AppSetting::get('ollama_base_url', 'http://localhost:11434');
-        $model   = AppSetting::get('ollama_model', 'llama3');
+        $model = AppSetting::get('ollama_model', 'llama3');
         $r = Http::timeout(120)->post("{$baseUrl}/api/generate", \App\Support\Linux5090::withOllamaOptions([
-            'model'  => $model,
+            'model' => $model,
             'prompt' => $prompt,
             'stream' => false,
         ]));
+
         return $r->json('response');
     }
 
     protected function callZai(string $prompt): ?string
     {
-        $key     = AppSetting::get('zai_api_key');
-        $model   = AppSetting::get('zai_model', 'glm-4.7');
+        $key = AppSetting::get('zai_api_key');
+        $model = AppSetting::get('zai_model', 'glm-4.7');
         $baseUrl = AppSetting::get('zai_base_url', AppSetting::ZAI_CODING_URL);
         if (! $key) {
             return null;
         }
         $r = Http::withToken($key)->timeout(120)
-            ->post(rtrim($baseUrl, '/') . '/chat/completions', [
-                'model'      => $model,
-                'messages'   => [['role' => 'user', 'content' => $prompt]],
+            ->post(rtrim($baseUrl, '/').'/chat/completions', [
+                'model' => $model,
+                'messages' => [['role' => 'user', 'content' => $prompt]],
                 'max_tokens' => 8000,
-                'thinking'   => ['type' => 'enabled'],
+                'thinking' => ['type' => 'enabled'],
             ]);
 
         if (! $r->successful()) {
             \Illuminate\Support\Facades\Log::warning('GenerateArtPrompts: z.ai error', [
                 'status' => $r->status(),
-                'body'   => $r->body(),
+                'body' => $r->body(),
             ]);
+
             return null;
         }
 
         $content = $r->json('choices.0.message.content') ?? '';
+
         return $content !== '' ? $content : null;
     }
 }

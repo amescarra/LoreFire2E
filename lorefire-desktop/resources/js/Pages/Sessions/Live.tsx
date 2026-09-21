@@ -11,7 +11,7 @@ import { SpellMaterialHint } from '@/Components/SpellMaterialHint'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import { useRecording } from '@/Contexts/RecordingContext'
 import { Campaign, GameSession, Character, InventoryItem, CharacterSpell } from '@/types'
-import { ABILITY_ORDER, inventoryQuantityLabel, missingSpellMaterials, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
+import { ABILITY_ORDER, clampCurrentHp, inventoryQuantityLabel, missingSpellMaterials, remainingMemorizedOf, timesMemorizedOf, vitalityState } from '@/lib/adnd2e'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -232,18 +232,18 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
   const [currentHp, setCurrentHp]   = useState(character.current_hp)
 
   // Local mirror of memorization capacity used
-  const [slotsUsed, setSlotsUsed]   = useState<Record<string, number>>(character.memorization_used ?? {})
+  const [memorizationUsed, setMemorizationUsed] = useState<Record<string, number>>(character.memorization_used ?? {})
 
   // Local mirror of class features (for lay on hands etc.)
   const [classFeatures, setClassFeatures] = useState<Record<string, unknown>>(character.class_features ?? {})
 
   useEffect(() => {
     setCurrentHp(character.current_hp)
-    setSlotsUsed(character.memorization_used ?? {})
+    setMemorizationUsed(character.memorization_used ?? {})
     setClassFeatures(character.class_features ?? {})
   }, [character.current_hp, character.memorization_used, character.class_features, character.spells])
 
-  const hasSpellSlots = !!(character.memorization && Object.keys(character.memorization).length > 0)
+  const hasMemorization = !!(character.memorization && Object.keys(character.memorization).length > 0)
 
   // Lay on Hands — fall back to level*5 for Paladins who haven't saved keys yet
   const defaultLayMax = character.class === 'Paladin' ? character.level * 2 : null
@@ -282,9 +282,9 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
     let next = currentHp
 
     if (mode === 'damage') {
-      next = Math.max(-10, next - amount)
+      next = clampCurrentHp(next - amount, max)
     } else {
-      next = Math.min(max, next + amount)
+      next = clampCurrentHp(next + amount, max)
     }
 
     setCurrentHp(next)
@@ -307,10 +307,10 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
 
   const toggleSlot = async (level: number, action: 'use' | 'recover') => {
     const key   = String(level)
-    const used  = slotsUsed[key] ?? 0
+    const used  = memorizationUsed[key] ?? 0
     const max   = (character.memorization?.[key] ?? 0) as number
     const next  = action === 'use' ? Math.min(max, used + 1) : Math.max(0, used - 1)
-    setSlotsUsed(prev => ({ ...prev, [key]: next }))
+    setMemorizationUsed(prev => ({ ...prev, [key]: next }))
     await fetch(memorizationUrl, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf() },
@@ -526,7 +526,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
         {/* Spells tab */}
         {tab === 'spells' && (
           <div className="flex flex-col gap-3">
-            {hasSpellSlots && character.memorization && (
+            {hasMemorization && character.memorization && (
               <div className="flex flex-col gap-2">
                 <p className="text-[9px] uppercase tracking-widest" style={{ color: 'var(--color-text-dim)' }}>
                   Memorized · click to cast · right-click to restore
@@ -536,7 +536,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
                   .sort(([a], [b]) => Number(a) - Number(b))
                   .map(([level, maxRaw]) => {
                     const max  = maxRaw as number
-                    const used = slotsUsed[level] ?? 0
+                    const used = memorizationUsed[level] ?? 0
                     const rem  = max - used
                     return (
                       <div key={level} className="flex items-center gap-2">
@@ -606,7 +606,7 @@ function CharacterCard({ character, campaignId }: { character: Character; campai
               </div>
             )}
 
-            {(!character.spells || character.spells.length === 0) && !hasSpellSlots && (
+            {(!character.spells || character.spells.length === 0) && !hasMemorization && (
               <p className="text-xs text-center py-4" style={{ color: 'var(--color-text-dim)' }}>No spells recorded.</p>
             )}
           </div>

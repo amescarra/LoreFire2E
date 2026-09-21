@@ -281,7 +281,7 @@
       <span class="field-value">{{ $classDisplay }}</span>
     </div>
     <div class="field">
-      <span class="field-label">Kit / Specialist</span>
+      <span class="field-label">{{ \App\Support\Adnd2e::kitFieldKind($character->subclass) === 'specialist school' ? 'Specialist school' : 'Kit' }}</span>
       <span class="field-value">{{ $character->subclass ?: '' }}</span>
     </div>
     <div class="field">

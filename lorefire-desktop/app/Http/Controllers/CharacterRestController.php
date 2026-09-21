@@ -16,6 +16,7 @@ class CharacterRestController extends Controller
 {
     public function overnight(Request $request, Character $character): RedirectResponse
     {
+        $wasAlive = (int) $character->current_hp > 0;
         $result = Adnd2e::overnightRest(
             (int) $character->current_hp,
             (int) $character->max_hp,
@@ -27,7 +28,11 @@ class CharacterRestController extends Controller
         $character->update($result);
         $character->spells()->update(Adnd2e::rememorizeSpellFields());
 
-        return back()->with('success', 'Overnight rest taken. One hit point recovered; memorized spells are available again.');
+        $message = $wasAlive
+            ? 'Overnight rest taken. One hit point recovered; memorized spells are available again.'
+            : 'Overnight rest taken. Slain characters do not recover hit points; memorized spells are available again.';
+
+        return back()->with('success', $message);
     }
 
     public function overnightForCampaign(Request $request, Campaign $campaign, Character $character): RedirectResponse

@@ -8,7 +8,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
 /**
- * Toggle memorization capacity used for a spell level.
+ * Toggle Vancian memorization capacity used for a spell level.
  */
 class CharacterSpellSlotsController extends Controller
 {
@@ -20,10 +20,10 @@ class CharacterSpellSlotsController extends Controller
         ]);
 
         $level = (string) $data['level'];
-        $slots = is_array($character->memorization) ? $character->memorization : [];
+        $capacity = is_array($character->memorization) ? $character->memorization : [];
         $used = is_array($character->memorization_used) ? $character->memorization_used : [];
 
-        $max = (int) ($slots[$level] ?? 0);
+        $max = (int) ($capacity[$level] ?? 0);
         $curr = (int) ($used[$level] ?? 0);
 
         if ($data['action'] === 'use') {

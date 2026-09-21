@@ -96,9 +96,9 @@ class Adnd2eTest extends TestCase
     public function test_vitality_states(): void
     {
         $this->assertSame('ok', Adnd2e::vitalityState(1));
-        $this->assertSame('unconscious', Adnd2e::vitalityState(0));
-        $this->assertSame('dying', Adnd2e::vitalityState(-3));
-        $this->assertSame('dead', Adnd2e::vitalityState(-10));
+        $this->assertSame('slain', Adnd2e::vitalityState(0));
+        $this->assertSame('slain', Adnd2e::vitalityState(-3));
+        $this->assertSame('slain', Adnd2e::dying_state(-10, 'phb_zero'));
     }
 
     public function test_defaults_for_new_character(): void

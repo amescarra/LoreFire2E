@@ -511,7 +511,7 @@ export default function Edit({ campaign, character, campaigns, imageGenProvider 
 
           <div className="grid grid-cols-3 gap-4">
             <Input label="Max HP" type="number" min={1} value={data.max_hp} onChange={e => setData('max_hp', parseInt(e.target.value) || 1)} />
-            <Input label="Current HP" type="number" value={data.current_hp} onChange={e => setData('current_hp', parseInt(e.target.value) || 0)} hint="0 unconscious · −1 to −9 dying · −10 dead" />
+            <Input label="Current HP" type="number" min={0} value={data.current_hp} onChange={e => setData('current_hp', Math.max(0, parseInt(e.target.value) || 0))} hint="At 0 hit points the character is slain." />
             <Input label="Hit Die" value={data.hit_die} onChange={e => setData('hit_die', e.target.value)} />
           </div>
 

@@ -110,7 +110,7 @@ class Adnd2eCharacterTest extends TestCase
         $this->assertTrue($spell->is_prepared);
     }
 
-    public function test_hit_points_can_drop_to_negative_ten(): void
+    public function test_hit_points_at_zero_are_slain_and_cannot_sit_below_zero(): void
     {
         $character = Character::factory()->create([
             'max_hp' => 10,
@@ -120,13 +120,27 @@ class Adnd2eCharacterTest extends TestCase
         $this->patchJson(route('characters.hp.update', $character), [
             'current_hp' => -10,
         ])->assertOk()->assertJson([
-            'current_hp' => -10,
-            'vitality' => 'dead',
+            'current_hp' => 0,
+            'vitality' => 'slain',
         ]);
 
         $character->refresh();
-        $this->assertSame(-10, $character->current_hp);
-        $this->assertSame('dead', $character->vitalityState());
+        $this->assertSame(0, $character->current_hp);
+        $this->assertSame('slain', $character->vitalityState());
+    }
+
+    public function test_table_law_store_records_dual_class_house_switch(): void
+    {
+        $law = \App\Support\TableLaw::current();
+        $this->assertSame('phb_zero', $law['death_mode']);
+        $this->assertTrue($law['dual_class_house_switch']['enabled']);
+        $this->assertFalse($law['dual_class_house_switch']['human_only']);
+        $this->assertSame(6, $law['dual_class_house_switch']['min_original_level']);
+        $this->assertSame(5, $law['dual_class_house_switch']['resume_new_level']);
+        $this->assertSame(
+            \App\Support\TableLaw::defaults(),
+            \App\Models\AppSetting::get(\App\Support\TableLaw::SETTING_KEY)
+        );
     }
 
     public function test_number_needed_to_hit_uses_thac0_minus_ac(): void

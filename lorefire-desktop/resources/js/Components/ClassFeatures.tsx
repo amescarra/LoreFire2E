@@ -156,7 +156,7 @@ export function ClassFeatures({ characterClass, level, value, onChange }: Props)
       <div className="flex flex-col gap-3">
         <p className="text-[10px] uppercase tracking-widest text-[var(--color-text-dim)]">Wizard notes</p>
         <InputRow label="Opposition school (if specialist)" value={String(value.opposition_school ?? '')} onChange={v => set('opposition_school', v)} placeholder="Banned school" />
-        <p className="text-xs text-[var(--color-text-dim)]">Specialists memorize one extra spell per level of their school. Record the school as the kit / subclass.</p>
+        <p className="text-xs text-[var(--color-text-dim)]">Specialists memorize one extra spell per level of their school. Record the school as specialist school, not as a kit.</p>
       </div>
     )
   }

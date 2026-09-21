@@ -12,7 +12,7 @@ import { ConditionManager } from '@/Components/ConditionManager'
 import { SpellsTab } from '@/Components/SpellsTab'
 import { AbilityScoreBlock } from '@/Components/AbilityScoreBlock'
 import {
-  ABILITY_ORDER, SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatXpAmount, hasPsionicist, inventoryQuantityLabel, normalizeClassLevels, vitalityState,
+  ABILITY_ORDER, SAVE_CATEGORIES, anyCaster, backfillClassLevelsXp, classAbbreviation, formatClassLevelsLine, formatXpAmount, hasPsionicist, inventoryQuantityLabel, kitFieldKind, normalizeClassLevels, vitalityState,
 } from '@/lib/adnd2e'
 
 interface Props {
@@ -87,8 +87,8 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
     router.patch(memorizationUrl, { level, action }, { preserveScroll: true })
   }
 
+  const kitKind = kitFieldKind(character.subclass)
   const vitality = vitalityState(character.current_hp)
-
   const classPath = character.class_path ?? 'single'
   const classEntries = backfillClassLevelsXp(
     normalizeClassLevels(character.class_levels, character.class, character.level, classPath),
@@ -159,7 +159,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
               )}
             </div>
             <p className="text-sm text-[var(--color-text-dim)] mt-0.5">
-              {character.race}{character.subrace ? ` (${character.subrace})` : ''} · {character.class}{character.subclass ? ` — ${character.subclass}` : ''}
+              {character.race}{character.subrace ? ` (${character.subrace})` : ''} · {character.class}{kitKind && character.subclass ? ` · ${kitKind}: ${character.subclass}` : ''}
               {character.background ? ` · ${character.background}` : ''}
             </p>
             <ul className="mt-1.5 text-xs text-[var(--color-text-dim)] flex flex-col gap-0.5">
@@ -185,7 +185,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
             <HpBar current={character.current_hp} max={character.max_hp} className="mt-3 max-w-xs" />
             {vitality !== 'ok' && (
               <p className="text-xs uppercase tracking-widest mt-1 text-[var(--color-danger)]">
-                {vitality === 'dead' ? 'Dead (−10)' : vitality === 'dying' ? 'Dying' : 'Unconscious'}
+                Slain
               </p>
             )}
           </div>
@@ -358,11 +358,7 @@ export default function Show({ campaign, character, imageGenProvider }: Props) {
               <Card>
                 <CardHeader title="Vitality" />
                 <p className="text-sm text-[var(--color-danger)]">
-                  {vitality === 'dead'
-                    ? 'This character has reached −10 hit points and is dead.'
-                    : vitality === 'dying'
-                      ? 'Below 0 hit points: dying. Death at −10.'
-                      : 'At 0 hit points: unconscious.'}
+                  At 0 hit points this character is slain.
                 </p>
               </Card>
             )}

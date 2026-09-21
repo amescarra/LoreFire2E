@@ -21,7 +21,10 @@ class Adnd2eOracleBriefingTest extends TestCase
         $this->assertStringContainsString('descending', $prompt);
         $this->assertStringContainsString('Vancian memorization', $prompt);
         $this->assertStringContainsString('Overnight rest', $prompt);
-        $this->assertStringContainsString('-10', $prompt);
+        $this->assertStringContainsString('slain', $prompt);
+        $this->assertStringContainsString('phb_zero', $prompt);
+        $this->assertStringContainsString('TABLE LAW', $prompt);
+        $this->assertStringContainsString('house switch', $prompt);
         $this->assertStringContainsString('Bladesinger', $prompt);
         $this->assertStringContainsString('Psionicist', $prompt);
         $this->assertStringContainsString('PSP totals and typed power names are sheet fields', $prompt);
@@ -192,6 +195,14 @@ class Adnd2eOracleBriefingTest extends TestCase
         $this->assertStringContainsString('HP: 18/22', $line);
         $this->assertStringContainsString('kit: Battlerager', $line);
         $this->assertStringContainsString('[single]', $line);
+
+        $specialist = Adnd2eOracleBriefing::formatCharacterLine([
+            'name' => 'Mira',
+            'class' => 'Mage',
+            'subclass' => 'Illusionist',
+        ]);
+        $this->assertStringContainsString('specialist school: Illusionist', $specialist);
+        $this->assertStringNotContainsString('kit: Illusionist', $specialist);
     }
 
     public function test_character_line_includes_ability_scores(): void

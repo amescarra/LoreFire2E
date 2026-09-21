@@ -221,15 +221,18 @@ export const CONDITIONS_2E = [
   'Hasted', 'Unconscious', 'Dying', 'Dead', 'Fear', 'Berserk',
 ]
 
-export const DEATH_THRESHOLD = -10
+/** Live death_mode. The old DMG optional survival to -10 is not used. */
+export const DEATH_MODE = 'phb_zero'
+export const HP_MIN = 0
+export const MASSIVE_DAMAGE_THRESHOLD = 50
 
 /** Copies of one known spell that may be marked memorized (2E Vancian). */
 export const MAX_TIMES_MEMORIZED = 12
 
-/** House dual-class: original class must be this level before a new class may begin. */
+/** TABLE LAW dual-class house switch: original class must be this level before a new class may begin. Not 1989 PHB core. */
 export const HOUSE_DUAL_MIN_ORIGINAL_LEVEL = 6
 
-/** This table switches at 6th; resume is 6 − 1 = 5th in the new class. */
+/** TABLE LAW: this table switches at 6th; resume is 6 − 1 = 5th in the new class. Not 1989 PHB core. */
 export const HOUSE_DUAL_RESUME_NEW_LEVEL = 5
 
 export type ClassGroup = 'warrior' | 'priest' | 'rogue' | 'wizard'
@@ -259,6 +262,13 @@ export function classGroup(characterClass: string): ClassGroup {
 export function isSpecialist(characterClass: string, subclass?: string | null): boolean {
   if ((SPECIALIST_SCHOOLS as readonly string[]).includes(characterClass)) return true
   return !!subclass && (SPECIALIST_SCHOOLS as readonly string[]).includes(subclass)
+}
+
+/** User-facing kind for the stored subclass column: kit or specialist school. */
+export function kitFieldKind(value?: string | null): 'kit' | 'specialist school' | null {
+  if (!value) return null
+  if ((SPECIALIST_SCHOOLS as readonly string[]).includes(value)) return 'specialist school'
+  return 'kit'
 }
 
 export function hitDie(characterClass: string): string {
@@ -725,11 +735,34 @@ export function resolveInitiative(d10: number, dexterity: number, otherModifiers
   return { roll: d10, modifier: -reaction + otherModifiers, total: d10 - reaction + otherModifiers }
 }
 
-export function vitalityState(currentHp: number): 'ok' | 'unconscious' | 'dying' | 'dead' {
-  if (currentHp <= DEATH_THRESHOLD) return 'dead'
-  if (currentHp < 0) return 'dying'
-  if (currentHp === 0) return 'unconscious'
+export function dyingState(
+  hp: number,
+  deathMode: string = 'phb_zero',
+  tableLaw: Record<string, unknown> = {},
+): 'ok' | 'slain' {
+  const mode = deathMode || (typeof tableLaw.death_mode === 'string' ? tableLaw.death_mode : DEATH_MODE)
+  void mode
+  // The old DMG optional survival to -10 is not used.
+  if (hp <= 0) return 'slain'
   return 'ok'
+}
+
+export function vitalityState(currentHp: number): 'ok' | 'slain' {
+  return dyingState(currentHp)
+}
+
+export function massiveDamageCheck(damage: number, saveRoll: number) {
+  const applies = damage >= MASSIVE_DAMAGE_THRESHOLD
+  if (!applies) {
+    return { applies: false, save_required: false, saved: null as boolean | null, slain: false, save_roll: saveRoll }
+  }
+  const saved = saveRoll > 0
+  return { applies: true, save_required: true, saved, slain: !saved, save_roll: saveRoll }
+}
+
+export function clampCurrentHp(currentHp: number, maxHp: number): number {
+  const max = Math.max(0, maxHp)
+  return Math.max(HP_MIN, Math.min(max, currentHp))
 }
 
 export type ClassEntry = { class: string; level: number; xp?: number | null }
@@ -883,14 +916,15 @@ export function backfillClassLevelsXp(
   return next
 }
 
-/** House dual-class: begin a new class only after the original is 6th. */
+/** TABLE LAW: begin a new class only after the original is 6th. Not 1989 PHB core. */
 export function canBeginNewClass(originalLevel: number): boolean {
   return originalLevel >= HOUSE_DUAL_MIN_ORIGINAL_LEVEL
 }
 
 /**
- * Resume the original class when the new class is 5th.
+ * TABLE LAW: resume the original class when the new class is 5th.
  * originalLevelAtSwitch is 6 on this table (6 − 1 = 5). Do not pass current original level.
+ * Not 1989 PHB core.
  */
 export function canResumeOriginalClass(newLevel: number): boolean {
   return newLevel >= HOUSE_DUAL_RESUME_NEW_LEVEL

@@ -177,7 +177,10 @@ class SpeakerSegmentRemapper
 
         if ($forceNew || $this->wantsNamedDestination($options) || $voiceprintId) {
             $owned = $this->labelOwnedBySelection($segments, $indexes);
-            if ($owned !== null) {
+            $attachingIdentity = $this->wantsNamedDestination($options) || (bool) $voiceprintId;
+            // Unlabeled split still mints a spare even when the selection
+            // already owns the current label. Naming that spare reuses it.
+            if ($owned !== null && $attachingIdentity) {
                 return $owned;
             }
 
@@ -192,8 +195,9 @@ class SpeakerSegmentRemapper
     /**
      * A selection owns a SPEAKER_N when every chosen line already shares
      * that label and no unselected line still uses it — typically a spare
-     * minted by an earlier split. Naming should attach a profile to that
-     * spare instead of allocating SPEAKER_N+1.
+     * minted by an earlier split. Naming attaches a profile to that spare
+     * instead of allocating SPEAKER_N+1. An unlabeled split still mints a
+     * new label even when the selection already owns the current one.
      *
      * @param  list<array<string, mixed>>  $segments
      * @param  list<int>  $indexes

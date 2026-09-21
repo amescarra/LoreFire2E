@@ -247,6 +247,41 @@ class SpeakerSegmentRemapTest extends TestCase
         $this->assertSame(1, SpeakerProfile::query()->where('game_session_id', $session->id)->count());
     }
 
+    public function test_naming_every_line_of_a_label_reuses_that_label(): void
+    {
+        [, $session, $elayas] = $this->sessionWithMixedLabel();
+
+        $this->post("/sessions/{$session->id}/speakers/remap", [
+            'segment_indexes' => [0, 1, 2],
+            'display_name' => 'Elayas',
+            'character_id' => $elayas->id,
+            'create_new_label' => 1,
+        ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Named SPEAKER_00 as Elayas.');
+
+        $segments = $this->rawSegments($session->fresh());
+        $this->assertSame('SPEAKER_00', $segments[0]['speaker']);
+        $this->assertSame('SPEAKER_00', $segments[1]['speaker']);
+        $this->assertSame('SPEAKER_00', $segments[2]['speaker']);
+        $this->assertSame('SPEAKER_01', $segments[3]['speaker']);
+        $this->assertArrayNotHasKey('speaker_diarized', $segments[0]);
+
+        $this->assertSame(
+            'Elayas',
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_00')
+                ->value('display_name')
+        );
+        $this->assertNull(
+            SpeakerProfile::query()
+                ->where('game_session_id', $session->id)
+                ->where('speaker_label', 'SPEAKER_02')
+                ->first()
+        );
+    }
+
     public function test_naming_a_subset_of_a_split_label_still_allocates_a_spare(): void
     {
         [, $session, $elayas] = $this->sessionWithMixedLabel();
